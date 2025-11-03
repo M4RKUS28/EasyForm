@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>EasyForm</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      width: 400px;
+      min-height: 300px;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      font-size: 14px;
+      color: #333;
+      background: #f5f5f5;
+    }
+
+    .container {
+      background: white;
+    }
+
+    .header {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      padding: 20px;
+      text-align: center;
+    }
+
+    .header h1 {
+      font-size: 24px;
+      font-weight: 600;
+      margin-bottom: 5px;
+    }
+
+    .header p {
+      font-size: 12px;
+      opacity: 0.9;
+    }
+
+    .content {
+      padding: 20px;
+    }
+
+    .section {
+      margin-bottom: 20px;
+    }
+
+    .section-title {
+      font-size: 12px;
+      font-weight: 600;
+      text-transform: uppercase;
+      color: #666;
+      margin-bottom: 10px;
+      letter-spacing: 0.5px;
+    }
+
+    .input-group {
+      margin-bottom: 15px;
+    }
+
+    .input-group label {
+      display: block;
+      font-size: 13px;
+      font-weight: 500;
+      margin-bottom: 5px;
+      color: #555;
+    }
+
+    .input-group input[type="text"],
+    .input-group input[type="url"] {
+      width: 100%;
+      padding: 8px 12px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      font-size: 13px;
+      transition: border-color 0.2s;
+    }
+
+    .input-group input:focus {
+      outline: none;
+      border-color: #667eea;
+    }
+
+    .mode-toggle {
+      display: flex;
+      gap: 10px;
+    }
+
+    .mode-button {
+      flex: 1;
+      padding: 10px;
+      border: 2px solid #ddd;
+      border-radius: 6px;
+      background: white;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 500;
+      transition: all 0.2s;
+    }
+
+    .mode-button:hover {
+      border-color: #667eea;
+    }
+
+    .mode-button.active {
+      border-color: #667eea;
+      background: #667eea;
+      color: white;
+    }
+
+    .save-button {
+      width: 100%;
+      padding: 12px;
+      background: #667eea;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    .save-button:hover {
+      background: #5568d3;
+    }
+
+    .save-button:active {
+      transform: scale(0.98);
+    }
+
+    .status {
+      padding: 15px;
+      background: #f9f9f9;
+      border-top: 1px solid #eee;
+    }
+
+    .status-item {
+      display: flex;
+      justify-content: space-between;
+      font-size: 12px;
+      margin-bottom: 8px;
+    }
+
+    .status-label {
+      color: #666;
+    }
+
+    .status-value {
+      font-weight: 600;
+      color: #333;
+    }
+
+    .error {
+      background: #fee;
+      color: #c33;
+      padding: 10px;
+      border-radius: 4px;
+      font-size: 12px;
+      margin-top: 10px;
+    }
+
+    .success {
+      background: #efe;
+      color: #3c3;
+      padding: 10px;
+      border-radius: 4px;
+      font-size: 12px;
+      margin-top: 10px;
+    }
+
+    .actions-list {
+      max-height: 200px;
+      overflow-y: auto;
+      border: 1px solid #eee;
+      border-radius: 4px;
+      margin-top: 10px;
+    }
+
+    .action-item {
+      padding: 10px;
+      border-bottom: 1px solid #eee;
+      font-size: 12px;
+    }
+
+    .action-item:last-child {
+      border-bottom: none;
+    }
+
+    .action-number {
+      font-weight: 600;
+      color: #667eea;
+      margin-right: 5px;
+    }
+
+    .action-question {
+      color: #333;
+      font-weight: 500;
+    }
+
+    .action-answer {
+      color: #666;
+      margin-left: 20px;
+      margin-top: 3px;
+    }
+
+    .empty-state {
+      text-align: center;
+      padding: 30px;
+      color: #999;
+      font-size: 13px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>EasyForm</h1>
+      <p>Intelligent Form Filling Assistant</p>
+    </div>
+
+    <div class="content">
+      <div class="section">
+        <div class="section-title">Settings</div>
+
+        <div class="input-group">
+          <label for="backendUrl">Backend URL</label>
+          <input type="url" id="backendUrl" placeholder="https://easyform.markus28.de/api/analyze">
+        </div>
+
+        <div class="input-group">
+          <label>Mode</label>
+          <div class="mode-toggle">
+            <button class="mode-button" data-mode="automatic">
+              Automatic
+            </button>
+            <button class="mode-button" data-mode="manual">
+              Manual
+            </button>
+          </div>
+        </div>
+
+        <button class="save-button" id="saveButton">Save Settings</button>
+        <div id="saveMessage"></div>
+      </div>
+
+      <div class="section">
+        <div class="section-title">Last Analysis</div>
+        <div id="actionsList"></div>
+      </div>
+    </div>
+
+    <div class="status">
+      <div class="status-item">
+        <span class="status-label">Status:</span>
+        <span class="status-value" id="statusText">Ready</span>
+      </div>
+      <div id="errorMessage"></div>
+    </div>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

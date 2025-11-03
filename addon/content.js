@@ -1,0 +1,253 @@
+// Content Script for EasyForm
+// Handles page interaction, overlay, and action execution
+
+(function() {
+  'use strict';
+
+  let overlayVisible = false;
+  let currentActions = [];
+
+  // Listen for messages from background script
+  chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+    switch (request.action) {
+      case 'getPageData':
+        sendResponse({ data: getPageData() });
+        break;
+
+      case 'executeActions':
+        executeActions(request.actions, request.autoExecute)
+          .then(result => sendResponse(result))
+          .catch(error => sendResponse({ error: error.message }));
+        return true;
+
+      case 'showOverlay':
+        currentActions = request.actions;
+        showOverlay(request.actions);
+        sendResponse({ success: true });
+        break;
+
+      case 'toggleOverlay':
+        toggleOverlay();
+        sendResponse({ success: true });
+        break;
+
+      case 'showNotification':
+        showNotification(request.type, request.message);
+        sendResponse({ success: true });
+        break;
+    }
+  });
+
+  /**
+   * Extract page data (text and HTML)
+   */
+  function getPageData() {
+    return {
+      url: window.location.href,
+      title: document.title,
+      text: document.body.innerText,
+      html: document.documentElement.outerHTML,
+      timestamp: new Date().toISOString()
+    };
+  }
+
+  /**
+   * Execute actions using ActionExecutor
+   */
+  async function executeActions(actions, autoExecute = true) {
+    if (window.ActionExecutor) {
+      return await window.ActionExecutor.executeActions(actions, autoExecute);
+    } else {
+      throw new Error('ActionExecutor not loaded');
+    }
+  }
+
+  /**
+   * Show overlay with actions
+   */
+  function showOverlay(actions) {
+    // Remove existing overlay if any
+    removeOverlay();
+
+    // Create overlay
+    const overlay = createOverlay(actions);
+    document.body.appendChild(overlay);
+    overlayVisible = true;
+  }
+
+  /**
+   * Toggle overlay visibility
+   */
+  function toggleOverlay() {
+    if (overlayVisible) {
+      removeOverlay();
+    } else if (currentActions.length > 0) {
+      showOverlay(currentActions);
+    }
+  }
+
+  /**
+   * Remove overlay
+   */
+  function removeOverlay() {
+    const overlay = document.getElementById('easyform-overlay');
+    if (overlay) {
+      overlay.remove();
+      overlayVisible = false;
+    }
+  }
+
+  /**
+   * Create overlay element
+   */
+  function createOverlay(actions) {
+    const overlay = document.createElement('div');
+    overlay.id = 'easyform-overlay';
+    overlay.className = 'easyform-overlay';
+
+    // Header
+    const header = document.createElement('div');
+    header.className = 'easyform-header';
+    header.innerHTML = `
+      <span class="easyform-title">EasyForm - Form Analysis</span>
+      <button class="easyform-close" id="easyform-close">×</button>
+    `;
+
+    // Content
+    const content = document.createElement('div');
+    content.className = 'easyform-content';
+
+    // Actions list
+    const list = document.createElement('div');
+    list.className = 'easyform-list';
+
+    actions.forEach((action, index) => {
+      const item = document.createElement('div');
+      item.className = 'easyform-item';
+
+      const question = action.question || `Field ${index + 1}`;
+      const number = action.number || index + 1;
+      const value = action.value || '-';
+
+      item.innerHTML = `
+        <div class="easyform-item-header">
+          <span class="easyform-number">${number}.</span>
+          <span class="easyform-question">${escapeHtml(question)}</span>
+        </div>
+        <div class="easyform-answer">${escapeHtml(String(value))}</div>
+      `;
+
+      list.appendChild(item);
+    });
+
+    content.appendChild(list);
+
+    // Footer with execute button
+    const footer = document.createElement('div');
+    footer.className = 'easyform-footer';
+    footer.innerHTML = `
+      <button class="easyform-execute" id="easyform-execute">
+        Execute Actions (${actions.length})
+      </button>
+    `;
+
+    // Assemble overlay
+    overlay.appendChild(header);
+    overlay.appendChild(content);
+    overlay.appendChild(footer);
+
+    // Event listeners
+    overlay.querySelector('#easyform-close').addEventListener('click', removeOverlay);
+    overlay.querySelector('#easyform-execute').addEventListener('click', async () => {
+      const button = overlay.querySelector('#easyform-execute');
+      button.disabled = true;
+      button.textContent = 'Executing...';
+
+      try {
+        const result = await executeActions(actions, true);
+        if (result.success) {
+          showNotification('success', `Executed ${result.successCount} action(s)`);
+          removeOverlay();
+        } else {
+          showNotification('error', `Failed: ${result.failCount} action(s)`);
+        }
+      } catch (error) {
+        showNotification('error', error.message);
+      } finally {
+        button.disabled = false;
+        button.textContent = `Execute Actions (${actions.length})`;
+      }
+    });
+
+    // Make draggable
+    makeDraggable(overlay, header);
+
+    return overlay;
+  }
+
+  /**
+   * Make element draggable
+   */
+  function makeDraggable(element, handle) {
+    let pos1 = 0, pos2 = 0, pos3 = 0, pos4 = 0;
+
+    handle.onmousedown = dragMouseDown;
+
+    function dragMouseDown(e) {
+      e.preventDefault();
+      pos3 = e.clientX;
+      pos4 = e.clientY;
+      document.onmouseup = closeDragElement;
+      document.onmousemove = elementDrag;
+    }
+
+    function elementDrag(e) {
+      e.preventDefault();
+      pos1 = pos3 - e.clientX;
+      pos2 = pos4 - e.clientY;
+      pos3 = e.clientX;
+      pos4 = e.clientY;
+      element.style.top = (element.offsetTop - pos2) + 'px';
+      element.style.left = (element.offsetLeft - pos1) + 'px';
+    }
+
+    function closeDragElement() {
+      document.onmouseup = null;
+      document.onmousemove = null;
+    }
+  }
+
+  /**
+   * Show notification
+   */
+  function showNotification(type, message) {
+    // Remove existing notification
+    const existing = document.getElementById('easyform-notification');
+    if (existing) existing.remove();
+
+    const notification = document.createElement('div');
+    notification.id = 'easyform-notification';
+    notification.className = `easyform-notification easyform-notification-${type}`;
+    notification.textContent = message;
+
+    document.body.appendChild(notification);
+
+    // Auto remove after 5 seconds
+    setTimeout(() => {
+      notification.classList.add('easyform-notification-fade');
+      setTimeout(() => notification.remove(), 300);
+    }, 5000);
+  }
+
+  /**
+   * Escape HTML
+   */
+  function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+  }
+
+  // Initialize
+  console.log('EasyForm content script loaded');
+})();

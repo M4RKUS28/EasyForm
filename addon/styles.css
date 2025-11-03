@@ -1,0 +1,247 @@
+/* EasyForm Overlay Styles */
+
+/* Overlay Container */
+.easyform-overlay {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  width: 400px;
+  max-height: 80vh;
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+  z-index: 2147483647;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: 14px;
+  color: #333;
+  display: flex;
+  flex-direction: column;
+  animation: easyform-slide-in 0.3s ease-out;
+}
+
+@keyframes easyform-slide-in {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+/* Header */
+.easyform-header {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  padding: 16px 20px;
+  border-radius: 12px 12px 0 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  cursor: move;
+  user-select: none;
+}
+
+.easyform-title {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.easyform-close {
+  background: rgba(255, 255, 255, 0.2);
+  border: none;
+  color: white;
+  font-size: 24px;
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s;
+  line-height: 1;
+  padding: 0;
+}
+
+.easyform-close:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+/* Content */
+.easyform-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px;
+  max-height: calc(80vh - 140px);
+}
+
+.easyform-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* Action Items */
+.easyform-item {
+  padding: 12px;
+  background: #f9f9f9;
+  border-radius: 8px;
+  border: 1px solid #eee;
+  transition: all 0.2s;
+}
+
+.easyform-item:hover {
+  background: #f5f5f5;
+  border-color: #667eea;
+}
+
+.easyform-item-header {
+  display: flex;
+  align-items: flex-start;
+  margin-bottom: 8px;
+}
+
+.easyform-number {
+  color: #667eea;
+  font-weight: 600;
+  margin-right: 8px;
+  flex-shrink: 0;
+}
+
+.easyform-question {
+  color: #333;
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+.easyform-answer {
+  color: #666;
+  font-size: 13px;
+  padding-left: 24px;
+  line-height: 1.4;
+  word-break: break-word;
+}
+
+/* Footer */
+.easyform-footer {
+  padding: 16px 20px;
+  border-top: 1px solid #eee;
+  background: #fafafa;
+  border-radius: 0 0 12px 12px;
+}
+
+.easyform-execute {
+  width: 100%;
+  padding: 12px;
+  background: #667eea;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.easyform-execute:hover {
+  background: #5568d3;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+}
+
+.easyform-execute:active {
+  transform: translateY(0);
+}
+
+.easyform-execute:disabled {
+  background: #ccc;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* Notifications */
+.easyform-notification {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  padding: 16px 24px;
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+  z-index: 2147483647;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: 14px;
+  max-width: 400px;
+  animation: easyform-fade-in 0.3s ease-out;
+  border-left: 4px solid #667eea;
+}
+
+@keyframes easyform-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.easyform-notification-fade {
+  animation: easyform-fade-out 0.3s ease-out;
+}
+
+@keyframes easyform-fade-out {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+}
+
+.easyform-notification-success {
+  border-left-color: #4caf50;
+  color: #2e7d32;
+}
+
+.easyform-notification-error {
+  border-left-color: #f44336;
+  color: #c62828;
+}
+
+.easyform-notification-info {
+  border-left-color: #2196f3;
+  color: #1565c0;
+}
+
+/* Scrollbar styling */
+.easyform-content::-webkit-scrollbar {
+  width: 8px;
+}
+
+.easyform-content::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 4px;
+}
+
+.easyform-content::-webkit-scrollbar-thumb {
+  background: #ccc;
+  border-radius: 4px;
+}
+
+.easyform-content::-webkit-scrollbar-thumb:hover {
+  background: #999;
+}
+
+/* Responsive for smaller screens */
+@media (max-width: 480px) {
+  .easyform-overlay {
+    width: calc(100vw - 40px);
+    right: 20px;
+  }
+}
