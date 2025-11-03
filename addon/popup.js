@@ -24,7 +24,7 @@ async function loadStatus() {
       showError(response.error);
     } else if (response.result && response.result.actions) {
       const count = response.result.actions.length;
-      updateSummary(`Last: ${count} action${count !== 1 ? 's' : ''} found`);
+      updateInfo(`${count} action${count !== 1 ? 's' : ''} found`);
     }
   } catch (error) {
     // Ignore - no last result available
@@ -39,11 +39,6 @@ function setupEventListeners() {
 
   document.getElementById('manualBtn').addEventListener('click', () => {
     setMode('manual');
-  });
-
-  // Settings link - opens options page
-  document.getElementById('settingsLink').addEventListener('click', () => {
-    chrome.runtime.openOptionsPage();
   });
 }
 
@@ -67,8 +62,8 @@ async function setMode(mode) {
   }
 }
 
-function updateSummary(text) {
-  document.getElementById('actionsSummary').textContent = text;
+function updateInfo(text) {
+  document.getElementById('infoText').textContent = text;
 }
 
 function showError(message) {
