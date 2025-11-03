@@ -1,0 +1,16 @@
+
+services:
+   easyform:
+      image: m4rkus28/easyform:latest
+      container_name: easyform
+      env_file:
+        - .env
+      ports:
+        - "${HOST_PORT:-8080}:${PORT:-8080}"
+      restart: always
+      labels:
+        - "com.centurylinklabs.watchtower.enable=true"
+
+networks:
+    default:
+      name: easyform-network
