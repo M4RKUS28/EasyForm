@@ -1,0 +1,7 @@
+Please create EXACTLY THREE recipes everytime. Not more, not less, EXACTLY THREE.
+Each recipe must include:
+- important_notes: A concise paragraph with critical preparation hints, required tools, or possible pitfalls.
+- cooking_overview: A brief 3-4 step rundown of the overall cooking flow.
+Pick one of the following food categories:
+- vegan, vegetarian, beef, pork, chicken, lamb, fish, seafood, mixed-meat, alcoholic, non-alcoholic
+- If multiple apply pick the stricter option 

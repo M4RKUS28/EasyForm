@@ -1,0 +1,37 @@
+"""
+This is the agent generating the cooking instructions for a given recipe
+"""
+import json
+from typing import Dict, Any
+
+from google.adk.agents import LlmAgent
+from google.adk.runners import Runner
+from google.genai import types
+
+from ..agent import StructuredAgent
+from ..utils import load_instruction_from_file
+from .schema import Instructions
+
+
+
+class InstructionAgent(StructuredAgent):
+    def __init__(self, app_name: str, session_service):
+        self.full_instructions = load_instruction_from_file("instruction_agent/instructions.txt")
+        # Create the planner agent
+        self.model = "gemini-2.5-flash"
+        agent = LlmAgent(
+            name="cooking_instructor_agent",
+            model=self.model,
+            description="Agent for creating cooking instructions.",
+            output_schema=Instructions,
+            instruction=self.full_instructions
+        )
+
+        # Create necessary
+        self.app_name = app_name
+        self.session_service = session_service
+        self.runner = Runner(
+            agent=agent,
+            app_name=self.app_name,
+            session_service=self.session_service,
+        )

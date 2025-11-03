@@ -1,0 +1,4 @@
+Please create a photorealistic image of the given food recipe.
+It should look very delicious. The food should be the main focus of the image, no humans.
+
+Most important is that it looks delicious and photorealistic.
