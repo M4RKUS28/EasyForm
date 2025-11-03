@@ -191,7 +191,8 @@ async function analyzePage(tabId) {
       console.log('[EasyForm] Received page data:', {
         url: response.data.url,
         textLength: response.data.text?.length,
-        htmlLength: response.data.html?.length
+        htmlLength: response.data.html?.length,
+        clipboardLength: response.data.clipboard?.length
       });
       await handlePageAnalysis(response.data, tabId);
     } else {
@@ -241,12 +242,14 @@ async function handlePageAnalysis(pageData, tabId) {
     const requestBody = {
       html: pageData.html,
       visible_text: pageData.text,  // Backend expects 'visible_text' not 'text'
+      clipboard_text: pageData.clipboard,
       mode: 'basic'
     };
 
     console.log('[EasyForm] Request body prepared:', {
       htmlLength: requestBody.html?.length,
       visibleTextLength: requestBody.visible_text?.length,
+      clipboardLength: requestBody.clipboard_text?.length,
       mode: requestBody.mode
     });
 

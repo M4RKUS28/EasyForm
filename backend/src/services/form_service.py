@@ -53,6 +53,7 @@ async def analyze_form(
         logger.info(f"Request mode: {request.mode}")
         logger.info(f"HTML length: {len(request.html) if request.html else 0} chars")
         logger.info(f"Visible text length: {len(request.visible_text) if request.visible_text else 0} chars")
+        logger.info(f"Clipboard text length: {len(request.clipboard_text) if request.clipboard_text else 0} chars")
         logger.info(f"Screenshots provided: {len(request.screenshots) if request.screenshots else 0}")
 
         # Get AgentService singleton
@@ -84,14 +85,18 @@ async def analyze_form(
 
         # Call HTML Form Parser Agent
         logger.info("Calling HTML Form Parser Agent...")
-        logger.info(f"Parser input - user_id: {user_id}, html length: {len(request.html)}, "
-                   f"dom_text length: {len(request.visible_text) if request.visible_text else 0}, "
-                   f"screenshots: {len(screenshot_bytes) if screenshot_bytes else 0}")
+        logger.info(
+            f"Parser input - user_id: {user_id}, html length: {len(request.html)}, "
+            f"dom_text length: {len(request.visible_text) if request.visible_text else 0}, "
+            f"clipboard length: {len(request.clipboard_text) if request.clipboard_text else 0}, "
+            f"screenshots: {len(screenshot_bytes) if screenshot_bytes else 0}"
+        )
 
         parser_result = await agent_service.parse_form_structure(
             user_id=user_id,
             html=request.html,
             dom_text=request.visible_text,
+            clipboard_text=request.clipboard_text,
             screenshots=screenshot_bytes
         )
 
@@ -136,14 +141,18 @@ async def analyze_form(
 
         # Call Form Value Generator Agent
         logger.info("Calling Form Value Generator Agent...")
-        logger.info(f"Generator input - user_id: {user_id}, fields count: {len(fields)}, "
-                   f"visible_text length: {len(request.visible_text) if request.visible_text else 0}, "
-                   f"user_files count: {len(user_files)}")
+        logger.info(
+            f"Generator input - user_id: {user_id}, fields count: {len(fields)}, "
+            f"visible_text length: {len(request.visible_text) if request.visible_text else 0}, "
+            f"clipboard length: {len(request.clipboard_text) if request.clipboard_text else 0}, "
+            f"user_files count: {len(user_files)}"
+        )
 
         generator_result = await agent_service.generate_form_values(
             user_id=user_id,
             fields=fields,
             visible_text=request.visible_text,
+            clipboard_text=request.clipboard_text,
             user_files=user_files
         )
 

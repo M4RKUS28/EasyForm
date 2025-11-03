@@ -27,6 +27,7 @@ class AgentService:
         user_id: str,
         html: str,
         dom_text: str,
+        clipboard_text: str = None,
         screenshots: list = None
     ) -> dict:
         """
@@ -36,6 +37,7 @@ class AgentService:
             user_id: User ID for session management
             html: HTML code of the page
             dom_text: Visible text content
+            clipboard_text: Clipboard contents captured during analysis
             screenshots: Optional list of screenshot bytes
 
         Returns:
@@ -53,6 +55,9 @@ HTML Code:
 
 Visible Text Content:
 {dom_text}
+
+Clipboard Content:
+{clipboard_text if clipboard_text else 'No clipboard content provided'}
 """
 
         # Create multi-part content with screenshots if provided
@@ -76,6 +81,7 @@ Visible Text Content:
         user_id: str,
         fields: list,
         visible_text: str,
+        clipboard_text: str = None,
         user_files: list = None
     ) -> dict:
         """
@@ -85,6 +91,7 @@ Visible Text Content:
             user_id: User ID for session management
             fields: List of field dictionaries from parser
             visible_text: Visible text from the page
+            clipboard_text: Clipboard contents captured during analysis
             user_files: Optional list of user file objects (from DB)
 
         Returns:
@@ -114,6 +121,9 @@ Form Fields (structured data from HTML analysis):
 
 Page Visible Text:
 {visible_text}
+
+Clipboard Content:
+{clipboard_text if clipboard_text else 'No clipboard content provided'}
 
 User has uploaded {len(pdf_files)} PDF(s) and {len(images)} image(s) that may contain relevant information.
 

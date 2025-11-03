@@ -39,6 +39,7 @@ async def analyze_form(
     **Request Body:**
     - `html`: Complete HTML code of the page
     - `visible_text`: Visible text content of the page
+    - `clipboard_text`: Optional clipboard contents captured during analysis
     - `screenshots`: Optional list of base64-encoded screenshots (for extended mode)
     - `mode`: "basic" (HTML + text only) or "extended" (includes screenshots)
 

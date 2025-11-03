@@ -8,6 +8,10 @@ class FormAnalyzeRequest(BaseModel):
     """Schema for form analysis request."""
     html: str = Field(..., description="Complete HTML code of the page")
     visible_text: str = Field(..., description="Visible text content of the page")
+    clipboard_text: Optional[str] = Field(
+        None,
+        description="Contents of the user's clipboard at analysis time"
+    )
     screenshots: Optional[List[str]] = Field(
         None,
         description="Optional list of base64-encoded screenshots (for extended mode)"

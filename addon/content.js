@@ -11,8 +11,16 @@
   chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     switch (request.action) {
       case 'getPageData':
-        sendResponse({ data: getPageData() });
-        break;
+        (async () => {
+          try {
+            const data = await getPageData();
+            sendResponse({ data });
+          } catch (error) {
+            console.error('[EasyForm Content] Failed to collect page data:', error);
+            sendResponse({ error: error.message });
+          }
+        })();
+        return true;
 
       case 'executeActions':
         executeActions(request.actions, request.autoExecute)
@@ -41,21 +49,37 @@
   /**
    * Extract page data (text and HTML)
    */
-  function getPageData() {
+  async function getPageData() {
+    const clipboard = await readClipboard();
+
     const data = {
       url: window.location.href,
       title: document.title,
       text: document.body.innerText,
       html: document.documentElement.outerHTML,
+      clipboard,
       timestamp: new Date().toISOString()
     };
     console.log('[EasyForm Content] Page data extracted:', {
       url: data.url,
       title: data.title,
       textLength: data.text?.length,
-      htmlLength: data.html?.length
+      htmlLength: data.html?.length,
+      clipboardLength: data.clipboard?.length
     });
     return data;
+  }
+
+  async function readClipboard() {
+    try {
+      if (navigator.clipboard?.readText) {
+        const text = await navigator.clipboard.readText();
+        return text || null;
+      }
+    } catch (error) {
+      console.warn('[EasyForm Content] Clipboard read failed:', error);
+    }
+    return null;
   }
 
   /**
