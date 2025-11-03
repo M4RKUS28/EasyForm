@@ -1,0 +1,51 @@
+name: Build and Deploy Frontend PROD
+
+on:
+  push:
+    paths:
+      - 'frontend/**'
+    branches:
+      - main
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    environment: production
+
+    steps:
+
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: npm install
+        working-directory: frontend
+
+      - name: Build frontend
+        run: npm run build
+        working-directory: frontend
+
+
+      #- name: Clean remote target directory
+      #  uses: appleboy/ssh-action@v1.0.0
+      #  with:
+      #    host: ${{ vars.SSH_HOST }}
+      #    username: ${{ vars.SSH_USER }}
+      #    key: ${{ secrets.SSH_PRIVATE_KEY }}
+      #    script: |
+      #      rm -rf ${{ vars.REMOTE_PATH }}/*
+
+      - name: Copy files over SSH
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ vars.SSH_HOST }}
+          username: ${{ vars.SSH_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          source: "frontend/dist/*"   # oder "build/*" – je nach Framework
+          target: ${{ vars.REMOTE_PATH }}
+          strip_components: 2
