@@ -82,3 +82,54 @@ def load_instructions_from_files(filenames: List[str], separator: str = "\n\n---
             logger.exception("ERROR loading instruction file %s: %s", filepath, e)
 
     return separator.join(combined_instructions)
+
+
+# ------- Multi-part content creation for form analysis -------
+
+def create_multipart_query(
+    query: str,
+    pdf_files: List[bytes] = None,
+    images: List[bytes] = None,
+    screenshots: List[bytes] = None
+) -> types.Content:
+    """
+    Creates a multi-part query with text, PDFs, images, and screenshots.
+    All files are sent directly to Gemini for processing.
+
+    Args:
+        query: Text query/prompt
+        pdf_files: List of PDF file bytes
+        images: List of image file bytes
+        screenshots: List of screenshot bytes (base64 decoded)
+
+    Returns:
+        types.Content object ready to send to an agent
+    """
+    parts = [types.Part(text=query)]
+
+    # Add PDFs
+    if pdf_files:
+        for pdf_bytes in pdf_files:
+            parts.append(types.Part.from_bytes(
+                data=pdf_bytes,
+                mime_type="application/pdf"
+            ))
+
+    # Add images (from user uploads)
+    if images:
+        for image_bytes in images:
+            # Try to detect image format, default to PNG
+            parts.append(types.Part.from_bytes(
+                data=image_bytes,
+                mime_type="image/png"  # Gemini handles various formats
+            ))
+
+    # Add screenshots
+    if screenshots:
+        for screenshot_bytes in screenshots:
+            parts.append(types.Part.from_bytes(
+                data=screenshot_bytes,
+                mime_type="image/png"
+            ))
+
+    return types.Content(role="user", parts=parts)

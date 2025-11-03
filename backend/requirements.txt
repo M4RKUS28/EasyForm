@@ -22,3 +22,6 @@ dataclasses~=0.6
 httpx
 apscheduler~=3.11.0
 pillow
+beautifulsoup4>=4.12.0
+lxml>=4.9.0
+PyPDF2>=3.0.0
