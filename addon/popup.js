@@ -41,8 +41,12 @@ async function checkBackendHealth() {
 async function loadConfig() {
   try {
     const response = await chrome.runtime.sendMessage({ action: 'getConfig' });
-    const mode = response.mode || 'automatic';
-    updateModeButtons(mode);
+    const executionMode = response.executionMode || response.mode || 'automatic'; // Backward compat
+    const analysisMode = response.analysisMode || 'basic';
+
+    // Set dropdown values
+    document.getElementById('executionMode').value = executionMode;
+    document.getElementById('analysisMode').value = analysisMode;
   } catch (error) {
     console.error('Error loading config:', error);
   }
@@ -64,13 +68,14 @@ async function loadStatus() {
 }
 
 function setupEventListeners() {
-  // Mode toggle buttons
-  document.getElementById('autoBtn').addEventListener('click', () => {
-    setMode('automatic');
+  // Execution mode dropdown
+  document.getElementById('executionMode').addEventListener('change', async (e) => {
+    await setConfig({ executionMode: e.target.value, mode: e.target.value }); // mode for backward compat
   });
 
-  document.getElementById('manualBtn').addEventListener('click', () => {
-    setMode('manual');
+  // Analysis mode dropdown
+  document.getElementById('analysisMode').addEventListener('change', async (e) => {
+    await setConfig({ analysisMode: e.target.value });
   });
 
   // Start button
@@ -84,23 +89,14 @@ function setupEventListeners() {
   });
 }
 
-function updateModeButtons(mode) {
-  const autoBtn = document.getElementById('autoBtn');
-  const manualBtn = document.getElementById('manualBtn');
-
-  autoBtn.classList.toggle('active', mode === 'automatic');
-  manualBtn.classList.toggle('active', mode === 'manual');
-}
-
-async function setMode(mode) {
+async function setConfig(config) {
   try {
     await chrome.runtime.sendMessage({
       action: 'setConfig',
-      mode
+      ...config
     });
-    updateModeButtons(mode);
   } catch (error) {
-    console.error('Error setting mode:', error);
+    console.error('Error setting config:', error);
   }
 }
 

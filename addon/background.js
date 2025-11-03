@@ -35,12 +35,16 @@ chrome.runtime.onInstalled.addListener(() => {
   console.log('EasyForm installed');
 
   // Set default config
-  chrome.storage.sync.get(['backendUrl', 'mode'], (result) => {
+  chrome.storage.sync.get(['backendUrl', 'mode', 'executionMode', 'analysisMode'], (result) => {
     if (!result.backendUrl) {
       chrome.storage.sync.set({ backendUrl: CONFIG.backendUrl });
     }
-    if (!result.mode) {
-      chrome.storage.sync.set({ mode: CONFIG.mode });
+    // Migrate old 'mode' to 'executionMode' if needed
+    if (!result.executionMode) {
+      chrome.storage.sync.set({ executionMode: result.mode || CONFIG.mode });
+    }
+    if (!result.analysisMode) {
+      chrome.storage.sync.set({ analysisMode: 'basic' });
     }
   });
 
@@ -98,10 +102,12 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   }
 
   if (request.action === 'getConfig') {
-    chrome.storage.sync.get(['backendUrl', 'mode', 'apiToken'], (result) => {
+    chrome.storage.sync.get(['backendUrl', 'mode', 'executionMode', 'analysisMode', 'apiToken'], (result) => {
       sendResponse({
         backendUrl: result.backendUrl || CONFIG.backendUrl,
-        mode: result.mode || CONFIG.mode,
+        mode: result.mode || CONFIG.mode, // Backward compat
+        executionMode: result.executionMode || result.mode || CONFIG.mode,
+        analysisMode: result.analysisMode || 'basic',
         apiToken: result.apiToken || ''
       });
     });
@@ -111,7 +117,9 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === 'setConfig') {
     const updates = {};
     if (request.backendUrl !== undefined) updates.backendUrl = request.backendUrl;
-    if (request.mode !== undefined) updates.mode = request.mode;
+    if (request.mode !== undefined) updates.mode = request.mode; // Backward compat
+    if (request.executionMode !== undefined) updates.executionMode = request.executionMode;
+    if (request.analysisMode !== undefined) updates.analysisMode = request.analysisMode;
     if (request.apiToken !== undefined) updates.apiToken = request.apiToken;
 
     chrome.storage.sync.set(updates, () => {
@@ -151,6 +159,93 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     return true;
   }
 });
+
+/**
+ * Capture full-page screenshots with scrolling
+ */
+async function captureFullPageScreenshots(tabId) {
+  try {
+    console.log('[EasyForm] Capturing full page screenshots...');
+
+    // Get initial scroll position to restore later
+    const initialScrollInfo = await chrome.tabs.sendMessage(tabId, {
+      action: 'getScrollInfo'
+    });
+    const originalScrollX = initialScrollInfo.scrollX;
+    const originalScrollY = initialScrollInfo.scrollY;
+
+    // Scroll to top of page
+    await chrome.tabs.sendMessage(tabId, {
+      action: 'scrollToTop'
+    });
+
+    // Wait for scroll to complete
+    await new Promise(resolve => setTimeout(resolve, 300));
+
+    // Get page dimensions after scrolling to top
+    const scrollInfo = await chrome.tabs.sendMessage(tabId, {
+      action: 'getScrollInfo'
+    });
+
+    const viewportHeight = scrollInfo.viewportHeight;
+    const scrollHeight = scrollInfo.scrollHeight;
+    const screenshots = [];
+
+    console.log('[EasyForm] Page dimensions:', {
+      viewportHeight,
+      scrollHeight,
+      estimatedScreenshots: Math.ceil(scrollHeight / viewportHeight)
+    });
+
+    // Capture screenshots while scrolling down
+    let currentY = 0;
+    let screenshotCount = 0;
+    const maxScreenshots = 20; // Safety limit
+
+    while (currentY < scrollHeight && screenshotCount < maxScreenshots) {
+      // Capture current viewport
+      const screenshot = await chrome.tabs.captureVisibleTab(null, {
+        format: 'png',
+        quality: 90
+      });
+
+      // Remove data URL prefix to get just base64 data
+      const base64Data = screenshot.replace(/^data:image\/png;base64,/, '');
+      screenshots.push(base64Data);
+
+      screenshotCount++;
+      console.log(`[EasyForm] Captured screenshot ${screenshotCount} at Y=${currentY}`);
+
+      // Scroll down by viewport height
+      currentY += viewportHeight;
+
+      if (currentY < scrollHeight) {
+        await chrome.tabs.sendMessage(tabId, {
+          action: 'scrollToPosition',
+          x: 0,
+          y: currentY
+        });
+
+        // Wait for scroll and render
+        await new Promise(resolve => setTimeout(resolve, 200));
+      }
+    }
+
+    // Restore original scroll position
+    await chrome.tabs.sendMessage(tabId, {
+      action: 'restoreScroll',
+      x: originalScrollX,
+      y: originalScrollY
+    });
+
+    console.log(`[EasyForm] Captured ${screenshots.length} screenshots`);
+    return screenshots;
+
+  } catch (error) {
+    console.error('[EasyForm] Error capturing screenshots:', error);
+    throw error;
+  }
+}
 
 // Main function to analyze page
 async function analyzePage(tabId) {
@@ -202,10 +297,24 @@ async function analyzePage(tabId) {
 async function handlePageAnalysisAsync(pageData, tabId) {
   try {
     // Get config from storage
-    const config = await chrome.storage.sync.get(['backendUrl', 'mode', 'apiToken']);
+    const config = await chrome.storage.sync.get(['backendUrl', 'mode', 'executionMode', 'analysisMode', 'apiToken']);
     const baseUrl = config.backendUrl || CONFIG.backendUrl;
-    const mode = config.mode || CONFIG.mode;
+    const executionMode = config.executionMode || config.mode || CONFIG.mode;
+    const analysisMode = config.analysisMode || 'basic';
     const apiToken = config.apiToken || '';
+
+    console.log('[EasyForm] Config:', {
+      executionMode,
+      analysisMode
+    });
+
+    // Capture screenshots if in extended mode
+    let screenshots = null;
+    if (analysisMode === 'extended') {
+      console.log('[EasyForm] Extended mode - capturing screenshots...');
+      screenshots = await captureFullPageScreenshots(tabId);
+      console.log(`[EasyForm] Captured ${screenshots.length} screenshots`);
+    }
 
     // Construct async analyze endpoint
     const backendUrl = baseUrl.endsWith('/')
@@ -228,14 +337,16 @@ async function handlePageAnalysisAsync(pageData, tabId) {
       html: pageData.html,
       visible_text: pageData.text,
       clipboard_text: pageData.clipboard,
-      mode: 'basic'
+      mode: analysisMode,
+      screenshots: screenshots
     };
 
     console.log('[EasyForm] Request body prepared:', {
       htmlLength: requestBody.html?.length,
       visibleTextLength: requestBody.visible_text?.length,
       clipboardLength: requestBody.clipboard_text?.length,
-      mode: requestBody.mode
+      mode: requestBody.mode,
+      screenshotCount: screenshots?.length || 0
     });
 
     // Send data to backend (async endpoint)
@@ -275,7 +386,7 @@ async function handlePageAnalysisAsync(pageData, tabId) {
     console.log('[EasyForm] Starting polling...');
 
     // Start polling for status
-    startPolling(requestId, tabId, startTime, mode);
+    startPolling(requestId, tabId, startTime, executionMode);
 
   } catch (error) {
     console.error('[EasyForm] Error handling page analysis:', error);

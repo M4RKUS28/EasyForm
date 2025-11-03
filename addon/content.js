@@ -22,6 +22,26 @@
         })();
         return true;
 
+      case 'getScrollInfo':
+        const scrollInfo = getScrollInfo();
+        sendResponse(scrollInfo);
+        break;
+
+      case 'scrollToPosition':
+        scrollToPosition(request.x, request.y);
+        sendResponse({ success: true });
+        break;
+
+      case 'scrollToTop':
+        scrollToTop();
+        sendResponse({ success: true });
+        break;
+
+      case 'restoreScroll':
+        restoreScroll(request.x, request.y);
+        sendResponse({ success: true });
+        break;
+
       case 'executeActions':
         executeActions(request.actions, request.autoExecute)
           .then(result => sendResponse(result))
@@ -80,6 +100,55 @@
       console.warn('[EasyForm Content] Clipboard read failed:', error);
     }
     return null;
+  }
+
+  /**
+   * Get scroll information for screenshot capture
+   */
+  function getScrollInfo() {
+    return {
+      scrollX: window.scrollX || window.pageXOffset,
+      scrollY: window.scrollY || window.pageYOffset,
+      scrollWidth: document.documentElement.scrollWidth,
+      scrollHeight: document.documentElement.scrollHeight,
+      viewportWidth: window.innerWidth,
+      viewportHeight: window.innerHeight,
+      documentWidth: document.documentElement.clientWidth,
+      documentHeight: document.documentElement.clientHeight
+    };
+  }
+
+  /**
+   * Scroll to specific position
+   */
+  function scrollToPosition(x, y) {
+    window.scrollTo({
+      left: x,
+      top: y,
+      behavior: 'instant'
+    });
+  }
+
+  /**
+   * Scroll to top of page
+   */
+  function scrollToTop() {
+    window.scrollTo({
+      left: 0,
+      top: 0,
+      behavior: 'instant'
+    });
+  }
+
+  /**
+   * Restore scroll position
+   */
+  function restoreScroll(x, y) {
+    window.scrollTo({
+      left: x,
+      top: y,
+      behavior: 'instant'
+    });
   }
 
   /**

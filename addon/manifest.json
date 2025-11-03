@@ -5,6 +5,7 @@
   "description": "Automatically fill forms based on page content analysis",
   "permissions": [
     "activeTab",
+    "tabs",
     "scripting",
     "contextMenus",
     "storage",
