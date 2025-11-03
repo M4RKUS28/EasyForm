@@ -53,6 +53,10 @@
       "description": "Toggle EasyForm overlay (manual mode)"
     }
   },
+  "options_ui": {
+    "page": "options.html",
+    "open_in_tab": true
+  },
   "browser_specific_settings": {
     "gecko": {
       "id": "easyform@example.com",

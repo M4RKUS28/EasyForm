@@ -7,45 +7,29 @@
   <style>
     :root {
       --bg-primary: #ffffff;
-      --bg-secondary: #f5f5f5;
-      --bg-tertiary: #f9f9f9;
       --text-primary: #333333;
-      --text-secondary: #555555;
-      --text-tertiary: #666666;
+      --text-secondary: #666666;
       --text-muted: #999999;
-      --border-color: #dddddd;
-      --border-light: #eeeeee;
-      --gradient-start: #667eea;
-      --gradient-end: #764ba2;
+      --border-color: #eeeeee;
       --accent-color: #667eea;
-      --accent-hover: #5568d3;
-      --input-bg: #ffffff;
+      --success-color: #4caf50;
+      --error-color: #f44336;
       --error-bg: #ffeeee;
       --error-text: #cc3333;
-      --success-bg: #eeffee;
-      --success-text: #33cc33;
     }
 
     @media (prefers-color-scheme: dark) {
       :root {
         --bg-primary: #1e1e1e;
-        --bg-secondary: #121212;
-        --bg-tertiary: #2a2a2a;
         --text-primary: #e0e0e0;
-        --text-secondary: #b0b0b0;
-        --text-tertiary: #999999;
+        --text-secondary: #999999;
         --text-muted: #666666;
-        --border-color: #444444;
-        --border-light: #333333;
-        --gradient-start: #7c8ef5;
-        --gradient-end: #8b5dc0;
+        --border-color: #333333;
         --accent-color: #7c8ef5;
-        --accent-hover: #6b7de3;
-        --input-bg: #2a2a2a;
+        --success-color: #66bb6a;
+        --error-color: #ef5350;
         --error-bg: #3a1a1a;
         --error-text: #ff6b6b;
-        --success-bg: #1a3a1a;
-        --success-text: #6bff6b;
       }
     }
 
@@ -56,259 +40,150 @@
     }
 
     body {
-      width: 400px;
-      min-height: 300px;
+      width: 220px;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      font-size: 14px;
+      font-size: 12px;
       color: var(--text-primary);
-      background: var(--bg-secondary);
-    }
-
-    .container {
       background: var(--bg-primary);
     }
 
     .header {
-      background: linear-gradient(135deg, var(--gradient-start) 0%, var(--gradient-end) 100%);
-      color: white;
-      padding: 20px;
-      text-align: center;
+      padding: 12px 15px;
+      border-bottom: 1px solid var(--border-color);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
     }
 
-    .header h1 {
-      font-size: 24px;
+    .header-title {
+      font-size: 13px;
       font-weight: 600;
-      margin-bottom: 5px;
+      color: var(--text-primary);
     }
 
-    .header p {
-      font-size: 12px;
-      opacity: 0.9;
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--success-color);
+    }
+
+    .status-dot.error {
+      background: var(--error-color);
     }
 
     .content {
-      padding: 20px;
+      padding: 12px 15px;
     }
 
-    .section {
-      margin-bottom: 20px;
-    }
-
-    .section-title {
-      font-size: 12px;
-      font-weight: 600;
-      text-transform: uppercase;
-      color: var(--text-tertiary);
+    .mode-switch {
+      display: flex;
+      gap: 5px;
       margin-bottom: 10px;
-      letter-spacing: 0.5px;
     }
 
-    .input-group {
-      margin-bottom: 15px;
-    }
-
-    .input-group label {
-      display: block;
-      font-size: 13px;
-      font-weight: 500;
-      margin-bottom: 5px;
-      color: var(--text-secondary);
-    }
-
-    .input-group input[type="text"],
-    .input-group input[type="url"] {
-      width: 100%;
-      padding: 8px 12px;
+    .mode-btn {
+      flex: 1;
+      padding: 6px;
       border: 1px solid var(--border-color);
       border-radius: 4px;
-      font-size: 13px;
-      background: var(--input-bg);
-      color: var(--text-primary);
-      transition: border-color 0.2s;
-    }
-
-    .input-group input:focus {
-      outline: none;
-      border-color: var(--accent-color);
-    }
-
-    .mode-toggle {
-      display: flex;
-      gap: 10px;
-    }
-
-    .mode-button {
-      flex: 1;
-      padding: 10px;
-      border: 2px solid var(--border-color);
-      border-radius: 6px;
-      background: var(--input-bg);
-      color: var(--text-primary);
+      background: transparent;
+      color: var(--text-secondary);
       cursor: pointer;
-      font-size: 13px;
+      font-size: 11px;
       font-weight: 500;
       transition: all 0.2s;
     }
 
-    .mode-button:hover {
+    .mode-btn:hover {
       border-color: var(--accent-color);
+      color: var(--accent-color);
     }
 
-    .mode-button.active {
+    .mode-btn.active {
       border-color: var(--accent-color);
       background: var(--accent-color);
       color: white;
     }
 
-    .save-button {
-      width: 100%;
-      padding: 12px;
-      background: var(--accent-color);
-      color: white;
-      border: none;
-      border-radius: 6px;
-      font-size: 14px;
-      font-weight: 600;
-      cursor: pointer;
-      transition: background 0.2s;
+    .actions-summary {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-top: 8px;
+      padding: 8px;
+      background: rgba(0, 0, 0, 0.02);
+      border-radius: 4px;
+      text-align: center;
     }
 
-    .save-button:hover {
-      background: var(--accent-hover);
+    @media (prefers-color-scheme: dark) {
+      .actions-summary {
+        background: rgba(255, 255, 255, 0.05);
+      }
     }
 
-    .save-button:active {
-      transform: scale(0.98);
-    }
-
-    .status {
-      padding: 15px;
-      background: var(--bg-tertiary);
-      border-top: 1px solid var(--border-light);
-    }
-
-    .status-item {
-      display: flex;
-      justify-content: space-between;
-      font-size: 12px;
-      margin-bottom: 8px;
-    }
-
-    .status-label {
-      color: var(--text-tertiary);
-    }
-
-    .status-value {
-      font-weight: 600;
-      color: var(--text-primary);
-    }
-
-    .error {
+    .error-message {
       background: var(--error-bg);
       color: var(--error-text);
-      padding: 10px;
+      padding: 8px;
       border-radius: 4px;
-      font-size: 12px;
-      margin-top: 10px;
+      font-size: 10px;
+      margin-top: 8px;
+      display: none;
     }
 
-    .success {
-      background: var(--success-bg);
-      color: var(--success-text);
-      padding: 10px;
-      border-radius: 4px;
-      font-size: 12px;
-      margin-top: 10px;
+    .error-message.show {
+      display: block;
     }
 
-    .actions-list {
-      max-height: 200px;
-      overflow-y: auto;
-      border: 1px solid var(--border-light);
-      border-radius: 4px;
-      margin-top: 10px;
+    .footer {
+      padding: 10px 15px;
+      border-top: 1px solid var(--border-color);
     }
 
-    .action-item {
-      padding: 10px;
-      border-bottom: 1px solid var(--border-light);
-      font-size: 12px;
-    }
-
-    .action-item:last-child {
-      border-bottom: none;
-    }
-
-    .action-number {
-      font-weight: 600;
-      color: var(--accent-color);
-      margin-right: 5px;
-    }
-
-    .action-question {
-      color: var(--text-primary);
-      font-weight: 500;
-    }
-
-    .action-answer {
-      color: var(--text-tertiary);
-      margin-left: 20px;
-      margin-top: 3px;
-    }
-
-    .empty-state {
+    .settings-link {
+      display: block;
       text-align: center;
-      padding: 30px;
+      font-size: 11px;
+      color: var(--accent-color);
+      text-decoration: none;
+      cursor: pointer;
+    }
+
+    .settings-link:hover {
+      text-decoration: underline;
+    }
+
+    .shortcut-hint {
+      font-size: 10px;
       color: var(--text-muted);
-      font-size: 13px;
+      text-align: center;
+      margin-top: 5px;
     }
   </style>
 </head>
 <body>
-  <div class="container">
-    <div class="header">
-      <h1>EasyForm</h1>
-      <p>Intelligent Form Filling Assistant</p>
+  <div class="header">
+    <span class="header-title">EasyForm</span>
+    <div class="status-dot" id="statusDot"></div>
+  </div>
+
+  <div class="content">
+    <div class="mode-switch">
+      <button class="mode-btn" data-mode="automatic" id="autoBtn">Auto</button>
+      <button class="mode-btn" data-mode="manual" id="manualBtn">Manual</button>
     </div>
 
-    <div class="content">
-      <div class="section">
-        <div class="section-title">Settings</div>
-
-        <div class="input-group">
-          <label for="backendUrl">Backend URL</label>
-          <input type="url" id="backendUrl" placeholder="https://easyform.markus28.de/api/analyze">
-        </div>
-
-        <div class="input-group">
-          <label>Mode</label>
-          <div class="mode-toggle">
-            <button class="mode-button" data-mode="automatic">
-              Automatic
-            </button>
-            <button class="mode-button" data-mode="manual">
-              Manual
-            </button>
-          </div>
-        </div>
-
-        <button class="save-button" id="saveButton">Save Settings</button>
-        <div id="saveMessage"></div>
-      </div>
-
-      <div class="section">
-        <div class="section-title">Last Analysis</div>
-        <div id="actionsList"></div>
-      </div>
+    <div class="actions-summary" id="actionsSummary">
+      Press Ctrl+Shift+E to analyze
     </div>
 
-    <div class="status">
-      <div class="status-item">
-        <span class="status-label">Status:</span>
-        <span class="status-value" id="statusText">Ready</span>
-      </div>
-      <div id="errorMessage"></div>
-    </div>
+    <div class="error-message" id="errorMessage"></div>
+  </div>
+
+  <div class="footer">
+    <a class="settings-link" id="settingsLink">Settings</a>
+    <div class="shortcut-hint">Ctrl+Shift+E · Analyze</div>
   </div>
 
   <script src="popup.js"></script>
