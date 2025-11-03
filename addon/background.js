@@ -57,7 +57,23 @@ chrome.commands.onCommand.addListener((command) => {
 
 // Handle messages from content script or popup
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-  if (request.action === 'analyzePage') {
+  // Handle analyzePage from popup (has tabId parameter)
+  if (request.action === 'analyzePage' && request.tabId) {
+    analyzePage(request.tabId)
+      .then(() => {
+        sendResponse({
+          success: true,
+          actionsCount: lastAnalysisResult?.actions?.length || 0
+        });
+      })
+      .catch(error => {
+        sendResponse({ success: false, error: error.message });
+      });
+    return true;
+  }
+
+  // Handle analyzePage from content script (has data parameter)
+  if (request.action === 'analyzePage' && request.data) {
     handlePageAnalysis(request.data, sender.tab.id)
       .then(sendResponse)
       .catch(error => {
@@ -123,20 +139,6 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       });
     return true;
   }
-
-  if (request.action === 'analyzePage' && request.tabId) {
-    analyzePage(request.tabId)
-      .then(() => {
-        sendResponse({
-          success: true,
-          actionsCount: lastAnalysisResult?.actions?.length || 0
-        });
-      })
-      .catch(error => {
-        sendResponse({ success: false, error: error.message });
-      });
-    return true;
-  }
 });
 
 // Main function to analyze page
@@ -169,7 +171,7 @@ async function handlePageAnalysis(pageData, tabId) {
     const apiToken = config.apiToken || '';
 
     // Construct full API endpoint
-    const backendUrl = baseUrl.endsWith('/') ? `${baseUrl}api/analyze` : `${baseUrl}/api/analyze`;
+    const backendUrl = baseUrl.endsWith('/') ? `${baseUrl}api/form/analyze` : `${baseUrl}/api/form/analyze`;
 
     console.log('Sending to backend:', backendUrl);
 
