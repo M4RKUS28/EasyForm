@@ -6,13 +6,9 @@ services:
       env_file:
         - .env
       ports:
-        - "8080:7109"
+        - "7109:8080"
       restart: always
       labels:
         - "com.centurylinklabs.watchtower.enable=true"
       environment:
         - WORKERS=1
-
-networks:
-    default:
-      name: easyform-network

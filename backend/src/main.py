@@ -10,12 +10,17 @@ from .core.lifespan import lifespan
 
 from .api.routers import auth as auth_router
 from .api.routers import users
+from .api.routers import api_tokens
+from .api.routers import files
+from .api.routers import form
 
 
 
 # Create the main app instance
 app = FastAPI(
-    title="User Management API",
+    title="EasyForm API",
+    description="API for EasyForm - AI-powered form filling browser extension",
+    version="1.0.0",
     root_path="/api",
     lifespan=lifespan  # Use the lifespan context manager
 )
@@ -50,13 +55,16 @@ def health():
     return {"ok": True}
 
 
-# Include your existing routers under this api_router
-app.include_router(users.router)
+# Include routers
 app.include_router(auth_router.api_router)
+app.include_router(users.router)
+app.include_router(api_tokens.router)
+app.include_router(files.router)
+app.include_router(form.router)
 
 # The root path "/" is now outside the /api prefix
 @app.get("/")
 async def root():
     """Status endpoint for the API."""
-    return {"message": "Welcome to Piatto API. Visit /api/docs for API documentation."}
+    return {"message": "Welcome to EasyForm API. Visit /api/docs for API documentation."}
 
