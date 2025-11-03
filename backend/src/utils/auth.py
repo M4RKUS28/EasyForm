@@ -3,7 +3,7 @@ Utility functions for authentication and authorization.
 """
 
 from typing import Any, Dict, Optional, Set
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, status, Request
 from pydantic import BaseModel
 
 from ..db.models import db_user as user_model
@@ -147,4 +147,91 @@ async def get_read_write_user_id(
     payload = security.verify_token(access_token)
     _ensure_access_level(payload, WRITE_ACCESS_LEVELS)
 
+    return payload.get("user_id")
+
+
+async def get_token_from_header_or_cookie(request: Request) -> Optional[str]:
+    """
+    Extract token from Authorization header (Bearer token) or cookie.
+
+    Priority:
+    1. Authorization header: "Bearer <api_token>"
+    2. Cookie: "__session" (access token)
+
+    Returns None if no token is found.
+    """
+    # Check Authorization header first (for API tokens)
+    auth_header = request.headers.get("Authorization")
+    if auth_header and auth_header.startswith("Bearer "):
+        return auth_header.replace("Bearer ", "", 1).strip()
+
+    # Fallback to cookie (for web app)
+    return await get_access_token_from_cookie(request)
+
+
+async def get_user_id_from_api_token_or_cookie(
+    request: Request,
+) -> str:
+    """
+    Return the user_id from either an API token (Authorization header) or cookie.
+
+    This function supports both:
+    - Browser extension using API tokens in Authorization header
+    - Web app using cookie-based authentication
+
+    Requires write access level.
+    """
+    from ..db.database import get_async_db_context
+    from ..db.crud import api_tokens_crud, users_crud
+    from datetime import datetime, timezone
+
+    token = await get_token_from_header_or_cookie(request)
+
+    if not token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Not authenticated: token missing",
+        )
+
+    # Check if it's an API token (starts with "easyform_")
+    if token.startswith("easyform_"):
+        async with get_async_db_context() as db:
+            api_token = await api_tokens_crud.get_api_token_by_token_string(db, token)
+
+            if not api_token:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Invalid API token",
+                )
+
+            # Check if token is expired
+            if api_token.expires_at < datetime.now(timezone.utc):
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="API token expired",
+                )
+
+            # Check if token is active
+            if not api_token.is_active:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="API token is inactive",
+                )
+
+            # Update last_used_at (async, don't wait)
+            await api_tokens_crud.update_last_used(db, api_token.id)
+
+            # Verify user exists and is active
+            user = await users_crud.get_active_user_by_id(db, api_token.user_id)
+            if not user:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="User not found or inactive",
+                )
+
+            return api_token.user_id
+
+    # Otherwise, it's a regular JWT access token from cookie
+    payload = security.verify_token(token)
+    _ensure_access_level(payload, WRITE_ACCESS_LEVELS)
     return payload.get("user_id")
