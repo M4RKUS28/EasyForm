@@ -144,18 +144,27 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 // Main function to analyze page
 async function analyzePage(tabId) {
   try {
+    console.log('[EasyForm] Starting page analysis for tab:', tabId);
     lastError = null;
 
     // Request page data from content script
+    console.log('[EasyForm] Requesting page data from content script...');
     const response = await chrome.tabs.sendMessage(tabId, {
       action: 'getPageData'
     });
 
     if (response && response.data) {
+      console.log('[EasyForm] Received page data:', {
+        url: response.data.url,
+        textLength: response.data.text?.length,
+        htmlLength: response.data.html?.length
+      });
       await handlePageAnalysis(response.data, tabId);
+    } else {
+      console.error('[EasyForm] No data received from content script');
     }
   } catch (error) {
-    console.error('Error analyzing page:', error);
+    console.error('[EasyForm] Error analyzing page:', error);
     lastError = error.message;
     notifyError(tabId, error.message);
   }
@@ -173,7 +182,9 @@ async function handlePageAnalysis(pageData, tabId) {
     // Construct full API endpoint
     const backendUrl = baseUrl.endsWith('/') ? `${baseUrl}api/form/analyze` : `${baseUrl}/api/form/analyze`;
 
-    console.log('Sending to backend:', backendUrl);
+    console.log('[EasyForm] Sending to backend:', backendUrl);
+    console.log('[EasyForm] Mode:', mode);
+    console.log('[EasyForm] Has API token:', !!apiToken);
 
     // Prepare headers
     const headers = {
@@ -185,25 +196,50 @@ async function handlePageAnalysis(pageData, tabId) {
       headers['Authorization'] = `Bearer ${apiToken}`;
     }
 
+    // Transform pageData to match backend schema
+    const requestBody = {
+      html: pageData.html,
+      visible_text: pageData.text,  // Backend expects 'visible_text' not 'text'
+      mode: 'basic'
+    };
+
+    console.log('[EasyForm] Request body prepared:', {
+      htmlLength: requestBody.html?.length,
+      visibleTextLength: requestBody.visible_text?.length,
+      mode: requestBody.mode
+    });
+
     // Send data to backend
     const response = await fetch(backendUrl, {
       method: 'POST',
       headers,
-      body: JSON.stringify(pageData)
+      body: JSON.stringify(requestBody)
     });
 
+    console.log('[EasyForm] Backend response status:', response.status, response.statusText);
+
     if (!response.ok) {
+      const errorText = await response.text();
+      console.error('[EasyForm] Backend error response:', errorText);
       throw new Error(`Backend returned ${response.status}: ${response.statusText}`);
     }
 
     const result = await response.json();
+    console.log('[EasyForm] Backend result:', {
+      status: result.status,
+      actionsCount: result.actions?.length,
+      fieldsDetected: result.fields_detected
+    });
+
     lastAnalysisResult = result;
     lastError = null;
 
     // Process based on mode
     if (result.actions && result.actions.length > 0) {
+      console.log('[EasyForm] Processing actions in mode:', mode);
       if (mode === 'automatic') {
         // Automatic mode: execute immediately
+        console.log('[EasyForm] Auto-executing', result.actions.length, 'actions');
         await chrome.tabs.sendMessage(tabId, {
           action: 'executeActions',
           actions: result.actions,
@@ -212,6 +248,7 @@ async function handlePageAnalysis(pageData, tabId) {
         notifyInfo(tabId, `Executed ${result.actions.length} action(s)`);
       } else {
         // Manual mode: show overlay
+        console.log('[EasyForm] Showing overlay with', result.actions.length, 'actions');
         await chrome.tabs.sendMessage(tabId, {
           action: 'showOverlay',
           actions: result.actions
@@ -220,11 +257,12 @@ async function handlePageAnalysis(pageData, tabId) {
 
       return { success: true, actionsCount: result.actions.length, mode };
     } else {
+      console.log('[EasyForm] No actions to execute');
       notifyInfo(tabId, 'No actions to execute');
       return { success: true, actionsCount: 0 };
     }
   } catch (error) {
-    console.error('Error handling page analysis:', error);
+    console.error('[EasyForm] Error handling page analysis:', error);
     lastError = error.message;
     notifyError(tabId, error.message);
     throw error;

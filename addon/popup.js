@@ -13,8 +13,7 @@ async function checkBackendHealth() {
 
     if (response.healthy) {
       // Backend is healthy - show green indicator
-      const statusDot = document.getElementById('statusDot');
-      statusDot.classList.remove('error');
+      setHealthStatus(true);
       clearError();
     } else {
       // Backend is not healthy
@@ -89,6 +88,15 @@ async function setMode(mode) {
 
 function updateInfo(text) {
   document.getElementById('infoText').textContent = text;
+}
+
+function setHealthStatus(isHealthy) {
+  const statusDot = document.getElementById('statusDot');
+  if (isHealthy) {
+    statusDot.classList.remove('error');
+  } else {
+    statusDot.classList.add('error');
+  }
 }
 
 function showError(message) {

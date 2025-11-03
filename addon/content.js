@@ -42,13 +42,20 @@
    * Extract page data (text and HTML)
    */
   function getPageData() {
-    return {
+    const data = {
       url: window.location.href,
       title: document.title,
       text: document.body.innerText,
       html: document.documentElement.outerHTML,
       timestamp: new Date().toISOString()
     };
+    console.log('[EasyForm Content] Page data extracted:', {
+      url: data.url,
+      title: data.title,
+      textLength: data.text?.length,
+      htmlLength: data.html?.length
+    });
+    return data;
   }
 
   /**
@@ -218,25 +225,11 @@
   }
 
   /**
-   * Show notification
+   * Show notification (disabled - notifications only shown in extension popup)
    */
   function showNotification(type, message) {
-    // Remove existing notification
-    const existing = document.getElementById('easyform-notification');
-    if (existing) existing.remove();
-
-    const notification = document.createElement('div');
-    notification.id = 'easyform-notification';
-    notification.className = `easyform-notification easyform-notification-${type}`;
-    notification.textContent = message;
-
-    document.body.appendChild(notification);
-
-    // Auto remove after 5 seconds
-    setTimeout(() => {
-      notification.classList.add('easyform-notification-fade');
-      setTimeout(() => notification.remove(), 300);
-    }, 5000);
+    // Log to console instead of showing floating notification
+    console.log(`[EasyForm ${type.toUpperCase()}]:`, message);
   }
 
   /**
