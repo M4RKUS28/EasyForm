@@ -1,5 +1,61 @@
 /* EasyForm Overlay Styles */
 
+:root {
+  --ef-bg-primary: #ffffff;
+  --ef-bg-secondary: #f9f9f9;
+  --ef-bg-tertiary: #fafafa;
+  --ef-text-primary: #333333;
+  --ef-text-secondary: #666666;
+  --ef-border-color: #eeeeee;
+  --ef-gradient-start: #667eea;
+  --ef-gradient-end: #764ba2;
+  --ef-accent-color: #667eea;
+  --ef-accent-hover: #5568d3;
+  --ef-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+  --ef-item-hover-bg: #f5f5f5;
+  --ef-scrollbar-track: #f1f1f1;
+  --ef-scrollbar-thumb: #cccccc;
+  --ef-scrollbar-thumb-hover: #999999;
+  --ef-disabled-bg: #cccccc;
+  --ef-notification-bg: #ffffff;
+  --ef-notification-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+  --ef-success-color: #4caf50;
+  --ef-success-text: #2e7d32;
+  --ef-error-color: #f44336;
+  --ef-error-text: #c62828;
+  --ef-info-color: #2196f3;
+  --ef-info-text: #1565c0;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --ef-bg-primary: #1e1e1e;
+    --ef-bg-secondary: #2a2a2a;
+    --ef-bg-tertiary: #252525;
+    --ef-text-primary: #e0e0e0;
+    --ef-text-secondary: #999999;
+    --ef-border-color: #333333;
+    --ef-gradient-start: #7c8ef5;
+    --ef-gradient-end: #8b5dc0;
+    --ef-accent-color: #7c8ef5;
+    --ef-accent-hover: #6b7de3;
+    --ef-shadow: 0 10px 40px rgba(0, 0, 0, 0.6);
+    --ef-item-hover-bg: #333333;
+    --ef-scrollbar-track: #2a2a2a;
+    --ef-scrollbar-thumb: #555555;
+    --ef-scrollbar-thumb-hover: #777777;
+    --ef-disabled-bg: #555555;
+    --ef-notification-bg: #2a2a2a;
+    --ef-notification-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+    --ef-success-color: #66bb6a;
+    --ef-success-text: #a5d6a7;
+    --ef-error-color: #ef5350;
+    --ef-error-text: #ef9a9a;
+    --ef-info-color: #42a5f5;
+    --ef-info-text: #90caf9;
+  }
+}
+
 /* Overlay Container */
 .easyform-overlay {
   position: fixed;
@@ -7,13 +63,13 @@
   right: 20px;
   width: 400px;
   max-height: 80vh;
-  background: white;
+  background: var(--ef-bg-primary);
   border-radius: 12px;
-  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+  box-shadow: var(--ef-shadow);
   z-index: 2147483647;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   font-size: 14px;
-  color: #333;
+  color: var(--ef-text-primary);
   display: flex;
   flex-direction: column;
   animation: easyform-slide-in 0.3s ease-out;
@@ -32,7 +88,7 @@
 
 /* Header */
 .easyform-header {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: linear-gradient(135deg, var(--ef-gradient-start) 0%, var(--ef-gradient-end) 100%);
   color: white;
   padding: 16px 20px;
   border-radius: 12px 12px 0 0;
@@ -86,15 +142,15 @@
 /* Action Items */
 .easyform-item {
   padding: 12px;
-  background: #f9f9f9;
+  background: var(--ef-bg-secondary);
   border-radius: 8px;
-  border: 1px solid #eee;
+  border: 1px solid var(--ef-border-color);
   transition: all 0.2s;
 }
 
 .easyform-item:hover {
-  background: #f5f5f5;
-  border-color: #667eea;
+  background: var(--ef-item-hover-bg);
+  border-color: var(--ef-accent-color);
 }
 
 .easyform-item-header {
@@ -104,20 +160,20 @@
 }
 
 .easyform-number {
-  color: #667eea;
+  color: var(--ef-accent-color);
   font-weight: 600;
   margin-right: 8px;
   flex-shrink: 0;
 }
 
 .easyform-question {
-  color: #333;
+  color: var(--ef-text-primary);
   font-weight: 500;
   line-height: 1.4;
 }
 
 .easyform-answer {
-  color: #666;
+  color: var(--ef-text-secondary);
   font-size: 13px;
   padding-left: 24px;
   line-height: 1.4;
@@ -127,15 +183,15 @@
 /* Footer */
 .easyform-footer {
   padding: 16px 20px;
-  border-top: 1px solid #eee;
-  background: #fafafa;
+  border-top: 1px solid var(--ef-border-color);
+  background: var(--ef-bg-tertiary);
   border-radius: 0 0 12px 12px;
 }
 
 .easyform-execute {
   width: 100%;
   padding: 12px;
-  background: #667eea;
+  background: var(--ef-accent-color);
   color: white;
   border: none;
   border-radius: 8px;
@@ -146,7 +202,7 @@
 }
 
 .easyform-execute:hover {
-  background: #5568d3;
+  background: var(--ef-accent-hover);
   transform: translateY(-1px);
   box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
 }
@@ -156,7 +212,7 @@
 }
 
 .easyform-execute:disabled {
-  background: #ccc;
+  background: var(--ef-disabled-bg);
   cursor: not-allowed;
   transform: none;
 }
@@ -167,15 +223,16 @@
   bottom: 20px;
   right: 20px;
   padding: 16px 24px;
-  background: white;
+  background: var(--ef-notification-bg);
+  color: var(--ef-text-primary);
   border-radius: 8px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+  box-shadow: var(--ef-notification-shadow);
   z-index: 2147483647;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   font-size: 14px;
   max-width: 400px;
   animation: easyform-fade-in 0.3s ease-out;
-  border-left: 4px solid #667eea;
+  border-left: 4px solid var(--ef-accent-color);
 }
 
 @keyframes easyform-fade-in {
@@ -205,18 +262,18 @@
 }
 
 .easyform-notification-success {
-  border-left-color: #4caf50;
-  color: #2e7d32;
+  border-left-color: var(--ef-success-color);
+  color: var(--ef-success-text);
 }
 
 .easyform-notification-error {
-  border-left-color: #f44336;
-  color: #c62828;
+  border-left-color: var(--ef-error-color);
+  color: var(--ef-error-text);
 }
 
 .easyform-notification-info {
-  border-left-color: #2196f3;
-  color: #1565c0;
+  border-left-color: var(--ef-info-color);
+  color: var(--ef-info-text);
 }
 
 /* Scrollbar styling */
@@ -225,17 +282,17 @@
 }
 
 .easyform-content::-webkit-scrollbar-track {
-  background: #f1f1f1;
+  background: var(--ef-scrollbar-track);
   border-radius: 4px;
 }
 
 .easyform-content::-webkit-scrollbar-thumb {
-  background: #ccc;
+  background: var(--ef-scrollbar-thumb);
   border-radius: 4px;
 }
 
 .easyform-content::-webkit-scrollbar-thumb:hover {
-  background: #999;
+  background: var(--ef-scrollbar-thumb-hover);
 }
 
 /* Responsive for smaller screens */

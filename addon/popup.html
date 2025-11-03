@@ -5,6 +5,50 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>EasyForm</title>
   <style>
+    :root {
+      --bg-primary: #ffffff;
+      --bg-secondary: #f5f5f5;
+      --bg-tertiary: #f9f9f9;
+      --text-primary: #333333;
+      --text-secondary: #555555;
+      --text-tertiary: #666666;
+      --text-muted: #999999;
+      --border-color: #dddddd;
+      --border-light: #eeeeee;
+      --gradient-start: #667eea;
+      --gradient-end: #764ba2;
+      --accent-color: #667eea;
+      --accent-hover: #5568d3;
+      --input-bg: #ffffff;
+      --error-bg: #ffeeee;
+      --error-text: #cc3333;
+      --success-bg: #eeffee;
+      --success-text: #33cc33;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg-primary: #1e1e1e;
+        --bg-secondary: #121212;
+        --bg-tertiary: #2a2a2a;
+        --text-primary: #e0e0e0;
+        --text-secondary: #b0b0b0;
+        --text-tertiary: #999999;
+        --text-muted: #666666;
+        --border-color: #444444;
+        --border-light: #333333;
+        --gradient-start: #7c8ef5;
+        --gradient-end: #8b5dc0;
+        --accent-color: #7c8ef5;
+        --accent-hover: #6b7de3;
+        --input-bg: #2a2a2a;
+        --error-bg: #3a1a1a;
+        --error-text: #ff6b6b;
+        --success-bg: #1a3a1a;
+        --success-text: #6bff6b;
+      }
+    }
+
     * {
       margin: 0;
       padding: 0;
@@ -16,16 +60,16 @@
       min-height: 300px;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
       font-size: 14px;
-      color: #333;
-      background: #f5f5f5;
+      color: var(--text-primary);
+      background: var(--bg-secondary);
     }
 
     .container {
-      background: white;
+      background: var(--bg-primary);
     }
 
     .header {
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      background: linear-gradient(135deg, var(--gradient-start) 0%, var(--gradient-end) 100%);
       color: white;
       padding: 20px;
       text-align: center;
@@ -54,7 +98,7 @@
       font-size: 12px;
       font-weight: 600;
       text-transform: uppercase;
-      color: #666;
+      color: var(--text-tertiary);
       margin-bottom: 10px;
       letter-spacing: 0.5px;
     }
@@ -68,22 +112,24 @@
       font-size: 13px;
       font-weight: 500;
       margin-bottom: 5px;
-      color: #555;
+      color: var(--text-secondary);
     }
 
     .input-group input[type="text"],
     .input-group input[type="url"] {
       width: 100%;
       padding: 8px 12px;
-      border: 1px solid #ddd;
+      border: 1px solid var(--border-color);
       border-radius: 4px;
       font-size: 13px;
+      background: var(--input-bg);
+      color: var(--text-primary);
       transition: border-color 0.2s;
     }
 
     .input-group input:focus {
       outline: none;
-      border-color: #667eea;
+      border-color: var(--accent-color);
     }
 
     .mode-toggle {
@@ -94,9 +140,10 @@
     .mode-button {
       flex: 1;
       padding: 10px;
-      border: 2px solid #ddd;
+      border: 2px solid var(--border-color);
       border-radius: 6px;
-      background: white;
+      background: var(--input-bg);
+      color: var(--text-primary);
       cursor: pointer;
       font-size: 13px;
       font-weight: 500;
@@ -104,19 +151,19 @@
     }
 
     .mode-button:hover {
-      border-color: #667eea;
+      border-color: var(--accent-color);
     }
 
     .mode-button.active {
-      border-color: #667eea;
-      background: #667eea;
+      border-color: var(--accent-color);
+      background: var(--accent-color);
       color: white;
     }
 
     .save-button {
       width: 100%;
       padding: 12px;
-      background: #667eea;
+      background: var(--accent-color);
       color: white;
       border: none;
       border-radius: 6px;
@@ -127,7 +174,7 @@
     }
 
     .save-button:hover {
-      background: #5568d3;
+      background: var(--accent-hover);
     }
 
     .save-button:active {
@@ -136,8 +183,8 @@
 
     .status {
       padding: 15px;
-      background: #f9f9f9;
-      border-top: 1px solid #eee;
+      background: var(--bg-tertiary);
+      border-top: 1px solid var(--border-light);
     }
 
     .status-item {
@@ -148,17 +195,17 @@
     }
 
     .status-label {
-      color: #666;
+      color: var(--text-tertiary);
     }
 
     .status-value {
       font-weight: 600;
-      color: #333;
+      color: var(--text-primary);
     }
 
     .error {
-      background: #fee;
-      color: #c33;
+      background: var(--error-bg);
+      color: var(--error-text);
       padding: 10px;
       border-radius: 4px;
       font-size: 12px;
@@ -166,8 +213,8 @@
     }
 
     .success {
-      background: #efe;
-      color: #3c3;
+      background: var(--success-bg);
+      color: var(--success-text);
       padding: 10px;
       border-radius: 4px;
       font-size: 12px;
@@ -177,14 +224,14 @@
     .actions-list {
       max-height: 200px;
       overflow-y: auto;
-      border: 1px solid #eee;
+      border: 1px solid var(--border-light);
       border-radius: 4px;
       margin-top: 10px;
     }
 
     .action-item {
       padding: 10px;
-      border-bottom: 1px solid #eee;
+      border-bottom: 1px solid var(--border-light);
       font-size: 12px;
     }
 
@@ -194,17 +241,17 @@
 
     .action-number {
       font-weight: 600;
-      color: #667eea;
+      color: var(--accent-color);
       margin-right: 5px;
     }
 
     .action-question {
-      color: #333;
+      color: var(--text-primary);
       font-weight: 500;
     }
 
     .action-answer {
-      color: #666;
+      color: var(--text-tertiary);
       margin-left: 20px;
       margin-top: 3px;
     }
@@ -212,7 +259,7 @@
     .empty-state {
       text-align: center;
       padding: 30px;
-      color: #999;
+      color: var(--text-muted);
       font-size: 13px;
     }
   </style>
