@@ -123,6 +123,29 @@
       cursor: not-allowed;
     }
 
+    .cancel-btn {
+      padding: 5px 10px;
+      border: 1px solid var(--error-color);
+      border-radius: 3px;
+      background: transparent;
+      color: var(--error-color);
+      cursor: pointer;
+      font-size: 10px;
+      font-weight: 600;
+      transition: all 0.15s;
+      white-space: nowrap;
+      display: none;
+    }
+
+    .cancel-btn.show {
+      display: block;
+    }
+
+    .cancel-btn:hover {
+      background: var(--error-color);
+      color: white;
+    }
+
     .content {
       padding: 10px;
     }
@@ -158,6 +181,7 @@
       <button class="mode-btn" data-mode="manual" id="manualBtn">Manual</button>
     </div>
     <button class="start-btn" id="startBtn">Start</button>
+    <button class="cancel-btn" id="cancelBtn">Cancel</button>
   </div>
 
   <div class="content">

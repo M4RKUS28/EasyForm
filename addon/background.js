@@ -1,16 +1,15 @@
 // Background Service Worker for EasyForm
+// Now uses async API with polling
 
 const CONFIG = {
   backendUrl: 'https://easyform.markus28.de',
   mode: 'automatic' // 'automatic' or 'manual'
 };
 
-// Store last analysis result (kept for backward compatibility)
-let lastAnalysisResult = null;
-let lastError = null;
-
-// Analysis state keys for chrome.storage.local
+// Storage keys - now per-tab for request IDs
 const STORAGE_KEYS = {
+  getRequestId: (tabId) => `request_${tabId}`,
+  getStartTime: (tabId) => `startTime_${tabId}`,
   ANALYSIS_STATE: 'analysisState',
   ANALYSIS_RESULT: 'analysisResult',
   ANALYSIS_ERROR: 'analysisError'
@@ -23,6 +22,13 @@ const ANALYSIS_STATES = {
   SUCCESS: 'success',
   ERROR: 'error'
 };
+
+// Polling configuration
+const POLL_INTERVAL_MS = 1000; // Poll every 1 second
+const POLL_TIMEOUT_MS = 300000; // 5 minutes timeout
+
+// Active polling intervals (tabId -> intervalId)
+const activePolls = new Map();
 
 // Initialize extension
 chrome.runtime.onInstalled.addListener(() => {
@@ -74,15 +80,11 @@ chrome.commands.onCommand.addListener((command) => {
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   // Handle analyzePage from popup (has tabId parameter)
   if (request.action === 'analyzePage' && request.tabId) {
-    // Start analysis asynchronously - don't wait for completion
-    // This prevents timeout issues with long-running operations
     analyzePage(request.tabId).catch(error => {
       console.error('[EasyForm] Analysis error:', error);
     });
-
-    // Respond immediately to acknowledge the request
     sendResponse({ success: true, started: true });
-    return false; // Don't keep the message channel open
+    return false;
   }
 
   // Handle analyzePage from content script (has data parameter)
@@ -118,14 +120,6 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     return true;
   }
 
-  if (request.action === 'getLastResult') {
-    sendResponse({
-      result: lastAnalysisResult,
-      error: lastError
-    });
-    return true;
-  }
-
   if (request.action === 'getAnalysisState') {
     chrome.storage.local.get([
       STORAGE_KEYS.ANALYSIS_STATE,
@@ -141,21 +135,10 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     return true;
   }
 
-  if (request.action === 'executeStoredActions') {
-    if (lastAnalysisResult && lastAnalysisResult.actions) {
-      chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-        if (tabs[0]) {
-          chrome.tabs.sendMessage(tabs[0].id, {
-            action: 'executeActions',
-            actions: lastAnalysisResult.actions,
-            autoExecute: true
-          });
-        }
-      });
-      sendResponse({ success: true });
-    } else {
-      sendResponse({ error: 'No actions to execute' });
-    }
+  if (request.action === 'cancelRequest' && request.tabId) {
+    cancelRequest(request.tabId)
+      .then(() => sendResponse({ success: true }))
+      .catch(error => sendResponse({ success: false, error: error.message }));
     return true;
   }
 
@@ -173,7 +156,13 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 async function analyzePage(tabId) {
   try {
     console.log('[EasyForm] Starting page analysis for tab:', tabId);
-    lastError = null;
+
+    // Check if there's already an active request for this tab
+    const existingRequestId = await getStoredRequestId(tabId);
+    if (existingRequestId) {
+      console.log('[EasyForm] Tab already has active request:', existingRequestId);
+      throw new Error('Analysis already running for this tab. Please cancel it first.');
+    }
 
     // Set state to RUNNING
     await chrome.storage.local.set({
@@ -194,26 +183,23 @@ async function analyzePage(tabId) {
         htmlLength: response.data.html?.length,
         clipboardLength: response.data.clipboard?.length
       });
-      await handlePageAnalysis(response.data, tabId);
+      await handlePageAnalysisAsync(response.data, tabId);
     } else {
       console.error('[EasyForm] No data received from content script');
+      throw new Error('Failed to get page data');
     }
   } catch (error) {
     console.error('[EasyForm] Error analyzing page:', error);
-    lastError = error.message;
-
-    // Set error state in storage
     await chrome.storage.local.set({
       [STORAGE_KEYS.ANALYSIS_STATE]: ANALYSIS_STATES.ERROR,
       [STORAGE_KEYS.ANALYSIS_ERROR]: error.message
     });
-
     notifyError(tabId, error.message);
   }
 }
 
-// Send page data to backend and process response
-async function handlePageAnalysis(pageData, tabId) {
+// Send page data to backend and start async processing
+async function handlePageAnalysisAsync(pageData, tabId) {
   try {
     // Get config from storage
     const config = await chrome.storage.sync.get(['backendUrl', 'mode', 'apiToken']);
@@ -221,19 +207,18 @@ async function handlePageAnalysis(pageData, tabId) {
     const mode = config.mode || CONFIG.mode;
     const apiToken = config.apiToken || '';
 
-    // Construct full API endpoint
-    const backendUrl = baseUrl.endsWith('/') ? `${baseUrl}api/form/analyze` : `${baseUrl}/api/form/analyze`;
+    // Construct async analyze endpoint
+    const backendUrl = baseUrl.endsWith('/')
+      ? `${baseUrl}api/form/analyze/async`
+      : `${baseUrl}/api/form/analyze/async`;
 
-    console.log('[EasyForm] Sending to backend:', backendUrl);
-    console.log('[EasyForm] Mode:', mode);
-    console.log('[EasyForm] Has API token:', !!apiToken);
+    console.log('[EasyForm] Sending to async backend:', backendUrl);
 
     // Prepare headers
     const headers = {
       'Content-Type': 'application/json',
     };
 
-    // Add authorization header if token is present
     if (apiToken) {
       headers['Authorization'] = `Bearer ${apiToken}`;
     }
@@ -241,7 +226,7 @@ async function handlePageAnalysis(pageData, tabId) {
     // Transform pageData to match backend schema
     const requestBody = {
       html: pageData.html,
-      visible_text: pageData.text,  // Backend expects 'visible_text' not 'text'
+      visible_text: pageData.text,
       clipboard_text: pageData.clipboard,
       mode: 'basic'
     };
@@ -253,7 +238,7 @@ async function handlePageAnalysis(pageData, tabId) {
       mode: requestBody.mode
     });
 
-    // Send data to backend
+    // Send data to backend (async endpoint)
     const response = await fetch(backendUrl, {
       method: 'POST',
       headers,
@@ -262,6 +247,12 @@ async function handlePageAnalysis(pageData, tabId) {
 
     console.log('[EasyForm] Backend response status:', response.status, response.statusText);
 
+    if (response.status === 409) {
+      // Conflict: User already has active request
+      const errorData = await response.json();
+      throw new Error(errorData.detail || 'You already have an active request');
+    }
+
     if (!response.ok) {
       const errorText = await response.text();
       console.error('[EasyForm] Backend error response:', errorText);
@@ -269,14 +260,146 @@ async function handlePageAnalysis(pageData, tabId) {
     }
 
     const result = await response.json();
-    console.log('[EasyForm] Backend result:', {
-      status: result.status,
-      actionsCount: result.actions?.length,
-      fieldsDetected: result.fields_detected
+    console.log('[EasyForm] Backend result:', result);
+
+    // Store request ID and start time for this tab
+    const requestId = result.request_id;
+    const startTime = Date.now();
+
+    await chrome.storage.local.set({
+      [STORAGE_KEYS.getRequestId(tabId)]: requestId,
+      [STORAGE_KEYS.getStartTime(tabId)]: startTime
     });
 
-    lastAnalysisResult = result;
-    lastError = null;
+    console.log('[EasyForm] Request created:', requestId);
+    console.log('[EasyForm] Starting polling...');
+
+    // Start polling for status
+    startPolling(requestId, tabId, startTime, mode);
+
+  } catch (error) {
+    console.error('[EasyForm] Error handling page analysis:', error);
+    await chrome.storage.local.set({
+      [STORAGE_KEYS.ANALYSIS_STATE]: ANALYSIS_STATES.ERROR,
+      [STORAGE_KEYS.ANALYSIS_ERROR]: error.message
+    });
+    notifyError(tabId, error.message);
+    throw error;
+  }
+}
+
+// Start polling for request status
+function startPolling(requestId, tabId, startTime, mode) {
+  // Clear any existing poll for this tab
+  stopPolling(tabId);
+
+  console.log('[EasyForm] Starting poll for tab:', tabId, 'request:', requestId);
+
+  const intervalId = setInterval(async () => {
+    try {
+      await pollRequestStatus(requestId, tabId, startTime, mode);
+    } catch (error) {
+      console.error('[EasyForm] Polling error:', error);
+      stopPolling(tabId);
+      await chrome.storage.local.set({
+        [STORAGE_KEYS.ANALYSIS_STATE]: ANALYSIS_STATES.ERROR,
+        [STORAGE_KEYS.ANALYSIS_ERROR]: error.message
+      });
+    }
+  }, POLL_INTERVAL_MS);
+
+  activePolls.set(tabId, intervalId);
+}
+
+// Poll request status
+async function pollRequestStatus(requestId, tabId, startTime, mode) {
+  const elapsed = Date.now() - startTime;
+
+  // Check timeout
+  if (elapsed > POLL_TIMEOUT_MS) {
+    console.error('[EasyForm] Polling timeout');
+    stopPolling(tabId);
+    await cancelRequest(tabId);
+    await chrome.storage.local.set({
+      [STORAGE_KEYS.ANALYSIS_STATE]: ANALYSIS_STATES.ERROR,
+      [STORAGE_KEYS.ANALYSIS_ERROR]: 'Analysis timeout (5 minutes)'
+    });
+    notifyError(tabId, 'Analysis timeout');
+    return;
+  }
+
+  // Get config for API call
+  const config = await chrome.storage.sync.get(['backendUrl', 'apiToken']);
+  const baseUrl = config.backendUrl || CONFIG.backendUrl;
+  const apiToken = config.apiToken || '';
+
+  // Construct status endpoint
+  const statusUrl = baseUrl.endsWith('/')
+    ? `${baseUrl}api/form/request/${requestId}/status`
+    : `${baseUrl}/api/form/request/${requestId}/status`;
+
+  // Prepare headers
+  const headers = {};
+  if (apiToken) {
+    headers['Authorization'] = `Bearer ${apiToken}`;
+  }
+
+  // Fetch status
+  const response = await fetch(statusUrl, { method: 'GET', headers });
+
+  if (!response.ok) {
+    throw new Error(`Status check failed: ${response.status}`);
+  }
+
+  const status = await response.json();
+  console.log('[EasyForm] Poll status:', status.status, `(${Math.round(elapsed / 1000)}s)`);
+
+  // Handle different statuses
+  if (status.status === 'completed') {
+    stopPolling(tabId);
+    await handleCompletedRequest(requestId, tabId, mode);
+  } else if (status.status === 'failed') {
+    stopPolling(tabId);
+    await chrome.storage.local.set({
+      [STORAGE_KEYS.ANALYSIS_STATE]: ANALYSIS_STATES.ERROR,
+      [STORAGE_KEYS.ANALYSIS_ERROR]: status.error_message || 'Analysis failed'
+    });
+    notifyError(tabId, status.error_message || 'Analysis failed');
+    await cleanupRequestStorage(tabId);
+  }
+  // For 'pending' or 'processing', just continue polling
+}
+
+// Handle completed request - fetch actions and execute
+async function handleCompletedRequest(requestId, tabId, mode) {
+  try {
+    console.log('[EasyForm] Request completed, fetching actions...');
+
+    // Get config for API call
+    const config = await chrome.storage.sync.get(['backendUrl', 'apiToken']);
+    const baseUrl = config.backendUrl || CONFIG.backendUrl;
+    const apiToken = config.apiToken || '';
+
+    // Construct actions endpoint
+    const actionsUrl = baseUrl.endsWith('/')
+      ? `${baseUrl}api/form/request/${requestId}/actions`
+      : `${baseUrl}/api/form/request/${requestId}/actions`;
+
+    // Prepare headers
+    const headers = {};
+    if (apiToken) {
+      headers['Authorization'] = `Bearer ${apiToken}`;
+    }
+
+    // Fetch actions
+    const response = await fetch(actionsUrl, { method: 'GET', headers });
+
+    if (!response.ok) {
+      throw new Error(`Failed to fetch actions: ${response.status}`);
+    }
+
+    const result = await response.json();
+    console.log('[EasyForm] Actions received:', result.actions.length);
 
     // Store result in chrome.storage
     await chrome.storage.local.set({
@@ -305,40 +428,45 @@ async function handlePageAnalysis(pageData, tabId) {
           actions: result.actions
         });
       }
-
-      return { success: true, actionsCount: result.actions.length, mode };
     } else {
       console.log('[EasyForm] No actions to execute');
       notifyInfo(tabId, 'No actions to execute');
-      return { success: true, actionsCount: 0 };
     }
-  } catch (error) {
-    console.error('[EasyForm] Error handling page analysis:', error);
-    lastError = error.message;
 
-    // Set error state in storage
+    // Cleanup
+    await cleanupRequestStorage(tabId);
+
+  } catch (error) {
+    console.error('[EasyForm] Error handling completed request:', error);
     await chrome.storage.local.set({
       [STORAGE_KEYS.ANALYSIS_STATE]: ANALYSIS_STATES.ERROR,
       [STORAGE_KEYS.ANALYSIS_ERROR]: error.message
     });
-
     notifyError(tabId, error.message);
-    throw error;
   }
 }
 
-// Health check function
-async function checkHealth() {
+// Cancel request
+async function cancelRequest(tabId) {
+  const requestId = await getStoredRequestId(tabId);
+
+  if (!requestId) {
+    console.log('[EasyForm] No active request to cancel for tab:', tabId);
+    return;
+  }
+
+  console.log('[EasyForm] Canceling request:', requestId);
+
   try {
-    // Get config from storage
+    // Get config for API call
     const config = await chrome.storage.sync.get(['backendUrl', 'apiToken']);
     const baseUrl = config.backendUrl || CONFIG.backendUrl;
     const apiToken = config.apiToken || '';
 
-    // Construct health endpoint
-    const healthUrl = baseUrl.endsWith('/') ? `${baseUrl}api/health` : `${baseUrl}/api/health`;
-
-    console.log('Checking health:', healthUrl);
+    // Construct delete endpoint
+    const deleteUrl = baseUrl.endsWith('/')
+      ? `${baseUrl}api/form/request/${requestId}`
+      : `${baseUrl}/api/form/request/${requestId}`;
 
     // Prepare headers
     const headers = {};
@@ -346,11 +474,68 @@ async function checkHealth() {
       headers['Authorization'] = `Bearer ${apiToken}`;
     }
 
-    // Call health endpoint
-    const response = await fetch(healthUrl, {
-      method: 'GET',
-      headers
+    // Delete request
+    const response = await fetch(deleteUrl, { method: 'DELETE', headers });
+
+    if (response.status === 204 || response.status === 404) {
+      console.log('[EasyForm] Request canceled successfully');
+    } else {
+      console.warn('[EasyForm] Unexpected status when canceling:', response.status);
+    }
+  } catch (error) {
+    console.error('[EasyForm] Error canceling request:', error);
+  } finally {
+    // Always stop polling and cleanup storage
+    stopPolling(tabId);
+    await cleanupRequestStorage(tabId);
+    await chrome.storage.local.set({
+      [STORAGE_KEYS.ANALYSIS_STATE]: ANALYSIS_STATES.IDLE,
+      [STORAGE_KEYS.ANALYSIS_ERROR]: null
     });
+  }
+}
+
+// Stop polling for a tab
+function stopPolling(tabId) {
+  const intervalId = activePolls.get(tabId);
+  if (intervalId) {
+    clearInterval(intervalId);
+    activePolls.delete(tabId);
+    console.log('[EasyForm] Stopped polling for tab:', tabId);
+  }
+}
+
+// Get stored request ID for a tab
+async function getStoredRequestId(tabId) {
+  const data = await chrome.storage.local.get([STORAGE_KEYS.getRequestId(tabId)]);
+  return data[STORAGE_KEYS.getRequestId(tabId)] || null;
+}
+
+// Cleanup request storage for a tab
+async function cleanupRequestStorage(tabId) {
+  await chrome.storage.local.remove([
+    STORAGE_KEYS.getRequestId(tabId),
+    STORAGE_KEYS.getStartTime(tabId)
+  ]);
+}
+
+// Health check function
+async function checkHealth() {
+  try {
+    const config = await chrome.storage.sync.get(['backendUrl', 'apiToken']);
+    const baseUrl = config.backendUrl || CONFIG.backendUrl;
+    const apiToken = config.apiToken || '';
+
+    const healthUrl = baseUrl.endsWith('/') ? `${baseUrl}api/health` : `${baseUrl}/api/health`;
+
+    console.log('Checking health:', healthUrl);
+
+    const headers = {};
+    if (apiToken) {
+      headers['Authorization'] = `Bearer ${apiToken}`;
+    }
+
+    const response = await fetch(healthUrl, { method: 'GET', headers });
 
     if (!response.ok) {
       throw new Error(`Health check failed: ${response.status} ${response.statusText}`);
@@ -384,3 +569,17 @@ function notifyInfo(tabId, message) {
     console.log('Notification:', message);
   });
 }
+
+// Cleanup when tab is closed
+chrome.tabs.onRemoved.addListener((tabId) => {
+  console.log('[EasyForm] Tab closed:', tabId);
+  stopPolling(tabId);
+  cleanupRequestStorage(tabId);
+});
+
+// Resume polling on extension reload if request is still active
+chrome.runtime.onStartup.addListener(async () => {
+  console.log('[EasyForm] Extension started, checking for active requests...');
+  // Note: This won't work perfectly because we lose the activePolls Map on reload
+  // But the storage-based state will persist
+});

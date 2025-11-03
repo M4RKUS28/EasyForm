@@ -77,6 +77,11 @@ function setupEventListeners() {
   document.getElementById('startBtn').addEventListener('click', async () => {
     await handleStartClick();
   });
+
+  // Cancel button
+  document.getElementById('cancelBtn').addEventListener('click', async () => {
+    await handleCancelClick();
+  });
 }
 
 function updateModeButtons(mode) {
@@ -177,11 +182,14 @@ async function checkAnalysisState() {
     if (!response) return;
 
     const startBtn = document.getElementById('startBtn');
+    const cancelBtn = document.getElementById('cancelBtn');
 
     switch (response.state) {
       case 'running':
         startBtn.disabled = true;
         startBtn.textContent = 'Running...';
+        startBtn.style.display = 'none';
+        cancelBtn.classList.add('show');
         updateInfo('Analyzing page...');
         clearError();
         break;
@@ -189,6 +197,8 @@ async function checkAnalysisState() {
       case 'success':
         startBtn.disabled = false;
         startBtn.textContent = 'Start';
+        startBtn.style.display = 'block';
+        cancelBtn.classList.remove('show');
         if (response.result && response.result.actions) {
           const count = response.result.actions.length;
           updateInfo(`${count} action${count !== 1 ? 's' : ''} found`);
@@ -201,6 +211,8 @@ async function checkAnalysisState() {
       case 'error':
         startBtn.disabled = false;
         startBtn.textContent = 'Start';
+        startBtn.style.display = 'block';
+        cancelBtn.classList.remove('show');
         if (response.error) {
           showError(response.error);
           updateInfo('Analysis failed');
@@ -211,10 +223,42 @@ async function checkAnalysisState() {
       default:
         startBtn.disabled = false;
         startBtn.textContent = 'Start';
+        startBtn.style.display = 'block';
+        cancelBtn.classList.remove('show');
         break;
     }
   } catch (error) {
     console.error('Error checking analysis state:', error);
+  }
+}
+
+// Handle cancel button click
+async function handleCancelClick() {
+  try {
+    // Get current tab
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+
+    if (!tab) {
+      throw new Error('No active tab found');
+    }
+
+    console.log('Canceling analysis for tab:', tab.id);
+
+    // Send cancel request to background
+    const response = await chrome.runtime.sendMessage({
+      action: 'cancelRequest',
+      tabId: tab.id
+    });
+
+    if (response && response.success) {
+      updateInfo('Analysis canceled');
+      clearError();
+    } else {
+      throw new Error(response.error || 'Failed to cancel');
+    }
+  } catch (error) {
+    console.error('Error canceling analysis:', error);
+    showError(error.message);
   }
 }
 
