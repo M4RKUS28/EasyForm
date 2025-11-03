@@ -51,6 +51,11 @@ venv.bak/
 !.vscode/launch.json
 !.vscode/extensions.json
 
+
+
+.secrets/
+
+
 # Jupyter Notebook
 .ipynb_checkpoints
 
