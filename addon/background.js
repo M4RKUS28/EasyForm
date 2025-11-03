@@ -114,6 +114,29 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     }
     return true;
   }
+
+  if (request.action === 'healthCheck') {
+    checkHealth()
+      .then(sendResponse)
+      .catch(error => {
+        sendResponse({ healthy: false, error: error.message });
+      });
+    return true;
+  }
+
+  if (request.action === 'analyzePage' && request.tabId) {
+    analyzePage(request.tabId)
+      .then(() => {
+        sendResponse({
+          success: true,
+          actionsCount: lastAnalysisResult?.actions?.length || 0
+        });
+      })
+      .catch(error => {
+        sendResponse({ success: false, error: error.message });
+      });
+    return true;
+  }
 });
 
 // Main function to analyze page
@@ -202,6 +225,43 @@ async function handlePageAnalysis(pageData, tabId) {
     console.error('Error handling page analysis:', error);
     lastError = error.message;
     notifyError(tabId, error.message);
+    throw error;
+  }
+}
+
+// Health check function
+async function checkHealth() {
+  try {
+    // Get config from storage
+    const config = await chrome.storage.sync.get(['backendUrl', 'apiToken']);
+    const baseUrl = config.backendUrl || CONFIG.backendUrl;
+    const apiToken = config.apiToken || '';
+
+    // Construct health endpoint
+    const healthUrl = baseUrl.endsWith('/') ? `${baseUrl}api/health` : `${baseUrl}/api/health`;
+
+    console.log('Checking health:', healthUrl);
+
+    // Prepare headers
+    const headers = {};
+    if (apiToken) {
+      headers['Authorization'] = `Bearer ${apiToken}`;
+    }
+
+    // Call health endpoint
+    const response = await fetch(healthUrl, {
+      method: 'GET',
+      headers
+    });
+
+    if (!response.ok) {
+      throw new Error(`Health check failed: ${response.status} ${response.statusText}`);
+    }
+
+    const result = await response.json();
+    return { healthy: true, data: result };
+  } catch (error) {
+    console.error('Health check error:', error);
     throw error;
   }
 }

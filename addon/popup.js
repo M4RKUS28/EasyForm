@@ -1,10 +1,30 @@
 // Minimal Popup Script for EasyForm
 
 document.addEventListener('DOMContentLoaded', async () => {
+  await checkBackendHealth();
   await loadConfig();
   await loadStatus();
   setupEventListeners();
 });
+
+async function checkBackendHealth() {
+  try {
+    const response = await chrome.runtime.sendMessage({ action: 'healthCheck' });
+
+    if (response.healthy) {
+      // Backend is healthy - show green indicator
+      const statusDot = document.getElementById('statusDot');
+      statusDot.classList.remove('error');
+      clearError();
+    } else {
+      // Backend is not healthy
+      showError(response.error || 'Backend health check failed');
+    }
+  } catch (error) {
+    // Health check failed
+    showError(error.message || 'Cannot connect to backend');
+  }
+}
 
 async function loadConfig() {
   try {
@@ -40,6 +60,11 @@ function setupEventListeners() {
   document.getElementById('manualBtn').addEventListener('click', () => {
     setMode('manual');
   });
+
+  // Start button
+  document.getElementById('startBtn').addEventListener('click', async () => {
+    await handleStartClick();
+  });
 }
 
 function updateModeButtons(mode) {
@@ -73,4 +98,55 @@ function showError(message) {
   statusDot.classList.add('error');
   errorDiv.textContent = message;
   errorDiv.classList.add('show');
+}
+
+function clearError() {
+  const statusDot = document.getElementById('statusDot');
+  const errorDiv = document.getElementById('errorMessage');
+
+  statusDot.classList.remove('error');
+  errorDiv.textContent = '';
+  errorDiv.classList.remove('show');
+}
+
+async function handleStartClick() {
+  const startBtn = document.getElementById('startBtn');
+
+  try {
+    // Disable button during processing
+    startBtn.disabled = true;
+    startBtn.textContent = 'Running...';
+    clearError();
+    updateInfo('Analyzing page...');
+
+    // Get current tab
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+
+    if (!tab) {
+      throw new Error('No active tab found');
+    }
+
+    // Send message to background to analyze page
+    const response = await chrome.runtime.sendMessage({
+      action: 'analyzePage',
+      tabId: tab.id
+    });
+
+    if (response && response.error) {
+      showError(response.error);
+      updateInfo('Analysis failed');
+    } else if (response && response.success) {
+      updateInfo(`${response.actionsCount} action(s) executed`);
+    } else {
+      updateInfo('Analysis complete');
+    }
+  } catch (error) {
+    console.error('Error starting analysis:', error);
+    showError(error.message);
+    updateInfo('Error');
+  } finally {
+    // Re-enable button
+    startBtn.disabled = false;
+    startBtn.textContent = 'Start';
+  }
 }

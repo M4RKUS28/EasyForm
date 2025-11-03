@@ -40,8 +40,8 @@
   "commands": {
     "analyze-page": {
       "suggested_key": {
-        "default": "Ctrl+Shift+E",
-        "mac": "Command+Shift+E"
+        "default": "Ctrl+Shift+F",
+        "mac": "Command+Shift+F"
       },
       "description": "Analyze page and execute form filling"
     },
