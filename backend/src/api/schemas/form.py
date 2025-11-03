@@ -1,5 +1,6 @@
 """Pydantic schemas for form analysis."""
 from typing import Optional, List, Any, Literal
+from datetime import datetime
 
 from pydantic import BaseModel, Field
 
@@ -56,4 +57,49 @@ class FormAnalyzeResponse(BaseModel):
     fields_detected: int = Field(
         0,
         description="Number of form fields detected"
+    )
+
+
+# ===== NEW: Async API Schemas =====
+
+
+class FormAnalyzeAsyncResponse(BaseModel):
+    """Schema for async form analysis response - returns request ID immediately."""
+    request_id: str = Field(..., description="Unique ID to track the analysis request")
+    status: Literal["pending"] = Field(
+        default="pending",
+        description="Initial status is always 'pending'"
+    )
+
+
+class FormRequestStatusResponse(BaseModel):
+    """Schema for form request status check response."""
+    request_id: str = Field(..., description="Request ID")
+    status: Literal["pending", "processing", "completed", "failed"] = Field(
+        ...,
+        description="Current status of the request"
+    )
+    fields_detected: Optional[int] = Field(
+        None,
+        description="Number of form fields detected (only available when completed)"
+    )
+    error_message: Optional[str] = Field(
+        None,
+        description="Error message if status is 'failed'"
+    )
+    created_at: datetime = Field(..., description="When the request was created")
+    started_at: Optional[datetime] = Field(None, description="When processing started")
+    completed_at: Optional[datetime] = Field(None, description="When processing completed")
+
+
+class FormRequestActionsResponse(BaseModel):
+    """Schema for form request actions response."""
+    request_id: str = Field(..., description="Request ID")
+    status: Literal["pending", "processing", "completed", "failed"] = Field(
+        ...,
+        description="Current status of the request"
+    )
+    actions: List[FormAction] = Field(
+        default_factory=list,
+        description="List of actions (only available when status is 'completed')"
     )

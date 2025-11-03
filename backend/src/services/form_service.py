@@ -11,7 +11,8 @@ from typing import List, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..api.schemas import form as form_schema
-from ..db.crud import files_crud
+from ..db.crud import files_crud, form_requests_crud
+from ..db.database import get_async_db_context
 from .agent_service import AgentService
 
 logger = logging.getLogger(__name__)
@@ -244,3 +245,98 @@ def map_action_type(agent_action_type: str) -> str:
     }
 
     return mapping.get(agent_action_type, "fillText")  # Default to fillText
+
+
+# ===== NEW: Async Background Task for Form Analysis =====
+
+
+async def process_form_analysis_async(
+    request_id: str,
+    user_id: str,
+    request_data: form_schema.FormAnalyzeRequest
+):
+    """
+    Process form analysis asynchronously in background.
+    Updates the form request status in database as it progresses.
+
+    Args:
+        request_id: Form request ID
+        user_id: User ID
+        request_data: Form analysis request data
+
+    This function:
+    1. Updates status to 'processing'
+    2. Runs the analysis (same as analyze_form)
+    3. Saves actions to database
+    4. Updates status to 'completed' or 'failed'
+    """
+    try:
+        logger.info(f"[AsyncTask {request_id}] Starting background analysis for user {user_id}")
+
+        async with get_async_db_context() as db:
+            # Update status to processing
+            await form_requests_crud.update_form_request_status(
+                db, request_id, "processing"
+            )
+            logger.info(f"[AsyncTask {request_id}] Status updated to 'processing'")
+
+        # Run the actual analysis (reuse existing analyze_form logic)
+        async with get_async_db_context() as db:
+            result = await analyze_form(db, user_id, request_data)
+
+        logger.info(f"[AsyncTask {request_id}] Analysis completed with status: {result.status}")
+
+        # Save results to database
+        async with get_async_db_context() as db:
+            if result.status == "success":
+                # Convert FormAction objects to dicts for database storage
+                actions_dict = [
+                    {
+                        "action_type": action.action_type,
+                        "selector": action.selector,
+                        "value": action.value,
+                        "label": action.label
+                    }
+                    for action in result.actions
+                ]
+
+                # Save actions to database
+                await form_requests_crud.create_form_actions(
+                    db, request_id, actions_dict
+                )
+                logger.info(f"[AsyncTask {request_id}] Saved {len(actions_dict)} actions to database")
+
+                # Update status to completed
+                await form_requests_crud.update_form_request_status(
+                    db,
+                    request_id,
+                    "completed",
+                    fields_detected=result.fields_detected
+                )
+                logger.info(f"[AsyncTask {request_id}] Status updated to 'completed'")
+
+            else:
+                # Analysis failed
+                error_msg = result.message or "Unknown error during analysis"
+                await form_requests_crud.update_form_request_status(
+                    db,
+                    request_id,
+                    "failed",
+                    error_message=error_msg
+                )
+                logger.error(f"[AsyncTask {request_id}] Analysis failed: {error_msg}")
+
+    except Exception as e:
+        logger.exception(f"[AsyncTask {request_id}] Exception during async analysis: {e}")
+
+        # Update status to failed
+        try:
+            async with get_async_db_context() as db:
+                await form_requests_crud.update_form_request_status(
+                    db,
+                    request_id,
+                    "failed",
+                    error_message=str(e)
+                )
+        except Exception as db_error:
+            logger.error(f"[AsyncTask {request_id}] Failed to update error status: {db_error}")
