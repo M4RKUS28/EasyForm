@@ -15,8 +15,8 @@ class HtmlFormParserAgent(StructuredAgent):
     def __init__(self, app_name: str, session_service):
         self.full_instructions = load_instruction_from_file("html_form_parser_agent/instructions.txt")
 
-        # Using Gemini 2.5 Pro for better analysis capabilities
-        self.model = "gemini-2.5-pro"
+        # Using Gemini 2.0 Flash for better analysis capabilities
+        self.model = "gemini-2.0-flash"
 
         parser_agent = LlmAgent(
             name="html_form_parser_agent",

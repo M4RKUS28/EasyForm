@@ -5,9 +5,24 @@ const CONFIG = {
   mode: 'automatic' // 'automatic' or 'manual'
 };
 
-// Store last analysis result
+// Store last analysis result (kept for backward compatibility)
 let lastAnalysisResult = null;
 let lastError = null;
+
+// Analysis state keys for chrome.storage.local
+const STORAGE_KEYS = {
+  ANALYSIS_STATE: 'analysisState',
+  ANALYSIS_RESULT: 'analysisResult',
+  ANALYSIS_ERROR: 'analysisError'
+};
+
+// Analysis states
+const ANALYSIS_STATES = {
+  IDLE: 'idle',
+  RUNNING: 'running',
+  SUCCESS: 'success',
+  ERROR: 'error'
+};
 
 // Initialize extension
 chrome.runtime.onInstalled.addListener(() => {
@@ -59,17 +74,15 @@ chrome.commands.onCommand.addListener((command) => {
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   // Handle analyzePage from popup (has tabId parameter)
   if (request.action === 'analyzePage' && request.tabId) {
-    analyzePage(request.tabId)
-      .then(() => {
-        sendResponse({
-          success: true,
-          actionsCount: lastAnalysisResult?.actions?.length || 0
-        });
-      })
-      .catch(error => {
-        sendResponse({ success: false, error: error.message });
-      });
-    return true;
+    // Start analysis asynchronously - don't wait for completion
+    // This prevents timeout issues with long-running operations
+    analyzePage(request.tabId).catch(error => {
+      console.error('[EasyForm] Analysis error:', error);
+    });
+
+    // Respond immediately to acknowledge the request
+    sendResponse({ success: true, started: true });
+    return false; // Don't keep the message channel open
   }
 
   // Handle analyzePage from content script (has data parameter)
@@ -113,6 +126,21 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     return true;
   }
 
+  if (request.action === 'getAnalysisState') {
+    chrome.storage.local.get([
+      STORAGE_KEYS.ANALYSIS_STATE,
+      STORAGE_KEYS.ANALYSIS_RESULT,
+      STORAGE_KEYS.ANALYSIS_ERROR
+    ], (data) => {
+      sendResponse({
+        state: data[STORAGE_KEYS.ANALYSIS_STATE] || ANALYSIS_STATES.IDLE,
+        result: data[STORAGE_KEYS.ANALYSIS_RESULT],
+        error: data[STORAGE_KEYS.ANALYSIS_ERROR]
+      });
+    });
+    return true;
+  }
+
   if (request.action === 'executeStoredActions') {
     if (lastAnalysisResult && lastAnalysisResult.actions) {
       chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
@@ -147,6 +175,12 @@ async function analyzePage(tabId) {
     console.log('[EasyForm] Starting page analysis for tab:', tabId);
     lastError = null;
 
+    // Set state to RUNNING
+    await chrome.storage.local.set({
+      [STORAGE_KEYS.ANALYSIS_STATE]: ANALYSIS_STATES.RUNNING,
+      [STORAGE_KEYS.ANALYSIS_ERROR]: null
+    });
+
     // Request page data from content script
     console.log('[EasyForm] Requesting page data from content script...');
     const response = await chrome.tabs.sendMessage(tabId, {
@@ -166,6 +200,13 @@ async function analyzePage(tabId) {
   } catch (error) {
     console.error('[EasyForm] Error analyzing page:', error);
     lastError = error.message;
+
+    // Set error state in storage
+    await chrome.storage.local.set({
+      [STORAGE_KEYS.ANALYSIS_STATE]: ANALYSIS_STATES.ERROR,
+      [STORAGE_KEYS.ANALYSIS_ERROR]: error.message
+    });
+
     notifyError(tabId, error.message);
   }
 }
@@ -234,6 +275,13 @@ async function handlePageAnalysis(pageData, tabId) {
     lastAnalysisResult = result;
     lastError = null;
 
+    // Store result in chrome.storage
+    await chrome.storage.local.set({
+      [STORAGE_KEYS.ANALYSIS_STATE]: ANALYSIS_STATES.SUCCESS,
+      [STORAGE_KEYS.ANALYSIS_RESULT]: result,
+      [STORAGE_KEYS.ANALYSIS_ERROR]: null
+    });
+
     // Process based on mode
     if (result.actions && result.actions.length > 0) {
       console.log('[EasyForm] Processing actions in mode:', mode);
@@ -264,6 +312,13 @@ async function handlePageAnalysis(pageData, tabId) {
   } catch (error) {
     console.error('[EasyForm] Error handling page analysis:', error);
     lastError = error.message;
+
+    // Set error state in storage
+    await chrome.storage.local.set({
+      [STORAGE_KEYS.ANALYSIS_STATE]: ANALYSIS_STATES.ERROR,
+      [STORAGE_KEYS.ANALYSIS_ERROR]: error.message
+    });
+
     notifyError(tabId, error.message);
     throw error;
   }

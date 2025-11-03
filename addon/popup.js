@@ -1,10 +1,23 @@
 // Minimal Popup Script for EasyForm
 
+let statusCheckInterval = null;
+
 document.addEventListener('DOMContentLoaded', async () => {
   await checkBackendHealth();
   await loadConfig();
   await loadStatus();
   setupEventListeners();
+
+  // Check analysis state on popup open
+  await checkAnalysisState();
+
+  // Start polling for analysis state changes
+  startStatusPolling();
+});
+
+// Stop polling when popup is closed/unloaded
+window.addEventListener('beforeunload', () => {
+  stopStatusPolling();
 });
 
 async function checkBackendHealth() {
@@ -121,12 +134,6 @@ async function handleStartClick() {
   const startBtn = document.getElementById('startBtn');
 
   try {
-    // Disable button during processing
-    startBtn.disabled = true;
-    startBtn.textContent = 'Running...';
-    clearError();
-    updateInfo('Analyzing page...');
-
     // Get current tab
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
 
@@ -134,27 +141,98 @@ async function handleStartClick() {
       throw new Error('No active tab found');
     }
 
-    // Send message to background to analyze page
+    // Clear previous state
+    clearError();
+    updateInfo('Starting analysis...');
+    startBtn.disabled = true;
+    startBtn.textContent = 'Running...';
+
+    // Send message to background to START analysis (doesn't wait for completion)
     const response = await chrome.runtime.sendMessage({
       action: 'analyzePage',
       tabId: tab.id
     });
 
-    if (response && response.error) {
-      showError(response.error);
-      updateInfo('Analysis failed');
-    } else if (response && response.success) {
-      updateInfo(`${response.actionsCount} action(s) executed`);
+    if (response && response.started) {
+      // Analysis started successfully - polling will update the UI
+      updateInfo('Analyzing page...');
     } else {
-      updateInfo('Analysis complete');
+      throw new Error('Failed to start analysis');
     }
   } catch (error) {
     console.error('Error starting analysis:', error);
     showError(error.message);
     updateInfo('Error');
-  } finally {
-    // Re-enable button
+    const startBtn = document.getElementById('startBtn');
     startBtn.disabled = false;
     startBtn.textContent = 'Start';
+  }
+}
+
+// Check current analysis state
+async function checkAnalysisState() {
+  try {
+    const response = await chrome.runtime.sendMessage({ action: 'getAnalysisState' });
+
+    if (!response) return;
+
+    const startBtn = document.getElementById('startBtn');
+
+    switch (response.state) {
+      case 'running':
+        startBtn.disabled = true;
+        startBtn.textContent = 'Running...';
+        updateInfo('Analyzing page...');
+        clearError();
+        break;
+
+      case 'success':
+        startBtn.disabled = false;
+        startBtn.textContent = 'Start';
+        if (response.result && response.result.actions) {
+          const count = response.result.actions.length;
+          updateInfo(`${count} action${count !== 1 ? 's' : ''} found`);
+        } else {
+          updateInfo('Analysis complete');
+        }
+        clearError();
+        break;
+
+      case 'error':
+        startBtn.disabled = false;
+        startBtn.textContent = 'Start';
+        if (response.error) {
+          showError(response.error);
+          updateInfo('Analysis failed');
+        }
+        break;
+
+      case 'idle':
+      default:
+        startBtn.disabled = false;
+        startBtn.textContent = 'Start';
+        break;
+    }
+  } catch (error) {
+    console.error('Error checking analysis state:', error);
+  }
+}
+
+// Start polling for status updates
+function startStatusPolling() {
+  // Clear any existing interval
+  stopStatusPolling();
+
+  // Poll every 500ms for status updates
+  statusCheckInterval = setInterval(async () => {
+    await checkAnalysisState();
+  }, 500);
+}
+
+// Stop polling
+function stopStatusPolling() {
+  if (statusCheckInterval) {
+    clearInterval(statusCheckInterval);
+    statusCheckInterval = null;
   }
 }
