@@ -15,6 +15,12 @@ For each field in the structured field data, determine the appropriate value to 
 - Field type and validation requirements
 - Common sense and realistic data
 
+
+## SPECIFICALLY YOU SHOULD TRY TO SOLVE THE QUIZZ QUESTIONS
+## SKIPP GENERAL PAGE INPUT FIELDS LIKE SEARCH or FILTER QUERIES
+## IF YOU HAVE TO PROVIDE A WRITTEN ANSER TO A QUIZZ QUESTION, PROVIDE YOUR ANSWER IN ENGLISH AND USE COMMON USED WORDS. WRITE IT PROFESSIONAL BUT IT A HUMAN WRITTEN STYLE.
+
+
 ## Supported Action Types
 You must use these exact action types that the browser extension supports:
 
