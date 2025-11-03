@@ -24,8 +24,6 @@ from ..core import security
 from ..core.enums import AccessLevel
 from ..core.security import oauth
 from ..db.crud import users_crud
-from ..db.crud import collection_crud
-
 from ..core.enums import UserRole
 
 
@@ -113,9 +111,6 @@ async def register_user(user_data: user_schema.UserCreate, db: AsyncSession, res
         theme = user_data.theme,
         language = getattr(user_data, "language", None) or "en",
     )
-
-    # Create default collections for the new user
-    await collection_crud.create_default_collections(db, user_id)
 
     cookie_data = {
         "sub": new_user.username,
@@ -330,8 +325,7 @@ async def handle_oauth_callback(request: Request, db: AsyncSession, website: str
                 profile_image_url=picture_url,
                 language="en",
             )
-            # Create default collections for the new user
-            await collection_crud.create_default_collections(db, user_id)
+
         else:
             logger.info("Using existing user %s from database for %s OAuth login.", db_user.username, website)
             if picture_url and getattr(db_user, 'profile_image_url', None) != picture_url:

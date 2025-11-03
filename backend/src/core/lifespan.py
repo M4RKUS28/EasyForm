@@ -5,8 +5,6 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from fastapi import FastAPI
 
 from ..db.database import get_engine, Base, get_async_db_context
-from ..db.bucket_session import get_bucket_engine
-from ..db.seed_data import seed_mock_data
 from ..config import settings
 
 
@@ -21,8 +19,6 @@ for _logger_name in (
     logging.getLogger(_logger_name).setLevel(logging.WARNING)
 
 #
-from ..db.database import Base, engine
-from ..db.models import db_recipe
 
 
 @asynccontextmanager
@@ -35,13 +31,12 @@ async def lifespan(_app: FastAPI):
         engine = await get_engine()
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
-            await conn.run_sync(db_recipe.Base.metadata.create_all)
 
         logger.info("✅ Database tables created/verified")
         
         logger.info("✅ Bucket engine initialized")
         
-        logger.info("Scheduler started.")   
+        logger.info("Scheduler started.")
 
         yield
     except Exception as e:  # noqa: BLE001
