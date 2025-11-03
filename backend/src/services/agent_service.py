@@ -4,7 +4,6 @@ This file defines the service that coordinates the interaction between all the a
 import json
 from logging import getLogger
 
-from ..agents.image_analyzer_agent import ImageAnalyzerAgent
 from ..agents.html_form_parser_agent import HtmlFormParserAgent
 from ..agents.form_value_generator_agent import FormValueGeneratorAgent
 
@@ -20,7 +19,6 @@ class AgentService:
         self.app_name = "EasyForm"
 
         # Initialize agents
-        self.image_analyzer_agent = ImageAnalyzerAgent(self.app_name, self.session_service)
         self.html_form_parser_agent = HtmlFormParserAgent(self.app_name, self.session_service)
         self.form_value_generator_agent = FormValueGeneratorAgent(self.app_name, self.session_service)
 
@@ -101,10 +99,10 @@ Visible Text Content:
 
         if user_files:
             for file in user_files:
-                if file.file_type == "application/pdf":
-                    pdf_files.append(file.file_data)
-                elif file.file_type.startswith("image/"):
-                    images.append(file.file_data)
+                if file.content_type == "application/pdf":
+                    pdf_files.append(file.data)
+                elif file.content_type.startswith("image/"):
+                    images.append(file.data)
 
         # Build query
         query = f"""Please generate appropriate values for the following form fields.

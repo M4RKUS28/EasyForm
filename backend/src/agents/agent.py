@@ -118,26 +118,42 @@ class StructuredAgent(ABC):
         """
         Wraps the event handling and runner from adk into a simple run() method that includes error handling
         and automatic retries for transient failures.
-        
+
         :param user_id: id of the user
         :param state: the state created from the StateService
         :param content: the user query as a type.Content object
         :param debug: if true the method will print auxiliary outputs (all events)
         :return: the parsed dictionary response from the agent
         """
+        logger = logging.getLogger(__name__)
+        logger.info(f"=== Agent.run() called for app: {self.app_name}, user: {user_id} ===")
+        logger.info(f"Content type: {type(content)}")
+        logger.info(f"Content parts count: {len(content.parts) if hasattr(content, 'parts') and content.parts else 0}")
+        if hasattr(content, 'parts') and content.parts:
+            for idx, part in enumerate(content.parts[:3]):  # Log first 3 parts
+                logger.info(f"Content part {idx} type: {type(part)}")
+                if hasattr(part, 'text'):
+                    logger.info(f"Content part {idx} text preview: {part.text[:200] if part.text else 'EMPTY'}")
+                if hasattr(part, 'inline_data'):
+                    logger.info(f"Content part {idx} has inline_data: {part.inline_data is not None}")
+
         max_retries: int = 1
         retry_delay: float = 2.0
         last_error = None
-        
+
         for attempt in range(max_retries + 1):  # +1 for the initial attempt
+            logger.info(f"Attempt {attempt + 1}/{max_retries + 1}")
             try:
+                logger.info("Creating session...")
                 session = await self.session_service.create_session(
                     app_name=self.app_name,
                     user_id=user_id,
                     state=state
                 )
                 session_id = session.id
+                logger.info(f"Session created: {session_id}")
 
+                logger.info("Starting agent runner...")
                 async for event in self.runner.run_async(
                     user_id=user_id,
                     session_id=session_id,
@@ -156,17 +172,48 @@ class StructuredAgent(ABC):
                             # Get the text from the Part object
                             json_text = event.content.parts[0].text
 
+                            logger = logging.getLogger(__name__)
+                            logger.info(f"Agent final response received, text length: {len(json_text) if json_text else 0}")
+                            logger.info(f"JSON text type: {type(json_text)}")
+                            logger.info(f"JSON text preview (first 500 chars): {json_text[:500] if json_text else 'EMPTY'}")
+                            logger.info(f"JSON text preview (last 200 chars): {json_text[-200:] if json_text and len(json_text) > 200 else json_text}")
+
                             # Try parsing the json response into a dictionary
                             try:
-                                dict_response = json.loads(json_text)
+                                logger.info("Attempting to parse JSON...")
+
+                                # Strip markdown code block markers if present
+                                cleaned_text = json_text.strip()
+                                if cleaned_text.startswith("```json"):
+                                    logger.info("Detected markdown JSON code block (```json), stripping markers...")
+                                    cleaned_text = cleaned_text[7:]  # Remove ```json
+                                elif cleaned_text.startswith("```"):
+                                    logger.info("Detected markdown code block (```), stripping markers...")
+                                    cleaned_text = cleaned_text[3:]  # Remove ```
+
+                                if cleaned_text.endswith("```"):
+                                    logger.info("Removing trailing ``` marker...")
+                                    cleaned_text = cleaned_text[:-3]
+
+                                cleaned_text = cleaned_text.strip()
+                                logger.info(f"Cleaned text length: {len(cleaned_text)}")
+                                logger.info(f"Cleaned text preview (first 200 chars): {cleaned_text[:200]}")
+
+                                dict_response = json.loads(cleaned_text)
+                                logger.info(f"JSON parsing successful! Result type: {type(dict_response)}")
+                                logger.info(f"JSON result keys: {dict_response.keys() if isinstance(dict_response, dict) else 'NOT A DICT'}")
                                 return dict_response
                             except json.JSONDecodeError as e:
                                 error_msg = f"Error parsing JSON response: {e}"
+                                logger.error(f"JSON parsing failed: {error_msg}")
+                                logger.error(f"JSON error position: line {e.lineno}, column {e.colno}")
+                                logger.error(f"Problematic text around error: {e.doc[max(0, e.pos-50):min(len(e.doc), e.pos+50)] if hasattr(e, 'doc') and e.doc else 'N/A'}")
                                 if attempt >= max_retries:
                                     if debug:
-                                        logging.getLogger(__name__).error("%s", error_msg)
+                                        logger.error("%s", error_msg)
                                     raise
                                 last_error = error_msg
+                                logger.info(f"Retrying due to JSON parse error (attempt {attempt}/{max_retries})")
                                 break  # Break out of event loop to trigger retry
 
                         elif event.actions and event.actions.escalate:  # Handle potential errors/escalations

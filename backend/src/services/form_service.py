@@ -49,25 +49,45 @@ async def analyze_form(
         FormAnalyzeResponse with actions
     """
     try:
+        logger.info(f"=== Starting form analysis for user {user_id} ===")
+        logger.info(f"Request mode: {request.mode}")
+        logger.info(f"HTML length: {len(request.html) if request.html else 0} chars")
+        logger.info(f"Visible text length: {len(request.visible_text) if request.visible_text else 0} chars")
+        logger.info(f"Screenshots provided: {len(request.screenshots) if request.screenshots else 0}")
+
         # Get AgentService singleton
         agent_service = get_agent_service()
+        logger.info("AgentService singleton retrieved")
+
         # ===== PHASE 1: Parse HTML Form Structure =====
         logger.info(f"Phase 1: Parsing HTML form structure for user {user_id}")
 
         # Decode screenshots if provided (from base64)
         screenshot_bytes = None
         if request.screenshots and request.mode == "extended":
+            logger.info(f"Decoding {len(request.screenshots)} screenshots for extended mode")
             screenshot_bytes = []
-            for screenshot_b64 in request.screenshots:
+            for idx, screenshot_b64 in enumerate(request.screenshots):
                 try:
                     # Remove data URL prefix if present
                     if ',' in screenshot_b64:
+                        logger.info(f"Screenshot {idx}: Removing data URL prefix")
                         screenshot_b64 = screenshot_b64.split(',', 1)[1]
-                    screenshot_bytes.append(base64.b64decode(screenshot_b64))
+                    decoded = base64.b64decode(screenshot_b64)
+                    screenshot_bytes.append(decoded)
+                    logger.info(f"Screenshot {idx}: Successfully decoded {len(decoded)} bytes")
                 except Exception as e:
-                    logger.warning(f"Failed to decode screenshot: {e}")
+                    logger.warning(f"Failed to decode screenshot {idx}: {e}")
+            logger.info(f"Successfully decoded {len(screenshot_bytes)} screenshots")
+        else:
+            logger.info("No screenshots to decode (either none provided or not in extended mode)")
 
         # Call HTML Form Parser Agent
+        logger.info("Calling HTML Form Parser Agent...")
+        logger.info(f"Parser input - user_id: {user_id}, html length: {len(request.html)}, "
+                   f"dom_text length: {len(request.visible_text) if request.visible_text else 0}, "
+                   f"screenshots: {len(screenshot_bytes) if screenshot_bytes else 0}")
+
         parser_result = await agent_service.parse_form_structure(
             user_id=user_id,
             html=request.html,
@@ -75,9 +95,14 @@ async def analyze_form(
             screenshots=screenshot_bytes
         )
 
+        logger.info(f"HTML Form Parser Agent returned result type: {type(parser_result)}")
+        logger.info(f"Parser result keys: {parser_result.keys() if isinstance(parser_result, dict) else 'NOT A DICT'}")
+        logger.info(f"Parser result preview: {str(parser_result)[:500]}")
+
         # Validate parser result
         if not parser_result or "fields" not in parser_result:
             logger.error(f"Parser agent returned invalid result: {parser_result}")
+            logger.error("Validation failed: parser_result is None or missing 'fields' key")
             return form_schema.FormAnalyzeResponse(
                 status="error",
                 message="Failed to parse form structure",
@@ -87,9 +112,11 @@ async def analyze_form(
 
         fields = parser_result["fields"]
         logger.info(f"Phase 1 complete: Detected {len(fields)} form fields")
+        logger.info(f"Fields summary: {[f.get('label', f.get('name', 'unknown')) for f in fields[:5]]}")
 
         # If no fields detected, return early
         if len(fields) == 0:
+            logger.info("No fields detected, returning early with success status")
             return form_schema.FormAnalyzeResponse(
                 status="success",
                 message="No form fields detected on this page",
@@ -101,10 +128,18 @@ async def analyze_form(
         logger.info(f"Phase 2: Generating values for {len(fields)} fields")
 
         # Get user's uploaded files
+        logger.info("Fetching user files from database...")
         user_files = await files_crud.get_user_files(db, user_id)
         logger.info(f"Found {len(user_files)} user files for context")
+        if user_files:
+            logger.info(f"User files: {[f.filename for f in user_files[:5]]}")
 
         # Call Form Value Generator Agent
+        logger.info("Calling Form Value Generator Agent...")
+        logger.info(f"Generator input - user_id: {user_id}, fields count: {len(fields)}, "
+                   f"visible_text length: {len(request.visible_text) if request.visible_text else 0}, "
+                   f"user_files count: {len(user_files)}")
+
         generator_result = await agent_service.generate_form_values(
             user_id=user_id,
             fields=fields,
@@ -112,9 +147,14 @@ async def analyze_form(
             user_files=user_files
         )
 
+        logger.info(f"Form Value Generator Agent returned result type: {type(generator_result)}")
+        logger.info(f"Generator result keys: {generator_result.keys() if isinstance(generator_result, dict) else 'NOT A DICT'}")
+        logger.info(f"Generator result preview: {str(generator_result)[:500]}")
+
         # Validate generator result
         if not generator_result or "actions" not in generator_result:
             logger.error(f"Generator agent returned invalid result: {generator_result}")
+            logger.error("Validation failed: generator_result is None or missing 'actions' key")
             return form_schema.FormAnalyzeResponse(
                 status="error",
                 message="Failed to generate form values",
@@ -123,11 +163,16 @@ async def analyze_form(
             )
 
         # Convert to FormAction objects
+        logger.info(f"Converting {len(generator_result['actions'])} actions to FormAction objects")
         actions = []
-        for action_data in generator_result["actions"]:
+        for idx, action_data in enumerate(generator_result["actions"]):
             try:
+                logger.info(f"Processing action {idx}: {action_data}")
+
                 # Map action_type to match browser extension expectations
-                action_type = map_action_type(action_data.get("action_type", ""))
+                original_type = action_data.get("action_type", "")
+                action_type = map_action_type(original_type)
+                logger.info(f"Action {idx}: Mapped type '{original_type}' -> '{action_type}'")
 
                 action = form_schema.FormAction(
                     action_type=action_type,
@@ -136,13 +181,17 @@ async def analyze_form(
                     label=action_data.get("label", "")
                 )
                 actions.append(action)
+                logger.info(f"Action {idx}: Successfully created FormAction")
             except Exception as e:
                 logger.warning(f"Failed to create action from data {action_data}: {e}")
+                logger.exception(f"Action {idx} conversion error details:")
                 continue
 
         logger.info(f"Phase 2 complete: Generated {len(actions)} actions")
+        logger.info(f"Actions summary: {[f'{a.action_type}:{a.label}' for a in actions[:5]]}")
 
         # Return success response
+        logger.info(f"=== Form analysis complete: {len(fields)} fields, {len(actions)} actions ===")
         return form_schema.FormAnalyzeResponse(
             status="success",
             message=f"Successfully analyzed form with {len(fields)} fields",
@@ -152,6 +201,8 @@ async def analyze_form(
 
     except Exception as e:
         logger.exception(f"Error analyzing form: {e}")
+        logger.error(f"Exception type: {type(e).__name__}")
+        logger.error(f"Exception args: {e.args}")
         return form_schema.FormAnalyzeResponse(
             status="error",
             message=f"Error analyzing form: {str(e)}",

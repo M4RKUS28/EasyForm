@@ -205,7 +205,12 @@ async def get_user_id_from_api_token_or_cookie(
                 )
 
             # Check if token is expired
-            if api_token.expires_at < datetime.now(timezone.utc):
+            # Make expires_at timezone-aware if it's naive
+            expires_at = api_token.expires_at
+            if expires_at.tzinfo is None:
+                expires_at = expires_at.replace(tzinfo=timezone.utc)
+
+            if expires_at < datetime.now(timezone.utc):
                 raise HTTPException(
                     status_code=status.HTTP_401_UNAUTHORIZED,
                     detail="API token expired",
