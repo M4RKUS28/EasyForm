@@ -1,7 +1,7 @@
 // Background Service Worker for EasyForm
 
 const CONFIG = {
-  backendUrl: 'https://easyform.markus28.de/api/analyze',
+  backendUrl: 'https://easyform.markus28.de',
   mode: 'automatic' // 'automatic' or 'manual'
 };
 
@@ -67,10 +67,11 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   }
 
   if (request.action === 'getConfig') {
-    chrome.storage.sync.get(['backendUrl', 'mode'], (result) => {
+    chrome.storage.sync.get(['backendUrl', 'mode', 'apiToken'], (result) => {
       sendResponse({
         backendUrl: result.backendUrl || CONFIG.backendUrl,
-        mode: result.mode || CONFIG.mode
+        mode: result.mode || CONFIG.mode,
+        apiToken: result.apiToken || ''
       });
     });
     return true;
@@ -80,6 +81,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     const updates = {};
     if (request.backendUrl !== undefined) updates.backendUrl = request.backendUrl;
     if (request.mode !== undefined) updates.mode = request.mode;
+    if (request.apiToken !== undefined) updates.apiToken = request.apiToken;
 
     chrome.storage.sync.set(updates, () => {
       sendResponse({ success: true });
@@ -138,18 +140,30 @@ async function analyzePage(tabId) {
 async function handlePageAnalysis(pageData, tabId) {
   try {
     // Get config from storage
-    const config = await chrome.storage.sync.get(['backendUrl', 'mode']);
-    const backendUrl = config.backendUrl || CONFIG.backendUrl;
+    const config = await chrome.storage.sync.get(['backendUrl', 'mode', 'apiToken']);
+    const baseUrl = config.backendUrl || CONFIG.backendUrl;
     const mode = config.mode || CONFIG.mode;
+    const apiToken = config.apiToken || '';
+
+    // Construct full API endpoint
+    const backendUrl = baseUrl.endsWith('/') ? `${baseUrl}api/analyze` : `${baseUrl}/api/analyze`;
 
     console.log('Sending to backend:', backendUrl);
+
+    // Prepare headers
+    const headers = {
+      'Content-Type': 'application/json',
+    };
+
+    // Add authorization header if token is present
+    if (apiToken) {
+      headers['Authorization'] = `Bearer ${apiToken}`;
+    }
 
     // Send data to backend
     const response = await fetch(backendUrl, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers,
       body: JSON.stringify(pageData)
     });
 

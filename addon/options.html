@@ -90,7 +90,9 @@
       color: var(--text-secondary);
     }
 
-    .input-group input[type="url"] {
+    .input-group input[type="url"],
+    .input-group input[type="password"],
+    .input-group input[type="text"] {
       width: 100%;
       padding: 10px 12px;
       border: 1px solid var(--border-color);
@@ -196,8 +198,14 @@
 
       <div class="input-group">
         <label for="backendUrl">Backend URL</label>
-        <input type="url" id="backendUrl" placeholder="https://easyform.markus28.de/api/analyze">
-        <div class="help-text">The URL of your EasyForm backend API</div>
+        <input type="url" id="backendUrl" placeholder="https://easyform.markus28.de">
+        <div class="help-text">The base URL of your EasyForm backend</div>
+      </div>
+
+      <div class="input-group">
+        <label for="apiToken">API Token (optional)</label>
+        <input type="password" id="apiToken" placeholder="Enter your API token">
+        <div class="help-text">Authentication token for the backend API</div>
       </div>
     </div>
 

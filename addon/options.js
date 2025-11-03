@@ -17,6 +17,9 @@ async function loadSettings() {
     // Set backend URL
     document.getElementById('backendUrl').value = response.backendUrl || '';
 
+    // Set API token
+    document.getElementById('apiToken').value = response.apiToken || '';
+
     // Set mode buttons
     const mode = response.mode || 'automatic';
     updateModeButtons(mode);
@@ -47,6 +50,12 @@ function setupEventListeners() {
       saveSettings();
     }
   });
+
+  document.getElementById('apiToken').addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') {
+      saveSettings();
+    }
+  });
 }
 
 function updateModeButtons(mode) {
@@ -65,6 +74,7 @@ function updateModeDescription(mode) {
 async function saveSettings() {
   try {
     const backendUrl = document.getElementById('backendUrl').value.trim();
+    const apiToken = document.getElementById('apiToken').value.trim();
     const mode = document.querySelector('.mode-button.active').dataset.mode;
 
     if (!backendUrl) {
@@ -83,6 +93,7 @@ async function saveSettings() {
     const response = await chrome.runtime.sendMessage({
       action: 'setConfig',
       backendUrl,
+      apiToken,
       mode
     });
 
