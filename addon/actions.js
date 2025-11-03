@@ -19,15 +19,27 @@ const ActionExecutor = {
     const results = [];
     let successCount = 0;
     let failCount = 0;
+    let skipCount = 0;
 
     for (const action of actions) {
       try {
-        await this.executeAction(action);
-        successCount++;
-        results.push({
-          action,
-          success: true
-        });
+        const executionResult = await this.executeAction(action);
+
+        if (executionResult?.skipped) {
+          skipCount++;
+          results.push({
+            action,
+            success: true,
+            skipped: true,
+            message: executionResult.reason
+          });
+        } else {
+          successCount++;
+          results.push({
+            action,
+            success: true
+          });
+        }
 
         // Small delay between actions to simulate human behavior
         await this.delay(this.defaultDelay);
@@ -46,6 +58,7 @@ const ActionExecutor = {
       success: failCount === 0,
       successCount,
       failCount,
+      skipCount,
       results
     };
   },
@@ -55,14 +68,34 @@ const ActionExecutor = {
    * @param {Object} action - Action object
    */
   async executeAction(action) {
-    const { type, selector, value } = action;
+  const actionType = action.type ?? action.action_type ?? action.actionType;
+  const selector = action.selector ?? action.cssSelector ?? action.target ?? action.field_selector;
+  const value = action.value ?? action.answer ?? action.text;
+
+    if (!actionType) {
+      throw new Error('Action type is missing');
+    }
+
+    if (!selector) {
+      throw new Error('Action selector is missing');
+    }
+
+    const requiresValue = new Set(['fillText', 'setText', 'selectCheckbox', 'selectDropdown']);
+
+    if (requiresValue.has(actionType) && value == null) {
+      console.warn('Skipping action with missing value:', action);
+      return {
+        skipped: true,
+        reason: 'Value missing'
+      };
+    }
 
     const element = document.querySelector(selector);
     if (!element) {
       throw new Error(`Element not found: ${selector}`);
     }
 
-    switch (type) {
+    switch (actionType) {
       case 'fillText':
         return this.fillText(element, value);
 
@@ -82,7 +115,7 @@ const ActionExecutor = {
         return this.setText(element, value);
 
       default:
-        throw new Error(`Unknown action type: ${type}`);
+        throw new Error(`Unknown action type: ${actionType}`);
     }
   },
 
@@ -94,7 +127,7 @@ const ActionExecutor = {
     element.focus();
 
     // Set value
-    element.value = value;
+  element.value = value ?? '';
 
     // Trigger input events to simulate user typing
     element.dispatchEvent(new Event('input', { bubbles: true }));
