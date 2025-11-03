@@ -48,8 +48,8 @@ jobs:
           file: ./backend/Dockerfile
           push: true
           tags: |
-            nexoraai/nexora-ai:latest
-            nexoraai/nexora-ai:${{ github.sha }}
+            m4rkus28/easyform:latest
+            m4rkus28/easyform:${{ github.sha }}
           cache-from: type=local,src=/tmp/.buildx-cache
           cache-to: type=local,dest=/tmp/.buildx-cache-new,mode=max
 
