@@ -22,18 +22,23 @@ window.addEventListener('beforeunload', () => {
 
 async function checkBackendHealth() {
   try {
+    console.log('[EasyForm Popup] 🏥 Checking backend health...');
     const response = await chrome.runtime.sendMessage({ action: 'healthCheck' });
+    console.log('[EasyForm Popup] Health check response:', response);
 
     if (response.healthy) {
       // Backend is healthy - show green indicator
+      console.log('[EasyForm Popup] ✅ Backend is healthy');
       setHealthStatus(true);
       clearError();
     } else {
       // Backend is not healthy
+      console.warn('[EasyForm Popup] ⚠️ Backend is not healthy:', response.error);
       showError(response.error || 'Backend health check failed');
     }
   } catch (error) {
     // Health check failed
+    console.error('[EasyForm Popup] ❌ Health check failed:', error);
     showError(error.message || 'Cannot connect to backend');
   }
 }
@@ -137,6 +142,7 @@ async function handleStartClick() {
   try {
     // Get current tab
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    console.log('[EasyForm Popup] 🎯 Start clicked for tab:', tab?.id);
 
     if (!tab) {
       throw new Error('No active tab found');
@@ -148,20 +154,23 @@ async function handleStartClick() {
     startBtn.disabled = true;
     startBtn.textContent = 'Running...';
 
+    console.log('[EasyForm Popup] 📤 Sending analyzePage message to background...');
     // Send message to background to START analysis (doesn't wait for completion)
     const response = await chrome.runtime.sendMessage({
       action: 'analyzePage',
       tabId: tab.id
     });
+    console.log('[EasyForm Popup] 📥 Received response:', response);
 
     if (response && response.started) {
       // Analysis started successfully - polling will update the UI
+      console.log('[EasyForm Popup] ✅ Analysis started successfully');
       updateInfo('Analyzing page...');
     } else {
       throw new Error('Failed to start analysis');
     }
   } catch (error) {
-    console.error('Error starting analysis:', error);
+    console.error('[EasyForm Popup] ❌ Error starting analysis:', error);
     showError(error.message);
     updateInfo('Error');
     const startBtn = document.getElementById('startBtn');
@@ -174,6 +183,7 @@ async function handleStartClick() {
 async function checkAnalysisState() {
   try {
     const response = await chrome.runtime.sendMessage({ action: 'getAnalysisState' });
+    console.log('[EasyForm Popup] 📊 Analysis state:', response?.state);
 
     if (!response) return;
 
@@ -182,6 +192,7 @@ async function checkAnalysisState() {
 
     switch (response.state) {
       case 'running':
+        console.log('[EasyForm Popup] 🔄 State: running');
         startBtn.disabled = true;
         startBtn.textContent = 'Running...';
         startBtn.style.display = 'none';
@@ -191,12 +202,14 @@ async function checkAnalysisState() {
         break;
 
       case 'success':
+        console.log('[EasyForm Popup] ✅ State: success');
         startBtn.disabled = false;
         startBtn.textContent = 'Start';
         startBtn.style.display = 'block';
         cancelBtn.classList.remove('show');
         if (response.result && response.result.actions) {
           const count = response.result.actions.length;
+          console.log('[EasyForm Popup] 📋 Actions found:', count);
           updateInfo(`${count} action${count !== 1 ? 's' : ''} found`);
         } else {
           updateInfo('Analysis complete');
@@ -205,6 +218,7 @@ async function checkAnalysisState() {
         break;
 
       case 'error':
+        console.log('[EasyForm Popup] ❌ State: error -', response.error);
         startBtn.disabled = false;
         startBtn.textContent = 'Start';
         startBtn.style.display = 'block';
@@ -217,6 +231,7 @@ async function checkAnalysisState() {
 
       case 'idle':
       default:
+        console.log('[EasyForm Popup] ⏸️ State: idle');
         startBtn.disabled = false;
         startBtn.textContent = 'Start';
         startBtn.style.display = 'block';
@@ -224,7 +239,7 @@ async function checkAnalysisState() {
         break;
     }
   } catch (error) {
-    console.error('Error checking analysis state:', error);
+    console.error('[EasyForm Popup] ❌ Error checking analysis state:', error);
   }
 }
 

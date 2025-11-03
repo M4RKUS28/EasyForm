@@ -12,7 +12,15 @@ const ActionExecutor = {
    * @returns {Promise<Object>} Execution result
    */
   async executeActions(actions, autoExecute = true) {
+    console.log('[ActionExecutor] 🚀 executeActions called:', {
+      actionsCount: actions?.length,
+      autoExecute,
+      timestamp: new Date().toISOString(),
+      stackTrace: new Error().stack
+    });
+
     if (!autoExecute) {
+      console.log('[ActionExecutor] ⏸️ AutoExecute is false, skipping execution');
       return { success: true, message: 'Actions stored for manual execution' };
     }
 
@@ -21,6 +29,7 @@ const ActionExecutor = {
     let failCount = 0;
     let skipCount = 0;
 
+    console.log('[ActionExecutor] 🔄 Starting action execution loop...');
     for (const action of actions) {
       try {
         const executionResult = await this.executeAction(action);
@@ -54,13 +63,16 @@ const ActionExecutor = {
       }
     }
 
-    return {
+    const finalResult = {
       success: failCount === 0,
       successCount,
       failCount,
       skipCount,
       results
     };
+
+    console.log('[ActionExecutor] 🏁 executeActions finished:', finalResult);
+    return finalResult;
   },
 
   /**

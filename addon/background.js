@@ -404,13 +404,13 @@ function startPolling(requestId, tabId, startTime, mode) {
   // Clear any existing poll for this tab
   stopPolling(tabId);
 
-  console.log('[EasyForm] Starting poll for tab:', tabId, 'request:', requestId);
+  console.log('[EasyForm] ▶️ Starting poll for tab:', tabId, 'request:', requestId, 'mode:', mode);
 
   const intervalId = setInterval(async () => {
     try {
       await pollRequestStatus(requestId, tabId, startTime, mode);
     } catch (error) {
-      console.error('[EasyForm] Polling error:', error);
+      console.error('[EasyForm] ❌ Polling error:', error);
       stopPolling(tabId);
       await chrome.storage.local.set({
         [STORAGE_KEYS.ANALYSIS_STATE]: ANALYSIS_STATES.ERROR,
@@ -420,6 +420,7 @@ function startPolling(requestId, tabId, startTime, mode) {
   }, POLL_INTERVAL_MS);
 
   activePolls.set(tabId, intervalId);
+  console.log('[EasyForm] 📊 Active polls after start:', activePolls.size, 'intervalId:', intervalId);
 }
 
 // Poll request status
@@ -467,9 +468,22 @@ async function pollRequestStatus(requestId, tabId, startTime, mode) {
 
   // Handle different statuses
   if (status.status === 'completed') {
+    console.log('[EasyForm] 🏁 Status completed - checking if polling is still active');
+    // Check if polling is still active - this prevents race condition where multiple polls
+    // see the 'completed' status before the interval is cleared
+    if (!activePolls.has(tabId)) {
+      console.log('[EasyForm] ⚠️ Polling already stopped for tab:', tabId, '- ignoring completion');
+      return;
+    }
+    console.log('[EasyForm] ✓ Polling is active, proceeding with completion');
     stopPolling(tabId);
     await handleCompletedRequest(requestId, tabId, mode);
   } else if (status.status === 'failed') {
+    console.log('[EasyForm] ❌ Status failed - checking if polling is still active');
+    if (!activePolls.has(tabId)) {
+      console.log('[EasyForm] ⚠️ Polling already stopped for tab:', tabId, '- ignoring failure');
+      return;
+    }
     stopPolling(tabId);
     await chrome.storage.local.set({
       [STORAGE_KEYS.ANALYSIS_STATE]: ANALYSIS_STATES.ERROR,
@@ -484,7 +498,7 @@ async function pollRequestStatus(requestId, tabId, startTime, mode) {
 // Handle completed request - fetch actions and execute
 async function handleCompletedRequest(requestId, tabId, mode) {
   try {
-    console.log('[EasyForm] Request completed, fetching actions...');
+    console.log('[EasyForm] ⭐ handleCompletedRequest called for requestId:', requestId, 'tabId:', tabId, 'mode:', mode);
 
     // Get config for API call
     const config = await chrome.storage.sync.get(['backendUrl', 'apiToken']);
@@ -521,26 +535,27 @@ async function handleCompletedRequest(requestId, tabId, mode) {
 
     // Process based on mode
     if (result.actions && result.actions.length > 0) {
-      console.log('[EasyForm] Processing actions in mode:', mode);
+      console.log('[EasyForm] 📋 Processing', result.actions.length, 'actions in mode:', mode);
       if (mode === 'automatic') {
         // Automatic mode: execute immediately
-        console.log('[EasyForm] Auto-executing', result.actions.length, 'actions');
-        await chrome.tabs.sendMessage(tabId, {
+        console.log('[EasyForm] 🤖 Auto-executing', result.actions.length, 'actions for tab:', tabId);
+        const messageResponse = await chrome.tabs.sendMessage(tabId, {
           action: 'executeActions',
           actions: result.actions,
           autoExecute: true
         });
+        console.log('[EasyForm] ✅ Execution response:', messageResponse);
         notifyInfo(tabId, `Executed ${result.actions.length} action(s)`);
       } else {
         // Manual mode: show overlay
-        console.log('[EasyForm] Showing overlay with', result.actions.length, 'actions');
+        console.log('[EasyForm] 👁️ Showing overlay with', result.actions.length, 'actions');
         await chrome.tabs.sendMessage(tabId, {
           action: 'showOverlay',
           actions: result.actions
         });
       }
     } else {
-      console.log('[EasyForm] No actions to execute');
+      console.log('[EasyForm] ⚠️ No actions to execute');
       notifyInfo(tabId, 'No actions to execute');
     }
 
@@ -612,7 +627,9 @@ function stopPolling(tabId) {
   if (intervalId) {
     clearInterval(intervalId);
     activePolls.delete(tabId);
-    console.log('[EasyForm] Stopped polling for tab:', tabId);
+    console.log('[EasyForm] ⏹️ Stopped polling for tab:', tabId, 'intervalId:', intervalId, 'activePolls size:', activePolls.size);
+  } else {
+    console.log('[EasyForm] ⚠️ stopPolling called but no active poll for tab:', tabId, 'activePolls size:', activePolls.size);
   }
 }
 

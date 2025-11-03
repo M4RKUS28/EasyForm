@@ -43,9 +43,20 @@
         break;
 
       case 'executeActions':
+        console.log('[EasyForm Content] 📨 Received executeActions message:', {
+          actionsCount: request.actions?.length,
+          autoExecute: request.autoExecute,
+          timestamp: new Date().toISOString()
+        });
         executeActions(request.actions, request.autoExecute)
-          .then(result => sendResponse(result))
-          .catch(error => sendResponse({ error: error.message }));
+          .then(result => {
+            console.log('[EasyForm Content] ✅ executeActions completed:', result);
+            sendResponse(result);
+          })
+          .catch(error => {
+            console.error('[EasyForm Content] ❌ executeActions error:', error);
+            sendResponse({ error: error.message });
+          });
         return true;
 
       case 'showOverlay':

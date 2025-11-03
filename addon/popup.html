@@ -38,7 +38,7 @@
     }
 
     body {
-      width: 220px;
+      width: 260px;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
       font-size: 11px;
       color: var(--text-primary);
@@ -67,27 +67,14 @@
 
     .settings {
       display: flex;
-      flex-direction: column;
+      flex-direction: row;
       gap: 6px;
       flex: 1;
-    }
-
-    .setting-row {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-    }
-
-    .setting-label {
-      font-size: 9px;
-      color: var(--text-muted);
-      min-width: 45px;
-      font-weight: 500;
     }
 
     .setting-select {
       flex: 1;
-      padding: 3px 6px;
+      padding: 4px 8px;
       border: 1px solid var(--border-color);
       border-radius: 3px;
       background: var(--bg-primary);
@@ -189,20 +176,14 @@
   <div class="header">
     <div class="status-dot" id="statusDot"></div>
     <div class="settings">
-      <div class="setting-row">
-        <label class="setting-label">Execute:</label>
-        <select class="setting-select" id="executionMode">
-          <option value="automatic">Automatic</option>
-          <option value="manual">Manual</option>
-        </select>
-      </div>
-      <div class="setting-row">
-        <label class="setting-label">Mode:</label>
-        <select class="setting-select" id="analysisMode">
-          <option value="basic">HTML Only</option>
-          <option value="extended">Extended (Screenshots)</option>
-        </select>
-      </div>
+      <select class="setting-select" id="executionMode">
+        <option value="automatic">Automatic</option>
+        <option value="manual">Manual</option>
+      </select>
+      <select class="setting-select" id="analysisMode">
+        <option value="basic">HTML Only</option>
+        <option value="extended">Extended</option>
+      </select>
     </div>
     <button class="start-btn" id="startBtn">Start</button>
     <button class="cancel-btn" id="cancelBtn">Cancel</button>
