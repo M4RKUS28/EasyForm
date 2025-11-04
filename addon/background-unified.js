@@ -330,11 +330,13 @@ async function pollRequestStatus(requestId, tabId, startTime, mode) {
     console.error('[EasyForm Polling] ⏱️ Polling timeout');
     stopPolling(tabId);
     await cancelRequestInternal(tabId);
+    const timeoutMinutes = Math.round(POLL_TIMEOUT_MS / 60000);
+    const timeoutMessage = `Analysis timeout (${timeoutMinutes} minutes)`;
     await chrome.storage.local.set({
       [STORAGE_KEYS.ANALYSIS_STATE]: ANALYSIS_STATES.ERROR,
-      [STORAGE_KEYS.ANALYSIS_ERROR]: 'Analysis timeout (5 minutes)'
+      [STORAGE_KEYS.ANALYSIS_ERROR]: timeoutMessage
     });
-    notifyError(tabId, 'Analysis timeout');
+    notifyError(tabId, timeoutMessage);
     return;
   }
 
