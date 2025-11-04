@@ -2,6 +2,8 @@ import { useState } from 'react';
 import Header from '../components/Header';
 import './TestForm.css';
 
+const checkboxGroupFields = new Set(['ethicsQ2', 'ethicsQ16', 'ethicsQ22', 'ethicsQ29']);
+
 function TestForm() {
   const [formData, setFormData] = useState({
     // Personal Information
@@ -55,13 +57,13 @@ function TestForm() {
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
-    
-    if (type === 'checkbox' && name === 'ethicsQ2') {
+
+    if (type === 'checkbox' && checkboxGroupFields.has(name)) {
       setFormData(prev => ({
         ...prev,
-        ethicsQ2: checked 
-          ? [...prev.ethicsQ2, value]
-          : prev.ethicsQ2.filter(h => h !== value)
+        [name]: checked
+          ? [...prev[name], value]
+          : prev[name].filter((entry) => entry !== value)
       }));
     } else if (type === 'checkbox') {
       setFormData(prev => ({ ...prev, [name]: checked }));

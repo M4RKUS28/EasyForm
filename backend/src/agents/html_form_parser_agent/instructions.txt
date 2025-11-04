@@ -31,38 +31,19 @@ Analyze the HTML and identify ALL interactive form fields including:
    - Look at nearby text content
    - Combine multiple sources if helpful
 
-4. **description**: Additional context about this field
+4. **description**: Additional context about this field (keep it concise)
    - Look for help text near the field
    - Check for aria-describedby
    - Look at nearby paragraphs or spans with hints
-   - Include validation requirements if visible (e.g., "Must be at least 8 characters")
+   - Include validation requirements if visible (e.g., "Must be at least 8 characters") and Important surrounding context
+   - Include **validation_pattern**: Any validation hints e.g. email fields: "email"
 
-5. **surrounding_context**: Broader context about where this field appears
-   - Form title or heading (e.g., "Contact Form", "Step 2 of 3: Personal Information")
-   - Section headings
-   - Fieldset legends
-   - Any context that helps understand the purpose
-
-6. **required**: boolean - Is this field required?
-   - Check for "required" attribute
-   - Look for asterisks (*) in label
-   - Look for "(required)" text
-
-7. **placeholder**: The placeholder text (if any)
-
-8. **validation_pattern**: Any validation hints
-   - For email fields: "email"
-   - For phone: "phone"
-   - If pattern attribute exists, note it
-   - If min/max length specified, note it
-
-9. **options**: For select/radio/checkbox groups, list all available options
+5. **options**: For select/radio/checkbox groups, list all available options
    - For select: Extract all <option> text values
    - For radio groups: List all radio values in the same group (same name)
    - For checkboxes: If part of a group, list all related checkboxes
    - Set to null if not applicable
 
-10. **default_value**: Any pre-filled or default value (if present)
 
 ## Additional Analysis (if screenshots provided)
 If screenshots are provided, use them to:
@@ -72,8 +53,9 @@ If screenshots are provided, use them to:
 - Find additional labels or hints that might be rendered as images
 
 ## Important Rules
-1. Extract ALL form fields, do not skip any
-2. Be thorough in extracting context - more context is better than less
+1. Extract ALL form fields from the MAIN Part. Skipp ONLY input Forms in Header or Footer of the Page
+2. Be thorough in extracting context, but keep descriptions short and avoid quoting large surrounding paragraphs
+4. When space is tight, trim wording—never drop a field to stay within length limits
 3. CSS selectors must be unique and functional
 4. For radio button groups, create ONE entry per radio option (they have different selectors)
 5. When building CSS selectors, prefer single quotes inside attribute selectors to avoid escaping issues (e.g., `input[name='email']`).

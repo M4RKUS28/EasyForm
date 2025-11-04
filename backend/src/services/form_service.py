@@ -6,6 +6,7 @@ using AI and user context (uploaded files).
 """
 import base64
 import logging
+from collections import Counter
 from typing import List, Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -119,7 +120,52 @@ async def analyze_form(
 
         fields = parser_result["fields"]
         logger.info(f"Phase 1 complete: Detected {len(fields)} form fields")
-        logger.info(f"Fields summary: {[f.get('label', f.get('name', 'unknown')) for f in fields[:5]]}")
+
+        # Provide richer diagnostics about the detected fields to help debug parsing issues
+        normalized_fields = []
+        for field in fields:
+            if hasattr(field, "model_dump"):
+                normalized_fields.append(field.model_dump())
+            elif isinstance(field, dict):
+                normalized_fields.append(field)
+            else:
+                logger.warning("Unexpected field type returned from parser: %s", type(field))
+
+        if normalized_fields:
+            summaries = [
+                nf.get("label")
+                or nf.get("name")
+                or nf.get("selector")
+                or f"field_{idx}"
+                for idx, nf in enumerate(normalized_fields[:5])
+            ]
+            logger.info("Fields summary: %s", summaries)
+
+            type_counter = Counter(f.get("type", "unknown") for f in normalized_fields)
+            logger.info("Field type distribution: %s", dict(type_counter))
+
+            max_logged_fields = 25
+            for idx, field_data in enumerate(normalized_fields[:max_logged_fields]):
+                selector = field_data.get("selector")
+                label = field_data.get("label")
+                summary = {
+                    "selector": selector,
+                    "label": label,
+                    "type": field_data.get("type"),
+                    "required": field_data.get("required"),
+                    "has_placeholder": bool(field_data.get("placeholder")),
+                    "options_count": len(field_data.get("options", []) or []),
+                    "description_len": len(field_data.get("description") or ""),
+                    "context_len": len(field_data.get("surrounding_context") or ""),
+                }
+                logger.info("Field[%d]: %s", idx, summary)
+
+            if len(normalized_fields) > max_logged_fields:
+                logger.info(
+                    "Additional fields omitted from log: showing %d of %d entries",
+                    max_logged_fields,
+                    len(normalized_fields),
+                )
 
         # If no fields detected, return early
         if len(fields) == 0:

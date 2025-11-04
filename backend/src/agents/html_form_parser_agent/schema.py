@@ -20,21 +20,9 @@ class FormField(BaseModel):
     )
     description: Optional[str] = Field(
         None,
-        description="Additional hints or help text describing the field.",
+        description="Additional hints or help text describing the field. Or Information from surrounding context.",
     )
-    surrounding_context: Optional[str] = Field(
-        None,
-        description="Broader context such as section headings or form titles.",
-    )
-    required: bool = Field(..., description="Whether the field is mandatory for submission.")
-    placeholder: Optional[str] = Field(
-        None,
-        description="Placeholder value shown inside the field when empty.",
-    )
-    validation_pattern: Optional[str] = Field(
-        None,
-        description="Known validation rule or pattern that applies to the field.",
-    )
+
     options: Optional[List[str]] = Field(
         None,
         description="Selectable options for dropdowns, radios, or grouped checkboxes.",

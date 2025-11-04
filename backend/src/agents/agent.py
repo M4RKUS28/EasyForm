@@ -260,6 +260,7 @@ class StructuredAgent(ABC):
                             logger.info(f"JSON text type: {type(json_text)}")
                             logger.info(f"JSON text preview (first 500 chars): {json_text[:500] if json_text else 'EMPTY'}")
                             logger.info(f"JSON text preview (last 200 chars): {json_text[-200:] if json_text and len(json_text) > 200 else json_text}")
+                            logger.warning("Agent raw response (len=%d): %s", len(json_text) if json_text else 0, json_text if json_text else "EMPTY")
 
                             # Try parsing the json response into a dictionary
                             try:
@@ -354,6 +355,7 @@ class StructuredAgent(ABC):
                                 logger.info(f"JSON parsing successful! Result type: {type(parsed_response)}")
                                 if isinstance(parsed_response, dict):
                                     logger.info(f"JSON result keys: {parsed_response.keys()}")
+                                logger.warning("Agent structured output: %s", parsed_response)
                                 return parsed_response
                             except json.JSONDecodeError as e:
                                 error_msg = f"Error parsing JSON response: {e}"

@@ -27,7 +27,7 @@ class FormAction(Base):
     action_type = Column(String(50), nullable=False)  # fillText, selectDropdown, etc.
     selector = Column(Text, nullable=False)  # CSS selector
     value = Column(Text, nullable=True)  # JSON or plain text value
-    label = Column(String(255), nullable=True)  # Human-readable label
+    label = Column(Text, nullable=True)  # Human-readable label
 
     # Order of execution
     order_index = Column(Integer, nullable=False, default=0)
