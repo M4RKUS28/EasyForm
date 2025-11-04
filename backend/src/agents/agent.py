@@ -16,6 +16,45 @@ if not settings.AGENT_DEBUG_MODE:
     logging.getLogger("google_adk.google.adk.models.google_llm").setLevel(logging.WARNING)
 
 
+def _escape_unescaped_control_chars(json_text: str) -> str:
+    """Escape control characters that appear inside JSON strings without proper escaping."""
+    result = []
+    in_string = False
+    escape_next = False
+
+    for ch in json_text:
+        if in_string:
+            if escape_next:
+                result.append(ch)
+                escape_next = False
+                continue
+
+            if ch == '\\':
+                result.append(ch)
+                escape_next = True
+            elif ch == '"':
+                result.append(ch)
+                in_string = False
+            elif ord(ch) < 0x20:
+                if ch == '\n':
+                    result.append('\\n')
+                elif ch == '\r':
+                    result.append('\\r')
+                elif ch == '\t':
+                    result.append('\\t')
+                else:
+                    result.append(f"\\u{ord(ch):04x}")
+            else:
+                result.append(ch)
+        else:
+            result.append(ch)
+            if ch == '"':
+                in_string = True
+                escape_next = False
+
+    return "".join(result)
+
+
 
 class StandardAgent(ABC):
     """ This is the standard agent without structured output """
@@ -200,6 +239,11 @@ class StructuredAgent(ABC):
                                 cleaned_text = cleaned_text.strip()
                                 logger.info(f"Cleaned text length: {len(cleaned_text)}")
                                 logger.info(f"Cleaned text preview (first 200 chars): {cleaned_text[:200]}")
+
+                                sanitized_text = _escape_unescaped_control_chars(cleaned_text)
+                                if sanitized_text != cleaned_text:
+                                    logger.info("Control characters sanitized before validation")
+                                    cleaned_text = sanitized_text
 
                                 parsed_response = None
 

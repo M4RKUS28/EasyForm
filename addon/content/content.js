@@ -238,42 +238,164 @@
     const renderActions = () => {
       list.innerHTML = '';
       
+      // Group checkbox and radio actions by label
+      const groupedActions = [];
+      const checkboxGroups = new Map();
+      const radioGroups = new Map();
+      
       filteredActions.forEach((action, index) => {
-        const item = document.createElement('div');
-        item.className = 'easyform-item';
-        item.dataset.actionIndex = index;
+        if (action.action_type === 'selectCheckbox') {
+          const label = action.label || 'Checkbox';
+          if (!checkboxGroups.has(label)) {
+            checkboxGroups.set(label, []);
+          }
+          checkboxGroups.get(label).push({ action, index });
+        } else if (action.action_type === 'selectRadio') {
+          const label = action.label || 'Radio';
+          if (!radioGroups.has(label)) {
+            radioGroups.set(label, []);
+          }
+          radioGroups.get(label).push({ action, index });
+        } else {
+          groupedActions.push({ action, index, type: 'single' });
+        }
+      });
+      
+      // Convert checkbox groups to grouped actions
+      checkboxGroups.forEach((group, label) => {
+        groupedActions.push({ label, group, type: 'checkbox-group' });
+      });
+      
+      // Convert radio groups to grouped actions
+      radioGroups.forEach((group, label) => {
+        groupedActions.push({ label, group, type: 'radio-group' });
+      });
+      
+      // Sort by original index
+      groupedActions.sort((a, b) => {
+        const indexA = a.type === 'single' ? a.index : a.group[0].index;
+        const indexB = b.type === 'single' ? b.index : b.group[0].index;
+        return indexA - indexB;
+      });
+      
+      groupedActions.forEach((item, displayIndex) => {
+        const itemDiv = document.createElement('div');
+        itemDiv.className = 'easyform-item';
+        const itemNumber = displayIndex + 1;
+        
+        if (item.type === 'single') {
+          // Regular action
+          const action = item.action;
+          const index = item.index;
+          const question = action.label || action.question || `Field ${index + 1}`;
+          const description = action.description || '';
+          const value = action.value !== null && action.value !== undefined ? action.value : '-';
 
-        // Use label from action, fallback to question or generic field name
-        const question = action.label || action.question || `Field ${index + 1}`;
-        const description = action.description || '';
-        const value = action.value !== null && action.value !== undefined ? action.value : '-';
-
-        item.innerHTML = `
-          <div class="easyform-item-content">
-            <div class="easyform-item-header">
-              <div class="easyform-question-wrapper">
-                <span class="easyform-question">${escapeHtml(question)}</span>
+          itemDiv.dataset.actionIndex = index;
+          itemDiv.innerHTML = `
+            <div class="easyform-item-content">
+              <div class="easyform-item-header">
+                <div class="easyform-question-wrapper">
+                  <span class="easyform-number">${itemNumber}.</span>
+                  <span class="easyform-question">${escapeHtml(question)}</span>
+                </div>
+                <button class="easyform-remove" data-index="${index}" title="Remove this action">×</button>
               </div>
-              <button class="easyform-remove" data-index="${index}" title="Remove this action">×</button>
+              ${description ? `
+                <div class="easyform-description">
+                  <span class="easyform-description-text">${escapeHtml(description)}</span>
+                </div>
+              ` : ''}
+              <div class="easyform-answer">${escapeHtml(String(value))}</div>
             </div>
-            ${description ? `
-              <div class="easyform-description">
-                <span class="easyform-description-text">${escapeHtml(description)}</span>
+          `;
+        } else if (item.type === 'checkbox-group') {
+          // Checkbox group
+          const label = item.label;
+          const group = item.group;
+          
+          // Extract checkbox values from selectors
+          const checkboxes = group.map(({ action, index }) => {
+            const match = action.selector.match(/\[value=['"]([^'"]+)['"]\]/);
+            const optionValue = match ? match[1] : 'unknown';
+            const isChecked = action.value === '1' || action.value === 1 || action.value === true;
+            return { optionValue, isChecked, index };
+          });
+          
+          const selectedOptions = checkboxes.filter(cb => cb.isChecked).map(cb => cb.optionValue);
+          const unselectedOptions = checkboxes.filter(cb => !cb.isChecked).map(cb => cb.optionValue);
+          
+          const displayValue = selectedOptions.length > 0 
+            ? `✓ ${selectedOptions.join(', ')}`
+            : 'None selected';
+          
+          itemDiv.innerHTML = `
+            <div class="easyform-item-content">
+              <div class="easyform-item-header">
+                <div class="easyform-question-wrapper">
+                  <span class="easyform-number">${itemNumber}.</span>
+                  <span class="easyform-question">${escapeHtml(label)}</span>
+                </div>
+                <button class="easyform-remove-group" data-label="${escapeHtml(label)}" title="Remove all ${escapeHtml(label)} actions">×</button>
               </div>
-            ` : ''}
-            <div class="easyform-answer">${escapeHtml(String(value))}</div>
-          </div>
-        `;
+              <div class="easyform-answer easyform-checkbox-answer">${escapeHtml(displayValue)}</div>
+              ${unselectedOptions.length > 0 ? `
+                <div class="easyform-checkbox-unselected">
+                  ✗ ${escapeHtml(unselectedOptions.join(', '))}
+                </div>
+              ` : ''}
+            </div>
+          `;
+        } else if (item.type === 'radio-group') {
+          // Radio group
+          const label = item.label;
+          const group = item.group;
+          
+          // Extract radio values from selectors
+          const radios = group.map(({ action, index }) => {
+            const match = action.selector.match(/\[value=['"]([^'"]+)['"]\]/);
+            const optionValue = match ? match[1] : 'unknown';
+            return { optionValue, index };
+          });
+          
+          // Only one radio should be selected (the one in the group)
+          const selectedValue = radios.length > 0 ? radios[0].optionValue : 'unknown';
+          
+          itemDiv.innerHTML = `
+            <div class="easyform-item-content">
+              <div class="easyform-item-header">
+                <div class="easyform-question-wrapper">
+                  <span class="easyform-number">${itemNumber}.</span>
+                  <span class="easyform-question">${escapeHtml(label)}</span>
+                </div>
+                <button class="easyform-remove-group" data-label="${escapeHtml(label)}" title="Remove ${escapeHtml(label)} action">×</button>
+              </div>
+              <div class="easyform-answer easyform-radio-answer">◉ ${escapeHtml(selectedValue)}</div>
+            </div>
+          `;
+        }
 
-        list.appendChild(item);
+        list.appendChild(itemDiv);
       });
 
-      // Add event listeners for remove buttons
+      // Add event listeners for remove buttons (single actions)
       list.querySelectorAll('.easyform-remove').forEach(button => {
         button.addEventListener('click', (e) => {
           e.stopPropagation();
           const index = parseInt(button.dataset.index);
           filteredActions.splice(index, 1);
+          renderActions();
+          updateExecuteButton();
+        });
+      });
+      
+      // Add event listeners for remove group buttons (checkbox/radio groups)
+      list.querySelectorAll('.easyform-remove-group').forEach(button => {
+        button.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const label = button.dataset.label;
+          // Remove all actions with this label
+          filteredActions = filteredActions.filter(action => action.label !== label);
           renderActions();
           updateExecuteButton();
         });

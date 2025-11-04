@@ -178,6 +178,7 @@ const ActionExecutor = {
     }
 
     element.checked = true;
+    element.dispatchEvent(new Event('input', { bubbles: true }));
     element.dispatchEvent(new Event('change', { bubbles: true }));
   },
 
@@ -192,6 +193,7 @@ const ActionExecutor = {
     // Value can be boolean or string ('true'/'false')
     const shouldCheck = value === true || value === 'true' || value === '1';
     element.checked = shouldCheck;
+    element.dispatchEvent(new Event('input', { bubbles: true }));
     element.dispatchEvent(new Event('change', { bubbles: true }));
   },
 
