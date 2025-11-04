@@ -1,7 +1,6 @@
 from typing import List, Optional, Dict, Any
 
-from fastapi import APIRouter, Depends, HTTPException
-from fastapi import FastAPI, Response, Cookie
+from fastapi import APIRouter, Depends, HTTPException, Response
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from ...db.database import get_db, get_async_db_context
@@ -13,9 +12,12 @@ from ...services import user_service
 from ...db.crud import users_crud
 from ...utils import auth
 
-from ...utils.auth import (get_user_id_optional,
-                            get_read_write_user_token_data,
-                            get_admin_token_data)
+from ...utils.auth import (
+    get_user_id_optional,
+    get_read_write_user_token_data,
+    get_admin_token_data,
+)
+from ...config.settings import PERSONAL_INSTRUCTIONS_MAX_LENGTH
 
 
 
@@ -47,9 +49,11 @@ async def read_current_user(
             return None
     return user_schemas.User.from_orm(user)
 
-@router.get("/",
-            response_model=List[user_schemas.User],
-            dependencies=[Depends(auth.get_admin_user_id)])
+@router.get(
+    "/",
+    response_model=List[user_schemas.User],
+    dependencies=[Depends(auth.get_admin_user_id)],
+)
 async def read_users(
     skip: int = 0,
     limit: int = 100,
@@ -75,20 +79,6 @@ async def update_user(
     """
     return await user_service.update_user(db, user_id, user_update, token_data)
 
-@router.put("/{user_id}/change_password", response_model=user_schemas.User)
-async def change_password(
-    user_id: str,
-    password_data: user_schemas.UserPasswordUpdate,
-    db: AsyncSession = Depends(get_db),
-    current_user_token_data: Dict[str, Any] = Depends(get_read_write_user_token_data)
-):
-    """
-    Change a user's password.
-    Admins can change any user's password, regular users can only change their own password.
-    """
-    return await user_service.change_password(db, user_id, password_data, current_user_token_data)
-
-
 @router.delete("/me", response_model=user_schemas.User, dependencies=[Depends(get_read_write_user_token_data)])
 async def delete_me(
     response: Response,
@@ -105,7 +95,11 @@ async def delete_me(
     return await user_service.delete_user(db, user_id, current_user_token_data=current_user_token_data, response=response)
 
 
-@router.delete("/{user_id:str}", response_model=user_schemas.User, dependencies=[Depends(auth.get_admin_user_id)])
+@router.delete(
+    "/{user_id:str}",
+    response_model=user_schemas.User,
+    dependencies=[Depends(auth.get_admin_user_id)],
+)
 async def delete_user(
     user_id: str,
     response: Response,
@@ -117,3 +111,57 @@ async def delete_user(
     Admins cannot delete themselves.
     """
     return await user_service.delete_user(db, user_id, current_user_token_data=current_user_token_data, response=response)
+
+
+@router.get(
+    "/me/personal-instructions",
+    response_model=user_schemas.PersonalInstructionsResponse,
+    summary="Get current user's personal instructions",
+)
+async def get_personal_instructions(
+    current_user_id: Optional[str] = Depends(get_user_id_optional),
+):
+    if current_user_id is None:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    async with get_async_db_context() as db:
+        instructions = await users_crud.get_user_personal_instructions(db, current_user_id)
+    return user_schemas.PersonalInstructionsResponse(personal_instructions=instructions)
+
+
+@router.put(
+    "/me/personal-instructions",
+    response_model=user_schemas.PersonalInstructionsResponse,
+    summary="Update current user's personal instructions",
+)
+async def update_personal_instructions(
+    update: user_schemas.PersonalInstructionsUpdate,
+    current_user_token_data: Dict[str, Any] = Depends(get_read_write_user_token_data),
+    db: AsyncSession = Depends(get_db),
+):
+    user_id = current_user_token_data.get("user_id")
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    instructions = update.personal_instructions
+    if instructions is not None:
+        instructions = instructions.strip()
+        if not instructions:
+            instructions = None
+        elif len(instructions) > PERSONAL_INSTRUCTIONS_MAX_LENGTH:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Personal instructions must be at most {PERSONAL_INSTRUCTIONS_MAX_LENGTH} characters.",
+            )
+
+    updated_user = await users_crud.update_user_personal_instructions(
+        db,
+        user_id,
+        instructions,
+    )
+    if updated_user is None:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    return user_schemas.PersonalInstructionsResponse(
+        personal_instructions=updated_user.personal_instructions
+    )

@@ -4,7 +4,6 @@ from datetime import datetime, timezone, timedelta
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-from sqlalchemy.sql import text
 
 from ..models.db_user import User
 from ...core.enums import UserRole, ThemePreference
@@ -16,6 +15,10 @@ async def get_user_by_id(db: AsyncSession, user_id: str) -> Optional[User]:
     result = await db.execute(select(User).filter(User.id == user_id))
     return result.scalar_one_or_none()
 
+async def get_user_personal_instructions(db: AsyncSession, user_id: str) -> Optional[str]:
+    """Return the personal instructions string for the given user."""
+    result = await db.execute(select(User.personal_instructions).filter(User.id == user_id))
+    return result.scalar_one_or_none()
 
 async def get_user_by_username(db: AsyncSession, username: str) -> Optional[User]:
     """Retrieve a user by their username."""
@@ -88,6 +91,17 @@ async def update_user_last_login(db: AsyncSession, user_id: str) -> Optional[Use
         await db.commit()
         await db.refresh(user)
     return user
+
+async def update_user_personal_instructions(db: AsyncSession, user_id: str, instructions: Optional[str]) -> Optional[User]:
+    """Update the stored personal instructions for a user."""
+    user = await get_user_by_id(db, user_id)
+    if not user:
+        return None
+    user.personal_instructions = instructions
+    await db.commit()
+    await db.refresh(user)
+    return user
+
 
 async def update_user_profile_image(db: AsyncSession, user: User, profile_image_url: str):
     """Update the profile image of an existing user."""

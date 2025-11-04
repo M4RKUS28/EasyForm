@@ -34,5 +34,11 @@ export const formAPI = {
   analyzeForm: (formData) => apiWithCookies.post('/form/analyze', formData),
 };
 
+// User endpoints
+export const userAPI = {
+  getPersonalInstructions: () => apiWithCookies.get('/users/me/personal-instructions'),
+  updatePersonalInstructions: (payload) => apiWithCookies.put('/users/me/personal-instructions', payload),
+};
+
 export { BaseApi, apiWithCookies, apiWithoutCookies };
 export default apiWithCookies;

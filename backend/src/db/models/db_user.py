@@ -45,6 +45,7 @@ class User(Base):
     #später hier oauth accs erkennen: open_id = Column(String(50), unique=True, index=True, nullable=True) # New field for OpenID
     # Use generic Text so it maps to PostgreSQL 'text' type instead of MySQL LONGTEXT
     profile_image_url = Column(Text, nullable=True)  # New field for profile image
+    personal_instructions = Column(Text, nullable=True)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=True)
     last_login = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=True) # Will be updated manually on login
 

@@ -14,7 +14,7 @@ from typing import Dict, List, Optional, Tuple
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..api.schemas import form as form_schema
-from ..db.crud import files_crud, form_requests_crud
+from ..db.crud import files_crud, form_requests_crud, users_crud
 from ..db.database import get_async_db_context
 from .agent_service import AgentService
 
@@ -161,13 +161,21 @@ async def analyze_form(
             len(screenshot_bytes) if screenshot_bytes else 0,
         )
 
+        personal_instructions = await users_crud.get_user_personal_instructions(db, user_id)
+        instructions_clean = _sanitize_prompt_text(personal_instructions, collapse_whitespace=False)
+        if instructions_clean:
+            logger.info("Personal instructions length: %d chars", len(instructions_clean))
+        else:
+            logger.info("No personal instructions provided")
+
         parser_result = await agent_service.parse_form_structure(
             user_id=user_id,
             html=html_clean,
             dom_text=visible_clean,
             clipboard_text=clipboard_clean,
             screenshots=screenshot_bytes,
-            quality=request.quality
+            quality=request.quality,
+            personal_instructions=instructions_clean,
         )
 
         logger.info("HTML Form Parser Agent returned result type: %s", type(parser_result))
@@ -274,7 +282,8 @@ async def analyze_form(
             visible_text=visible_clean,
             clipboard_text=clipboard_clean,
             user_files=user_files,
-            quality=request.quality
+            quality=request.quality,
+            personal_instructions=instructions_clean,
         )
 
         logger.info("Form Value Generator Agent returned result type: %s", type(generator_result))
@@ -411,12 +420,24 @@ async def process_form_analysis_async(
             len(clipboard_clean),
         )
 
+        personal_instructions = None
         async with get_async_db_context() as db:
+            personal_instructions = await users_crud.get_user_personal_instructions(db, user_id)
             # Update status to processing_step_1 (parsing HTML form structure)
             await form_requests_crud.update_form_request_status(
                 db, request_id, "processing_step_1"
             )
             logger.info("[AsyncTask %s] Status updated to 'processing_step_1'", request_id)
+
+        instructions_clean = _sanitize_prompt_text(personal_instructions, collapse_whitespace=False)
+        if instructions_clean:
+            logger.info(
+                "[AsyncTask %s] Personal instructions length: %d chars",
+                request_id,
+                len(instructions_clean),
+            )
+        else:
+            logger.info("[AsyncTask %s] No personal instructions provided", request_id)
 
         # Get AgentService singleton
         agent_service = get_agent_service()
@@ -445,7 +466,8 @@ async def process_form_analysis_async(
                 dom_text=visible_clean,
                 clipboard_text=clipboard_clean,
                 screenshots=screenshot_bytes,
-                quality=request_data.quality
+                quality=request_data.quality,
+                personal_instructions=instructions_clean,
             )
 
             # Validate parser result
@@ -500,7 +522,8 @@ async def process_form_analysis_async(
                 visible_text=visible_clean,
                 clipboard_text=clipboard_clean,
                 user_files=user_files,
-                quality=request_data.quality
+                quality=request_data.quality,
+                personal_instructions=instructions_clean,
             )
 
             # Validate generator result

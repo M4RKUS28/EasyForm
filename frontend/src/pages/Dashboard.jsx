@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { tokenAPI, fileAPI } from '../api/client';
+import { tokenAPI, fileAPI, userAPI } from '../api/client';
 import Header from '../components/Header';
 import DeleteModal from '../components/DeleteModal';
 import '../components/DeleteModal.css';
@@ -16,6 +16,8 @@ const Dashboard = () => {
   const [uploadProgress, setUploadProgress] = useState(false);
   const [message, setMessage] = useState(null);
   const [personalInstructions, setPersonalInstructions] = useState('');
+  const [instructionsSaving, setInstructionsSaving] = useState(false);
+  const [instructionsDirty, setInstructionsDirty] = useState(false);
   
   // Modal state
   const [deleteModal, setDeleteModal] = useState({
@@ -26,11 +28,11 @@ const Dashboard = () => {
   });
 
   useEffect(() => {
-    loadData();
+    loadData({ includeInstructions: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const loadData = async () => {
+  const loadData = async ({ includeInstructions = false } = {}) => {
     setLoading(true);
     try {
       const [tokensRes, filesRes] = await Promise.all([
@@ -40,6 +42,18 @@ const Dashboard = () => {
       setTokens(tokensRes.data.tokens);
       setFiles(filesRes.data.files);
       setTotalStorage(filesRes.data.total_storage_bytes);
+
+      if (includeInstructions) {
+        try {
+          const instructionsRes = await userAPI.getPersonalInstructions();
+          const savedInstructions = instructionsRes.data.personal_instructions || '';
+          setPersonalInstructions(savedInstructions);
+          setInstructionsDirty(false);
+        } catch (instructionsError) {
+          console.error('Error loading personal instructions:', instructionsError);
+          showMessage('Error loading personal instructions', 'error');
+        }
+      }
     } catch (error) {
       console.error('Error loading data:', error);
       showMessage('Error loading data', 'error');
@@ -149,16 +163,39 @@ const Dashboard = () => {
       });
 
       await loadData();
-      const successMessage = personalInstructions
-        ? 'File uploaded successfully! Personal instructions saved locally.'
-        : 'File uploaded successfully!';
-      showMessage(successMessage);
+      showMessage('File uploaded successfully!');
       e.target.value = ''; // Reset input
     } catch (error) {
       console.error('Error uploading file:', error);
       showMessage(error.response?.data?.detail || 'Error uploading file', 'error');
     } finally {
       setUploadProgress(false);
+    }
+  };
+
+  const handleSavePersonalInstructions = async () => {
+    if (instructionsSaving || !instructionsDirty) {
+      return;
+    }
+
+    setInstructionsSaving(true);
+    try {
+      const payload = {
+        personal_instructions: personalInstructions && personalInstructions.trim().length > 0
+          ? personalInstructions
+          : null,
+      };
+      const response = await userAPI.updatePersonalInstructions(payload);
+      const savedValue = response.data.personal_instructions || '';
+      setPersonalInstructions(savedValue);
+      setInstructionsDirty(false);
+      showMessage('Personal instructions saved!');
+    } catch (error) {
+      console.error('Error saving personal instructions:', error);
+      const detail = error.response?.data?.detail || 'Error saving personal instructions';
+      showMessage(detail, 'error');
+    } finally {
+      setInstructionsSaving(false);
     }
   };
 
@@ -317,14 +354,38 @@ const Dashboard = () => {
               <textarea
                 id="personalInstructions"
                 value={personalInstructions}
-                onChange={(e) => setPersonalInstructions(e.target.value)}
+                onChange={(e) => {
+                  setPersonalInstructions(e.target.value);
+                  setInstructionsDirty(true);
+                }}
                 rows={4}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                 placeholder="Add optional notes for yourself..."
               />
-              <p className="text-xs text-gray-500 mt-2">
-                Stored locally on this device; update before uploading a new file.
-              </p>
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mt-3">
+                <div>
+                  <p className="text-xs text-gray-500">
+                    These notes are stored with your account and sent to the AI when analyzing forms.
+                  </p>
+                  {instructionsDirty && (
+                    <p className="text-xs text-amber-600 font-medium mt-1">
+                      Unsaved changes — click Save to keep them.
+                    </p>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  onClick={handleSavePersonalInstructions}
+                  disabled={instructionsSaving || !instructionsDirty}
+                  className={`px-6 py-2 rounded-lg text-white transition ${
+                    instructionsSaving || !instructionsDirty
+                      ? 'bg-blue-300 cursor-not-allowed'
+                      : 'bg-blue-600 hover:bg-blue-700'
+                  }`}
+                >
+                  {instructionsSaving ? 'Saving...' : 'Save Instructions'}
+                </button>
+              </div>
             </div>
           </div>
         </section>

@@ -23,6 +23,7 @@ class UserBase(BaseModel):
     profile_image_url: Optional[str] = None
     theme: Optional[ThemePreference] = Field(default=ThemePreference.LIGHT)
     language: Optional[str] = Field(default="en", min_length=2, max_length=10)
+    personal_instructions: Optional[str] = None
 
     @field_validator('language', mode='before')
     @classmethod
@@ -89,6 +90,7 @@ class UserUpdate(BaseModel):
     role: Optional[UserRole] = None # Only updatable by admins
     theme: Optional[ThemePreference] = None
     language: Optional[str] = Field(default=None, min_length=2, max_length=10)
+    personal_instructions: Optional[str] = Field(default=None, max_length=4000)
 
     @field_validator('language', mode='before')
     @classmethod
@@ -172,7 +174,20 @@ class User(UserBase):
     created_at: datetime
     last_login: datetime
     login_streak: int
+    personal_instructions: Optional[str] = None
 
     class Config:
         from_attributes = True
+
+
+class PersonalInstructionsResponse(BaseModel):
+    personal_instructions: Optional[str] = None
+
+
+class PersonalInstructionsUpdate(BaseModel):
+    personal_instructions: Optional[str] = Field(
+        default=None,
+        max_length=4000,
+        description="Optional personal instructions. Set to null or empty to clear.",
+    )
 
