@@ -22,7 +22,7 @@ class File(Base):
     content_type = Column(String(100), nullable=False)  # e.g., "image/png", "application/pdf"
     file_size = Column(Integer, nullable=False)  # Size in bytes
     # Use LONGBLOB for MySQL to support files up to 4GB (we limit to 200MB in application)
-    data = Column(LONGBLOB, nullable=False)
+    data = Column(LargeBinary(length=2**30), nullable=False)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
 
     # Relationship to user
