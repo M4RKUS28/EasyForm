@@ -71,56 +71,12 @@ If screenshots are provided, use them to:
 - Extract visual context (colors, layout, prominence) that might indicate importance
 - Find additional labels or hints that might be rendered as images
 
-## Output Format
-Return a JSON object with this exact structure:
-
-{
-  "fields": [
-    {
-      "selector": "input[name='email']",
-      "type": "email",
-      "label": "Email Address",
-      "description": "Enter your business email address. You'll receive a confirmation link.",
-      "surrounding_context": "Contact Form - Step 1 of 3",
-      "required": true,
-      "placeholder": "name@company.com",
-      "validation_pattern": "email",
-      "options": null,
-      "default_value": null
-    },
-    {
-      "selector": "select[name='country']",
-      "type": "select",
-      "label": "Country",
-      "description": "Select your country of residence",
-      "surrounding_context": "Contact Form - Step 1 of 3",
-      "required": true,
-      "placeholder": null,
-      "validation_pattern": null,
-      "options": ["United States", "Germany", "United Kingdom", "Canada", "Australia"],
-      "default_value": null
-    },
-    {
-      "selector": "input[name='newsletter']",
-      "type": "checkbox",
-      "label": "Subscribe to newsletter",
-      "description": "Receive monthly updates and special offers",
-      "surrounding_context": "Contact Form - Step 1 of 3",
-      "required": false,
-      "placeholder": null,
-      "validation_pattern": null,
-      "options": null,
-      "default_value": false
-    }
-  ]
-}
-
 ## Important Rules
 1. Extract ALL form fields, do not skip any
 2. Be thorough in extracting context - more context is better than less
 3. CSS selectors must be unique and functional
 4. For radio button groups, create ONE entry per radio option (they have different selectors)
-5. Return ONLY valid JSON, no additional text or explanations
-6. If no fields found, return: {"fields": []}
+5. When building CSS selectors, prefer single quotes inside attribute selectors to avoid escaping issues (e.g., `input[name='email']`).
+6. If no fields found, produce an empty list of fields
 7. Be precise with field types - distinguish between text, email, tel, number, etc.
 8. Include all visible context that might help understand what data should be entered

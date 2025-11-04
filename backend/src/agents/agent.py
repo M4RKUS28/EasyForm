@@ -13,6 +13,11 @@ from google.genai import types
 
 from ..config import settings
 
+try:
+    from json_repair import repair_json
+except ImportError:  # pragma: no cover - optional dependency
+    repair_json = None
+
 if not settings.AGENT_DEBUG_MODE:
     logging.getLogger("google_adk.google.adk.models.google_llm").setLevel(logging.WARNING)
 
@@ -114,9 +119,15 @@ class StandardAgent(ABC):
                     if event.is_final_response():
                         response_handled = True
                         if event.content and event.content.parts:
+                            text_segments = [
+                                part.text
+                                for part in event.content.parts
+                                if hasattr(part, "text") and part.text
+                            ]
+                            merged_text = "".join(text_segments)
                             return {
                                 "status": "success",
-                                "output": event.content.parts[0].text,
+                                "output": merged_text,
                             }
                         if event.actions and event.actions.escalate:
                             error_msg = (
@@ -233,8 +244,16 @@ class StructuredAgent(ABC):
                     if event.is_final_response():
                         final_response_handled = True
                         if event.content and event.content.parts:
-                            # Get the text from the Part object
-                            json_text = event.content.parts[0].text
+                            text_segments = [
+                                part.text
+                                for part in event.content.parts
+                                if hasattr(part, "text") and part.text
+                            ]
+                            json_text = "".join(text_segments)
+                            logger.info(
+                                "Final response composed of %d text segment(s)",
+                                len(text_segments),
+                            )
 
                             logger = logging.getLogger(__name__)
                             logger.info(f"Agent final response received, text length: {len(json_text) if json_text else 0}")
@@ -268,19 +287,69 @@ class StructuredAgent(ABC):
                                     logger.info("Control characters sanitized before validation")
                                     cleaned_text = sanitized_text
 
-                                parsed_response = None
-
-                                output_model = getattr(self, "output_model", None)
-                                if output_model is not None:
+                                candidate_texts = [(cleaned_text, "cleaned")]
+                                if repair_json is not None:
                                     try:
-                                        model_instance = output_model.model_validate_json(cleaned_text)
-                                        parsed_response = model_instance.model_dump()
-                                        logger.info("Structured output validated against %s", output_model.__name__)
-                                    except ValidationError as validation_error:
-                                        logger.error("Structured output validation failed: %s", validation_error)
+                                        repaired_text = repair_json(cleaned_text)
+                                        if repaired_text and repaired_text != cleaned_text:
+                                            candidate_texts.append((repaired_text, "json_repair"))
+                                            logger.info("json-repair generated alternative candidate for parsing")
+                                    except Exception as repair_error:  # noqa: BLE001
+                                        logger.warning("json-repair failed to repair candidate: %s", repair_error)
+
+                                parsed_response = None
+                                fallback_json = None
+                                last_decode_error = None
+
+                                for candidate_text, candidate_label in candidate_texts:
+                                    try:
+                                        loaded_json = json.loads(candidate_text)
+                                    except json.JSONDecodeError as decode_error:
+                                        last_decode_error = decode_error
+                                        logger.error(
+                                            "JSON parsing failed (%s candidate): %s",
+                                            candidate_label,
+                                            decode_error,
+                                        )
+                                        logger.error(
+                                            "Problematic text around error (%s candidate): %s",
+                                            candidate_label,
+                                            candidate_text[max(0, decode_error.pos - 50): min(len(candidate_text), decode_error.pos + 50)]
+                                            if candidate_text else "N/A",
+                                        )
+                                        continue
+
+                                    output_model = getattr(self, "output_model", None)
+                                    if output_model is not None:
+                                        try:
+                                            model_instance = output_model.model_validate(loaded_json)
+                                            parsed_response = model_instance.model_dump()
+                                            logger.info(
+                                                "Structured output validated against %s using %s candidate",
+                                                output_model.__name__,
+                                                candidate_label,
+                                            )
+                                            break
+                                        except ValidationError as validation_error:
+                                            logger.error(
+                                                "Structured output validation failed (%s candidate): %s",
+                                                candidate_label,
+                                                validation_error,
+                                            )
+                                            fallback_json = loaded_json
+                                            continue
+                                    else:
+                                        parsed_response = loaded_json
+                                        break
+
+                                if parsed_response is None and fallback_json is not None:
+                                    logger.info("Using fallback raw JSON after validation failure")
+                                    parsed_response = fallback_json
 
                                 if parsed_response is None:
-                                    parsed_response = json.loads(cleaned_text)
+                                    if last_decode_error is not None:
+                                        raise last_decode_error
+                                    raise ValueError("Failed to parse agent response into JSON")
 
                                 logger.info(f"JSON parsing successful! Result type: {type(parsed_response)}")
                                 if isinstance(parsed_response, dict):
