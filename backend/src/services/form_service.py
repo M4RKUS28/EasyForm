@@ -367,22 +367,24 @@ async def process_form_analysis_async(
 
         # Save results to database
         async with get_async_db_context() as db:
-            # Convert actions to dict format and filter out null values
+            # Convert actions to dict format and filter out incomplete values only when required
             actions_dict = []
+            required_value_actions = {"fillText", "selectDropdown", "selectCheckbox", "setText"}
             for action_data in generator_result["actions"]:
-                # Skip actions with null values
-                if action_data.get("value") is None:
-                    logger.info(f"[AsyncTask {request_id}] Skipping action with null value: {action_data.get('label', 'unknown')}")
-                    continue
-
-                # Map action_type
                 original_type = action_data.get("action_type", "")
                 action_type = map_action_type(original_type)
+                value = action_data.get("value")
+
+                if action_type in required_value_actions and value is None:
+                    logger.info(
+                        f"[AsyncTask {request_id}] Skipping {action_type} action with null value: {action_data.get('label', 'unknown')}"
+                    )
+                    continue
 
                 actions_dict.append({
                     "action_type": action_type,
                     "selector": action_data.get("selector", ""),
-                    "value": action_data.get("value"),
+                    "value": value,
                     "label": action_data.get("label", "")
                 })
 

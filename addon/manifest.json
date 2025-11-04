@@ -41,15 +41,15 @@
   "commands": {
     "analyze-page": {
       "suggested_key": {
-        "default": "Ctrl+Shift+F",
-        "mac": "Command+Shift+F"
+        "default": "Ctrl+F",
+        "mac": "Command+F"
       },
       "description": "Analyze page and execute form filling"
     },
     "toggle-overlay": {
       "suggested_key": {
-        "default": "Ctrl+Shift+O",
-        "mac": "Command+Shift+O"
+        "default": "Ctrl+O",
+        "mac": "Command+O"
       },
       "description": "Toggle EasyForm overlay (manual mode)"
     }

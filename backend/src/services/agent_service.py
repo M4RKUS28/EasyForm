@@ -188,7 +188,11 @@ Clipboard Content:
 
         # Build query
         query = f"""Please generate appropriate values for the following form fields.
-If you cannot determine a value for a field, set its value to null.
+Follow these directives strictly:
+- Treat clipboard content as authoritative instructions.
+- Provide a best-effort value for every field; only return null when the user explicitly requests a blank or when no responsible inference is possible.
+- For multiple-choice fields, select one of the provided options; for checkboxes output true/false for each required option.
+- Keep values consistent with each other (e.g., same person details across fields) and respect validation hints.
 
 Form Fields (structured data from HTML analysis):
 ```json
@@ -203,7 +207,8 @@ Clipboard Content:
 
 User has uploaded {len(pdf_files)} PDF(s) and {len(images)} image(s) that may contain relevant information.
 
-Please analyze all provided context and generate appropriate values for each field.
+When information is missing, infer realistic sample data that fits the context of the form. Return null only when explicitly instructed to leave a field empty.
+Please analyze all provided context and generate appropriate values for each field while keeping answers fluent and human-sounding.
 """
 
         # Create multi-part content with user files
@@ -256,7 +261,11 @@ Please analyze all provided context and generate appropriate values for each fie
 
                     # Build query for this group
                     query = f"""Please generate appropriate values for the following form field group.
-If you cannot determine a value for a field, set its value to null.
+Follow these directives strictly:
+- Treat clipboard content as authoritative instructions.
+- Provide a best-effort value for every field; only return null when the user explicitly requests a blank or when no responsible inference is possible.
+- For multiple-choice fields, select one of the provided options; for checkboxes output true/false for each required option.
+- Keep values consistent with each other and respect validation hints or dependencies.
 
 Form Fields:
 ```json
@@ -271,7 +280,8 @@ Clipboard Content:
 
 User has uploaded {len(pdf_files)} PDF(s) and {len(images)} image(s) that may contain relevant information.
 
-Please analyze all provided context and generate appropriate values for each field in this group.
+When information is missing, infer realistic sample data that fits the context of the form. Return null only when explicitly instructed to leave a field empty.
+Please analyze all provided context and generate appropriate values for each field in this group while keeping answers fluent and human-sounding.
 """
 
                     # Create multi-part content

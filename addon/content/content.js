@@ -216,6 +216,9 @@
     overlay.id = 'easyform-overlay';
     overlay.className = 'easyform-overlay';
 
+    // Store filtered actions
+    let filteredActions = [...actions];
+
     // Header
     const header = document.createElement('div');
     header.className = 'easyform-header';
@@ -232,24 +235,52 @@
     const list = document.createElement('div');
     list.className = 'easyform-list';
 
-    actions.forEach((action, index) => {
-      const item = document.createElement('div');
-      item.className = 'easyform-item';
+    const renderActions = () => {
+      list.innerHTML = '';
+      
+      filteredActions.forEach((action, index) => {
+        const item = document.createElement('div');
+        item.className = 'easyform-item';
+        item.dataset.actionIndex = index;
 
-      const question = action.question || `Field ${index + 1}`;
-      const number = action.number || index + 1;
-      const value = action.value || '-';
+        // Use label from action, fallback to question or generic field name
+        const question = action.label || action.question || `Field ${index + 1}`;
+        const description = action.description || '';
+        const value = action.value !== null && action.value !== undefined ? action.value : '-';
 
-      item.innerHTML = `
-        <div class="easyform-item-header">
-          <span class="easyform-number">${number}.</span>
-          <span class="easyform-question">${escapeHtml(question)}</span>
-        </div>
-        <div class="easyform-answer">${escapeHtml(String(value))}</div>
-      `;
+        item.innerHTML = `
+          <div class="easyform-item-content">
+            <div class="easyform-item-header">
+              <div class="easyform-question-wrapper">
+                <span class="easyform-question">${escapeHtml(question)}</span>
+              </div>
+              <button class="easyform-remove" data-index="${index}" title="Remove this action">×</button>
+            </div>
+            ${description ? `
+              <div class="easyform-description">
+                <span class="easyform-description-text">${escapeHtml(description)}</span>
+              </div>
+            ` : ''}
+            <div class="easyform-answer">${escapeHtml(String(value))}</div>
+          </div>
+        `;
 
-      list.appendChild(item);
-    });
+        list.appendChild(item);
+      });
+
+      // Add event listeners for remove buttons
+      list.querySelectorAll('.easyform-remove').forEach(button => {
+        button.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const index = parseInt(button.dataset.index);
+          filteredActions.splice(index, 1);
+          renderActions();
+          updateExecuteButton();
+        });
+      });
+    };
+
+    renderActions();
 
     content.appendChild(list);
 
@@ -258,9 +289,18 @@
     footer.className = 'easyform-footer';
     footer.innerHTML = `
       <button class="easyform-execute" id="easyform-execute">
-        Execute Actions (${actions.length})
+        Execute Actions (${filteredActions.length})
       </button>
     `;
+
+    // Update execute button text
+    const updateExecuteButton = () => {
+      const button = footer.querySelector('#easyform-execute');
+      if (button) {
+        button.textContent = `Execute Actions (${filteredActions.length})`;
+        button.disabled = filteredActions.length === 0;
+      }
+    };
 
     // Assemble overlay
     overlay.appendChild(header);
@@ -270,12 +310,14 @@
     // Event listeners
     overlay.querySelector('#easyform-close').addEventListener('click', removeOverlay);
     overlay.querySelector('#easyform-execute').addEventListener('click', async () => {
+      if (filteredActions.length === 0) return;
+
       const button = overlay.querySelector('#easyform-execute');
       button.disabled = true;
       button.textContent = 'Executing...';
 
       try {
-        const result = await executeActions(actions, true);
+        const result = await executeActions(filteredActions, true);
         if (result.success) {
           showNotification('success', `Executed ${result.successCount} action(s)`);
           removeOverlay();
@@ -286,7 +328,7 @@
         showNotification('error', error.message);
       } finally {
         button.disabled = false;
-        button.textContent = `Execute Actions (${actions.length})`;
+        button.textContent = `Execute Actions (${filteredActions.length})`;
       }
     });
 
