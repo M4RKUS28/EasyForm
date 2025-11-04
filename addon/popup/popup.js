@@ -7,6 +7,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   await checkBackendHealth();
   await loadConfig();
   await loadStatus();
+  await loadClipboard();
   setupEventListeners();
 
   // Check analysis state on popup open
@@ -73,6 +74,32 @@ async function loadStatus() {
   }
 }
 
+async function loadClipboard() {
+  const clipboardInput = document.getElementById('clipboardInput');
+  
+  try {
+    // First try to load saved custom clipboard
+    const storage = await chrome.storage.local.get('customClipboard');
+    if (storage.customClipboard !== undefined && storage.customClipboard !== null) {
+      clipboardInput.value = storage.customClipboard;
+      console.log('[EasyForm Popup] 💾 Loaded saved clipboard:', storage.customClipboard.substring(0, 50) + '...');
+      return;
+    }
+
+    // Otherwise, try to read system clipboard
+    const text = await navigator.clipboard.readText();
+    if (text) {
+      clipboardInput.value = text;
+      // Save it for future use
+      await chrome.storage.local.set({ customClipboard: text });
+      console.log('[EasyForm Popup] 📋 Clipboard loaded:', text.substring(0, 50) + '...');
+    }
+  } catch (error) {
+    console.warn('[EasyForm Popup] ⚠️ Could not read clipboard:', error);
+    clipboardInput.placeholder = 'Could not access clipboard. You can paste content manually.';
+  }
+}
+
 function setupEventListeners() {
   // Execution mode dropdown
   document.getElementById('executionMode').addEventListener('change', async (e) => {
@@ -92,6 +119,33 @@ function setupEventListeners() {
   // Cancel button
   document.getElementById('cancelBtn').addEventListener('click', async () => {
     await handleCancelClick();
+  });
+
+  // Clipboard input - save to storage when edited
+  const clipboardInput = document.getElementById('clipboardInput');
+  let clipboardUpdateTimeout;
+  
+  clipboardInput.addEventListener('input', () => {
+    // Debounce the update
+    clearTimeout(clipboardUpdateTimeout);
+    clipboardUpdateTimeout = setTimeout(async () => {
+      const newValue = clipboardInput.value;
+      console.log('[EasyForm Popup] 📝 Clipboard updated:', newValue.substring(0, 50) + '...');
+      
+      // Store the updated clipboard value
+      try {
+        await chrome.storage.local.set({ customClipboard: newValue });
+      } catch (error) {
+        console.error('[EasyForm Popup] Error saving clipboard:', error);
+      }
+    }, 500);
+  });
+
+  // Listen for clipboard changes (when user pastes)
+  clipboardInput.addEventListener('paste', () => {
+    setTimeout(() => {
+      console.log('[EasyForm Popup] 📋 Pasted into clipboard input');
+    }, 10);
   });
 }
 

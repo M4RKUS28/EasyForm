@@ -185,10 +185,22 @@ async function handlePageAnalysisAsync(pageData, tabId) {
     const headers = { 'Content-Type': 'application/json' };
     if (apiToken) headers['Authorization'] = `Bearer ${apiToken}`;
 
+    // Check if there's a custom clipboard value from the popup
+    let clipboardText = pageData.clipboard;
+    try {
+      const storage = await chrome.storage.local.get('customClipboard');
+      if (storage.customClipboard !== undefined && storage.customClipboard !== null) {
+        clipboardText = storage.customClipboard;
+        console.log('[EasyForm API] 📋 Using custom clipboard from popup');
+      }
+    } catch (error) {
+      console.warn('[EasyForm API] Could not load custom clipboard:', error);
+    }
+
     const requestBody = {
       html: pageData.html,
       visible_text: pageData.text,
-      clipboard_text: pageData.clipboard,
+      clipboard_text: clipboardText,
       mode: analysisMode,
       quality: quality,
       screenshots: screenshots
