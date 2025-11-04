@@ -21,6 +21,12 @@ class FormAnalyzeRequest(BaseModel):
         "basic",
         description="Analysis mode: 'basic' (HTML + text only) or 'extended' (includes screenshots)"
     )
+    quality: Literal["fast", "fast-ultra", "medium", "medium-ultra", "exact", "exact-ultra"] = Field(
+        "medium",
+        description="Analysis quality: determines models and processing method. "
+                    "fast=Flash/Flash, medium=Flash/Pro, exact=Pro/Pro. "
+                    "Ultra variants use per-group parallel processing in step 2."
+    )
 
 
 class FormAction(BaseModel):
@@ -75,7 +81,7 @@ class FormAnalyzeAsyncResponse(BaseModel):
 class FormRequestStatusResponse(BaseModel):
     """Schema for form request status check response."""
     request_id: str = Field(..., description="Request ID")
-    status: Literal["pending", "processing", "completed", "failed"] = Field(
+    status: Literal["pending", "processing", "processing_step_1", "processing_step_2", "completed", "failed"] = Field(
         ...,
         description="Current status of the request"
     )
@@ -95,7 +101,7 @@ class FormRequestStatusResponse(BaseModel):
 class FormRequestActionsResponse(BaseModel):
     """Schema for form request actions response."""
     request_id: str = Field(..., description="Request ID")
-    status: Literal["pending", "processing", "completed", "failed"] = Field(
+    status: Literal["pending", "processing", "processing_step_1", "processing_step_2", "completed", "failed"] = Field(
         ...,
         description="Current status of the request"
     )

@@ -24,6 +24,8 @@ class FormRequest(Base):
         SQLEnum(
             "pending",
             "processing",
+            "processing_step_1",
+            "processing_step_2",
             "completed",
             "failed",
             name="form_request_status",

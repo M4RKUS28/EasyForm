@@ -1,10 +1,5 @@
 // Options Page Script for EasyForm
 
-const modeDescriptions = {
-  automatic: 'Actions are executed immediately after analysis. Best for trusted forms.',
-  manual: 'Actions are displayed in an overlay for review. Click "Execute" to apply changes.'
-};
-
 document.addEventListener('DOMContentLoaded', async () => {
   await loadSettings();
   setupEventListeners();
@@ -20,27 +15,15 @@ async function loadSettings() {
     // Set API token
     document.getElementById('apiToken').value = response.apiToken || '';
 
-    // Set mode buttons
-    const mode = response.mode || 'automatic';
-    updateModeButtons(mode);
-    updateModeDescription(mode);
+    // Set quality dropdown
+    const quality = response.quality || 'medium';
+    document.getElementById('quality').value = quality;
   } catch (error) {
     console.error('Error loading settings:', error);
   }
 }
 
 function setupEventListeners() {
-  // Mode toggle buttons
-  document.getElementById('autoModeBtn').addEventListener('click', () => {
-    updateModeButtons('automatic');
-    updateModeDescription('automatic');
-  });
-
-  document.getElementById('manualModeBtn').addEventListener('click', () => {
-    updateModeButtons('manual');
-    updateModeDescription('manual');
-  });
-
   // Save button
   document.getElementById('saveButton').addEventListener('click', saveSettings);
 
@@ -58,24 +41,11 @@ function setupEventListeners() {
   });
 }
 
-function updateModeButtons(mode) {
-  const autoBtn = document.getElementById('autoModeBtn');
-  const manualBtn = document.getElementById('manualModeBtn');
-
-  autoBtn.classList.toggle('active', mode === 'automatic');
-  manualBtn.classList.toggle('active', mode === 'manual');
-}
-
-function updateModeDescription(mode) {
-  const description = document.getElementById('modeDescription');
-  description.textContent = modeDescriptions[mode];
-}
-
 async function saveSettings() {
   try {
     const backendUrl = document.getElementById('backendUrl').value.trim();
     const apiToken = document.getElementById('apiToken').value.trim();
-    const mode = document.querySelector('.mode-button.active').dataset.mode;
+    const quality = document.getElementById('quality').value;
 
     if (!backendUrl) {
       alert('Please enter a backend URL');
@@ -94,7 +64,7 @@ async function saveSettings() {
       action: 'setConfig',
       backendUrl,
       apiToken,
-      mode
+      quality
     });
 
     if (response.success) {

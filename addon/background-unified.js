@@ -54,14 +54,15 @@ async function cleanupRequestStorage(tabId) {
 async function getConfig() {
   return new Promise((resolve) => {
     chrome.storage.sync.get(
-      ['backendUrl', 'mode', 'executionMode', 'analysisMode', 'apiToken'],
+      ['backendUrl', 'mode', 'executionMode', 'analysisMode', 'apiToken', 'quality'],
       (result) => {
         resolve({
           backendUrl: result.backendUrl,
           mode: result.mode,
           executionMode: result.executionMode || result.mode,
           analysisMode: result.analysisMode || 'basic',
-          apiToken: result.apiToken || ''
+          apiToken: result.apiToken || '',
+          quality: result.quality || 'medium'
         });
       }
     );
@@ -163,9 +164,10 @@ async function handlePageAnalysisAsync(pageData, tabId) {
     const baseUrl = config.backendUrl || CONFIG.backendUrl;
     const executionMode = config.executionMode || CONFIG.mode;
     const analysisMode = config.analysisMode || 'basic';
+    const quality = config.quality || 'medium';
     const apiToken = config.apiToken || '';
 
-    console.log('[EasyForm API] 📝 Config:', { executionMode, analysisMode });
+    console.log('[EasyForm API] 📝 Config:', { executionMode, analysisMode, quality });
 
     let screenshots = null;
     if (analysisMode === 'extended') {
@@ -188,6 +190,7 @@ async function handlePageAnalysisAsync(pageData, tabId) {
       visible_text: pageData.text,
       clipboard_text: pageData.clipboard,
       mode: analysisMode,
+      quality: quality,
       screenshots: screenshots
     };
 
@@ -490,7 +493,7 @@ function cleanupTab(tabId) {
 chrome.runtime.onInstalled.addListener(() => {
   console.log('[EasyForm] 🚀 Extension installed');
 
-  chrome.storage.sync.get(['backendUrl', 'mode', 'executionMode', 'analysisMode'], (result) => {
+  chrome.storage.sync.get(['backendUrl', 'mode', 'executionMode', 'analysisMode', 'quality'], (result) => {
     if (!result.backendUrl) {
       chrome.storage.sync.set({ backendUrl: CONFIG.backendUrl });
     }
@@ -499,6 +502,9 @@ chrome.runtime.onInstalled.addListener(() => {
     }
     if (!result.analysisMode) {
       chrome.storage.sync.set({ analysisMode: 'basic' });
+    }
+    if (!result.quality) {
+      chrome.storage.sync.set({ quality: 'medium' });
     }
   });
 
@@ -554,7 +560,8 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         mode: config.mode || CONFIG.mode,
         executionMode: config.executionMode || CONFIG.mode,
         analysisMode: config.analysisMode || 'basic',
-        apiToken: config.apiToken || ''
+        apiToken: config.apiToken || '',
+        quality: config.quality || 'medium'
       });
     });
     return true;
@@ -567,6 +574,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (request.executionMode !== undefined) updates.executionMode = request.executionMode;
     if (request.analysisMode !== undefined) updates.analysisMode = request.analysisMode;
     if (request.apiToken !== undefined) updates.apiToken = request.apiToken;
+    if (request.quality !== undefined) updates.quality = request.quality;
 
     setConfig(updates).then(() => {
       sendResponse({ success: true });

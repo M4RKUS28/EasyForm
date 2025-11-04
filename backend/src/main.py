@@ -30,19 +30,10 @@ app.add_middleware(
     secret_key=SESSION_SECRET_KEY
 )
 
-# CORS Configuration - Allow both local development and production
-origins = [
-    "http://localhost:3000",
-    "http://localhost:5173",  # Vite dev server
-    "http://localhost:8000",
-    "http://127.0.0.1:8127",
-    "https://easyform.m4rkus28.de",
-]
-
-
+# CORS Configuration - Allow all origins for browser extension
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
+    allow_origins=["*"],  # Allow all origins (required for browser extensions)
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

@@ -12,11 +12,11 @@ from ..utils import load_instruction_from_file
 
 
 class HtmlFormParserAgent(StructuredAgent):
-    def __init__(self, app_name: str, session_service):
+    def __init__(self, app_name: str, session_service, model: str = "gemini-2.5-pro"):
         self.full_instructions = load_instruction_from_file("html_form_parser_agent/instructions.txt")
 
-        # Using Gemini 2.5 Pro for better analysis capabilities
-        self.model = "gemini-2.5-pro"
+        # Use provided model or default to Gemini 2.5 Pro
+        self.model = model
 
         parser_agent = LlmAgent(
             name="html_form_parser_agent",

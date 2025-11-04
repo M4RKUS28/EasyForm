@@ -98,7 +98,8 @@ async def analyze_form(
             html=request.html,
             dom_text=request.visible_text,
             clipboard_text=request.clipboard_text,
-            screenshots=screenshot_bytes
+            screenshots=screenshot_bytes,
+            quality=request.quality
         )
 
         logger.info(f"HTML Form Parser Agent returned result type: {type(parser_result)}")
@@ -154,7 +155,8 @@ async def analyze_form(
             fields=fields,
             visible_text=request.visible_text,
             clipboard_text=request.clipboard_text,
-            user_files=user_files
+            user_files=user_files,
+            quality=request.quality
         )
 
         logger.info(f"Form Value Generator Agent returned result type: {type(generator_result)}")
@@ -274,57 +276,130 @@ async def process_form_analysis_async(
         logger.info(f"[AsyncTask {request_id}] Starting background analysis for user {user_id}")
 
         async with get_async_db_context() as db:
-            # Update status to processing
+            # Update status to processing_step_1 (parsing HTML form structure)
             await form_requests_crud.update_form_request_status(
-                db, request_id, "processing"
+                db, request_id, "processing_step_1"
             )
-            logger.info(f"[AsyncTask {request_id}] Status updated to 'processing'")
+            logger.info(f"[AsyncTask {request_id}] Status updated to 'processing_step_1'")
 
-        # Run the actual analysis (reuse existing analyze_form logic)
+        # Get AgentService singleton
+        agent_service = get_agent_service()
+
+        # ===== PHASE 1: Parse HTML Form Structure =====
+        logger.info(f"[AsyncTask {request_id}] Phase 1: Parsing HTML form structure")
+
+        # Decode screenshots if provided
+        screenshot_bytes = None
+        if request_data.screenshots and request_data.mode == "extended":
+            screenshot_bytes = []
+            for idx, screenshot_b64 in enumerate(request_data.screenshots):
+                try:
+                    if ',' in screenshot_b64:
+                        screenshot_b64 = screenshot_b64.split(',', 1)[1]
+                    decoded = base64.b64decode(screenshot_b64)
+                    screenshot_bytes.append(decoded)
+                except Exception as e:
+                    logger.warning(f"Failed to decode screenshot {idx}: {e}")
+
         async with get_async_db_context() as db:
-            result = await analyze_form(db, user_id, request_data)
+            # Call HTML Form Parser Agent
+            parser_result = await agent_service.parse_form_structure(
+                user_id=user_id,
+                html=request_data.html,
+                dom_text=request_data.visible_text,
+                clipboard_text=request_data.clipboard_text,
+                screenshots=screenshot_bytes,
+                quality=request_data.quality
+            )
 
-        logger.info(f"[AsyncTask {request_id}] Analysis completed with status: {result.status}")
+            # Validate parser result
+            if not parser_result or "fields" not in parser_result:
+                logger.error(f"[AsyncTask {request_id}] Parser agent returned invalid result")
+                await form_requests_crud.update_form_request_status(
+                    db, request_id, "failed", error_message="Failed to parse form structure"
+                )
+                return
+
+            fields = parser_result["fields"]
+            logger.info(f"[AsyncTask {request_id}] Phase 1 complete: Detected {len(fields)} form fields")
+
+            # If no fields detected, mark as completed with 0 actions
+            if len(fields) == 0:
+                logger.info(f"[AsyncTask {request_id}] No fields detected, marking as completed")
+                await form_requests_crud.update_form_request_status(
+                    db, request_id, "completed", fields_detected=0
+                )
+                return
+
+        # ===== PHASE 2: Generate Field Values =====
+        async with get_async_db_context() as db:
+            # Update status to processing_step_2 (generating field values)
+            await form_requests_crud.update_form_request_status(
+                db, request_id, "processing_step_2"
+            )
+            logger.info(f"[AsyncTask {request_id}] Status updated to 'processing_step_2'")
+
+            logger.info(f"[AsyncTask {request_id}] Phase 2: Generating values for {len(fields)} fields")
+
+            # Get user's uploaded files
+            user_files = await files_crud.get_user_files(db, user_id)
+            logger.info(f"[AsyncTask {request_id}] Found {len(user_files)} user files for context")
+
+            # Call Form Value Generator Agent
+            generator_result = await agent_service.generate_form_values(
+                user_id=user_id,
+                fields=fields,
+                visible_text=request_data.visible_text,
+                clipboard_text=request_data.clipboard_text,
+                user_files=user_files,
+                quality=request_data.quality
+            )
+
+            # Validate generator result
+            if not generator_result or "actions" not in generator_result:
+                logger.error(f"[AsyncTask {request_id}] Generator agent returned invalid result")
+                await form_requests_crud.update_form_request_status(
+                    db, request_id, "failed", error_message="Failed to generate form values"
+                )
+                return
+
+            logger.info(f"[AsyncTask {request_id}] Phase 2 complete: Generated {len(generator_result['actions'])} actions")
 
         # Save results to database
         async with get_async_db_context() as db:
-            if result.status == "success":
-                # Convert FormAction objects to dicts for database storage
-                actions_dict = [
-                    {
-                        "action_type": action.action_type,
-                        "selector": action.selector,
-                        "value": action.value,
-                        "label": action.label
-                    }
-                    for action in result.actions
-                ]
+            # Convert actions to dict format and filter out null values
+            actions_dict = []
+            for action_data in generator_result["actions"]:
+                # Skip actions with null values
+                if action_data.get("value") is None:
+                    logger.info(f"[AsyncTask {request_id}] Skipping action with null value: {action_data.get('label', 'unknown')}")
+                    continue
 
-                # Save actions to database
-                await form_requests_crud.create_form_actions(
-                    db, request_id, actions_dict
-                )
-                logger.info(f"[AsyncTask {request_id}] Saved {len(actions_dict)} actions to database")
+                # Map action_type
+                original_type = action_data.get("action_type", "")
+                action_type = map_action_type(original_type)
 
-                # Update status to completed
-                await form_requests_crud.update_form_request_status(
-                    db,
-                    request_id,
-                    "completed",
-                    fields_detected=result.fields_detected
-                )
-                logger.info(f"[AsyncTask {request_id}] Status updated to 'completed'")
+                actions_dict.append({
+                    "action_type": action_type,
+                    "selector": action_data.get("selector", ""),
+                    "value": action_data.get("value"),
+                    "label": action_data.get("label", "")
+                })
 
-            else:
-                # Analysis failed
-                error_msg = result.message or "Unknown error during analysis"
-                await form_requests_crud.update_form_request_status(
-                    db,
-                    request_id,
-                    "failed",
-                    error_message=error_msg
-                )
-                logger.error(f"[AsyncTask {request_id}] Analysis failed: {error_msg}")
+            # Save actions to database
+            await form_requests_crud.create_form_actions(
+                db, request_id, actions_dict
+            )
+            logger.info(f"[AsyncTask {request_id}] Saved {len(actions_dict)} actions to database")
+
+            # Update status to completed
+            await form_requests_crud.update_form_request_status(
+                db,
+                request_id,
+                "completed",
+                fields_detected=len(fields)
+            )
+            logger.info(f"[AsyncTask {request_id}] Status updated to 'completed'")
 
     except Exception as e:
         logger.exception(f"[AsyncTask {request_id}] Exception during async analysis: {e}")
