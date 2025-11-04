@@ -23,7 +23,7 @@ const ANALYSIS_STATES = {
 };
 
 const POLL_INTERVAL_MS = 1000;
-const POLL_TIMEOUT_MS = 300000;
+const POLL_TIMEOUT_MS = 1200000; // 20 minutes
 
 // ===== STORAGE UTILITIES =====
 async function getStoredRequestId(tabId) {

@@ -24,4 +24,4 @@ export const ANALYSIS_STATES = {
 
 // Polling configuration
 export const POLL_INTERVAL_MS = 1000; // Poll every 1 second
-export const POLL_TIMEOUT_MS = 12000000; // 20 minutes timeout
+export const POLL_TIMEOUT_MS = 1200000; // 20 minutes timeout
