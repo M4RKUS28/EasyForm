@@ -31,6 +31,14 @@ class AgentService:
         self.session_service = InMemorySessionService()
         self.app_name = "EasyForm"
 
+        # Pre-initialize agents with both models for reuse
+        logger.info("Initializing agents with both Flash and Pro models...")
+        self.parser_flash = HtmlFormParserAgent(self.app_name, self.session_service, model="gemini-2.0-flash")
+        self.parser_pro = HtmlFormParserAgent(self.app_name, self.session_service, model="gemini-2.5-pro")
+        self.generator_flash = FormValueGeneratorAgent(self.app_name, self.session_service, model="gemini-2.0-flash")
+        self.generator_pro = FormValueGeneratorAgent(self.app_name, self.session_service, model="gemini-2.5-pro")
+        logger.info("All agents initialized successfully")
+
     async def parse_form_structure(
         self,
         user_id: str,
@@ -59,8 +67,8 @@ class AgentService:
         # Get model configuration for this quality level
         step1_model, _, _ = MODEL_CONFIG.get(quality, MODEL_CONFIG["medium"])
 
-        # Create agent instance with appropriate model
-        parser_agent = HtmlFormParserAgent(self.app_name, self.session_service, model=step1_model)
+        # Select pre-initialized agent based on model
+        parser_agent = self.parser_flash if step1_model == "gemini-2.0-flash" else self.parser_pro
 
         # Build query
         query = f"""Please analyze the following HTML and extract all form fields.
@@ -175,8 +183,8 @@ Clipboard Content:
         from ..agents.utils import create_multipart_query
         import json
 
-        # Create agent instance with appropriate model
-        generator_agent = FormValueGeneratorAgent(self.app_name, self.session_service, model=model)
+        # Select pre-initialized agent based on model
+        generator_agent = self.generator_flash if model == "gemini-2.0-flash" else self.generator_pro
 
         # Build query
         query = f"""Please generate appropriate values for the following form fields.
@@ -234,6 +242,9 @@ Please analyze all provided context and generate appropriate values for each fie
 
         logger.info(f"Starting ultra processing for {len(field_groups)} field groups")
 
+        # Select pre-initialized agent based on model (reuse across all groups)
+        generator_agent = self.generator_flash if model == "gemini-2.0-flash" else self.generator_pro
+
         # Create a semaphore to limit concurrent tasks to 10
         semaphore = asyncio.Semaphore(10)
 
@@ -242,9 +253,6 @@ Please analyze all provided context and generate appropriate values for each fie
             async with semaphore:
                 try:
                     logger.info(f"Processing field group {group_idx + 1}/{len(field_groups)}")
-
-                    # Create agent instance for this group
-                    generator_agent = FormValueGeneratorAgent(self.app_name, self.session_service, model=model)
 
                     # Build query for this group
                     query = f"""Please generate appropriate values for the following form field group.
