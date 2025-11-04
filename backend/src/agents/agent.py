@@ -1,6 +1,7 @@
 """
 This file defines the base class for all agents.
 """
+import asyncio
 import json
 import logging
 from abc import ABC, abstractmethod
@@ -64,36 +65,43 @@ class StandardAgent(ABC):
         self.session_service = session_service
         self.model = "gemini-2.5-flash"
 
-    async def run(self, user_id: str, state: dict, content: types.Content, debug: bool = False) -> Dict[str, Any]:
+    async def run(
+        self,
+        user_id: str,
+        state: dict,
+        content: types.Content,
+        debug: bool = False,
+        max_retries: int = 1,
+        retry_delay: float = 2.0,
+    ) -> Dict[str, Any]:
         """
         Wraps the event handling and runner from adk into a simple run() method that includes error handling
         and automatic retries for transient failures.
-        
-        :param user_id: id of the user
-        :param state: the state created from the StateService
-        :param content: the user query as a type.Content object
-        :param debug: if true the method will print auxiliary outputs (all events)
-        :return: the parsed dictionary response from the agent
         """
-        max_retries: int = 1
-        retry_delay: float = 2.0
+        total_attempts = max(0, max_retries) + 1
         last_error = None
-        
-        for attempt in range(max_retries + 1):  # +1 for the initial attempt
+
+        for attempt in range(total_attempts):
+            should_retry = False
+            response_handled = False
             try:
                 if debug:
-                    logging.getLogger(__name__).debug("[Debug] Running agent with state: %s", json.dumps(state, indent=2))
+                    logging.getLogger(__name__).debug(
+                        "[Debug] Running agent with state: %s", json.dumps(state, indent=2)
+                    )
 
-                # Create session
                 session = await self.session_service.create_session(
                     app_name=self.app_name,
                     user_id=user_id,
-                    state=state
+                    state=state,
                 )
                 session_id = session.id
 
-                # We iterate through events to find the final answer
-                async for event in self.runner.run_async(user_id=user_id, session_id=session_id, new_message=content):
+                async for event in self.runner.run_async(
+                    user_id=user_id,
+                    session_id=session_id,
+                    new_message=content,
+                ):
                     if debug:
                         logging.getLogger(__name__).debug(
                             "  [Event] Author: %s, Type: %s, Final: %s, Content: %s",
@@ -103,31 +111,39 @@ class StandardAgent(ABC):
                             event.content,
                         )
 
-                    # is_final_response() marks the concluding message for the turn
                     if event.is_final_response():
+                        response_handled = True
                         if event.content and event.content.parts:
-                            # Assuming text response in the first part
                             return {
                                 "status": "success",
-                                "output": event.content.parts[0].text
+                                "output": event.content.parts[0].text,
                             }
-                        elif event.actions and event.actions.escalate:  # Handle potential errors/escalations
-                            error_msg = f"Agent escalated: {event.error_message or 'No specific message.'}"
-                            if attempt >= max_retries:
+                        if event.actions and event.actions.escalate:
+                            error_msg = (
+                                f"Agent escalated: {event.error_message or 'No specific message.'}"
+                            )
+                            if attempt == total_attempts - 1:
                                 return {"status": "error", "message": error_msg}
                             last_error = error_msg
-                            break  # Break out of event loop to trigger retry
-                
-                # If we get here, no final response was received
+                            should_retry = True
+                            break
+
+                if should_retry:
+                    continue
+
                 error_msg = "Agent did not give a final response. Unknown error occurred."
-                if attempt >= max_retries:
+                if response_handled:
+                    last_error = error_msg
+                    if attempt == total_attempts - 1:
+                        return {"status": "error", "message": last_error}
+                if attempt == total_attempts - 1:
                     return {"status": "error", "message": error_msg}
                 last_error = error_msg
-                
-            except Exception as e:
-                if attempt >= max_retries:
-                    raise  # Re-raise the exception if we've exhausted our retries
+
+            except Exception as e:  # noqa: BLE001 - we want to surface agent failures
                 last_error = str(e)
+                if attempt == total_attempts - 1:
+                    raise
                 if debug:
                     logging.getLogger(__name__).warning(
                         "[RETRY] Attempt %d failed, retrying in %s seconds... Error: %s",
@@ -135,13 +151,10 @@ class StandardAgent(ABC):
                         retry_delay,
                         last_error,
                     )
-                
-            # Only sleep if we're going to retry
-            if attempt < max_retries:
-                import asyncio
+
+            if attempt < total_attempts - 1:
                 await asyncio.sleep(retry_delay)
-        
-        # This should theoretically never be reached due to the raise/return above
+
         return {
             "status": "error",
             "message": f"Max retries exceeded. Last error: {last_error}",
@@ -155,7 +168,15 @@ class StructuredAgent(ABC):
         self.app_name = app_name
         self.session_service = session_service
         self.model = "gemini-2.5-flash"
-    async def run(self, user_id: str, state: dict, content: types.Content, debug: bool = False, max_retries: int = 1, retry_delay: float = 2.0) -> Dict[str, Any]:
+    async def run(
+        self,
+        user_id: str,
+        state: dict,
+        content: types.Content,
+        debug: bool = False,
+        max_retries: int = 1,
+        retry_delay: float = 2.0,
+    ) -> Dict[str, Any]:
         """
         Wraps the event handling and runner from adk into a simple run() method that includes error handling
         and automatic retries for transient failures.
@@ -178,12 +199,13 @@ class StructuredAgent(ABC):
                 if hasattr(part, 'inline_data'):
                     logger.info(f"Content part {idx} has inline_data: {part.inline_data is not None}")
 
-        max_retries: int = 1
-        retry_delay: float = 2.0
+        total_attempts = max(0, max_retries) + 1
         last_error = None
 
-        for attempt in range(max_retries + 1):  # +1 for the initial attempt
-            logger.info(f"Attempt {attempt + 1}/{max_retries + 1}")
+        for attempt in range(total_attempts):
+            logger.info(f"Attempt {attempt + 1}/{total_attempts}")
+            should_retry = False
+            final_response_handled = False
             try:
                 logger.info("Creating session...")
                 session = await self.session_service.create_session(
@@ -209,6 +231,7 @@ class StructuredAgent(ABC):
                         )
 
                     if event.is_final_response():
+                        final_response_handled = True
                         if event.content and event.content.parts:
                             # Get the text from the Part object
                             json_text = event.content.parts[0].text
@@ -268,29 +291,40 @@ class StructuredAgent(ABC):
                                 logger.error(f"JSON parsing failed: {error_msg}")
                                 logger.error(f"JSON error position: line {e.lineno}, column {e.colno}")
                                 logger.error(f"Problematic text around error: {e.doc[max(0, e.pos-50):min(len(e.doc), e.pos+50)] if hasattr(e, 'doc') and e.doc else 'N/A'}")
-                                if attempt >= max_retries:
+                                last_error = error_msg
+                                if attempt == total_attempts - 1:
                                     if debug:
                                         logger.error("%s", error_msg)
                                     raise
+                                should_retry = True
                                 last_error = error_msg
-                                logger.info(f"Retrying due to JSON parse error (attempt {attempt}/{max_retries})")
-                                break  # Break out of event loop to trigger retry
+                                logger.info(
+                                    "Retrying due to JSON parse error (attempt %d/%d)",
+                                    attempt + 1,
+                                    total_attempts,
+                                )
+                                break
 
                         elif event.actions and event.actions.escalate:  # Handle potential errors/escalations
                             error_msg = f"Agent escalated: {event.error_message or 'No specific message.'}"
-                            if attempt >= max_retries:
+                            if attempt == total_attempts - 1:
                                 return {"status": "error", "message": error_msg}
                             last_error = error_msg
-                            break  # Break out of event loop to trigger retry
+                            should_retry = True
+                            break
                 
+                if should_retry:
+                    continue
+
                 # If we get here, no final response was received
-                error_msg = "Agent did not give a final response. Unknown error occurred."
-                if attempt >= max_retries:
-                    return {"status": "error", "message": error_msg}
-                last_error = error_msg
-                
+                if not final_response_handled:
+                    error_msg = "Agent did not give a final response. Unknown error occurred."
+                    if attempt == total_attempts - 1:
+                        return {"status": "error", "message": error_msg}
+                    last_error = error_msg
+
             except Exception as e:
-                if attempt >= max_retries:
+                if attempt == total_attempts - 1:
                     raise  # Re-raise the exception if we've exhausted our retries
                 last_error = str(e)
                 if debug:
@@ -300,12 +334,10 @@ class StructuredAgent(ABC):
                         retry_delay,
                         last_error,
                     )
-            
-            # Only sleep if we're going to retry
-            if attempt < max_retries:
-                import asyncio
+
+            if attempt < total_attempts - 1:
                 await asyncio.sleep(retry_delay)
-        
+
         # This should theoretically never be reached due to the raise/return above
         return {
             "status": "error",

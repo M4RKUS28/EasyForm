@@ -8,6 +8,7 @@ from typing import Literal
 
 from ..agents.html_form_parser_agent import HtmlFormParserAgent
 from ..agents.form_value_generator_agent import FormValueGeneratorAgent
+from ..config import settings
 
 from google.adk.sessions import InMemorySessionService
 
@@ -97,7 +98,9 @@ Clipboard Content:
             user_id=user_id,
             state={},
             content=content,
-            debug=False
+            debug=False,
+            max_retries=settings.AGENT_MAX_RETRIES,
+            retry_delay=settings.AGENT_RETRY_DELAY_SECONDS,
         )
 
         return result
@@ -223,7 +226,9 @@ Please analyze all provided context and generate appropriate values for each fie
             user_id=user_id,
             state={},
             content=content,
-            debug=False
+            debug=False,
+            max_retries=settings.AGENT_MAX_RETRIES,
+            retry_delay=settings.AGENT_RETRY_DELAY_SECONDS,
         )
 
         return result
@@ -296,7 +301,9 @@ Please analyze all provided context and generate appropriate values for each fie
                         user_id=user_id,
                         state={},
                         content=content,
-                        debug=False
+                        debug=False,
+                        max_retries=settings.AGENT_MAX_RETRIES,
+                        retry_delay=settings.AGENT_RETRY_DELAY_SECONDS,
                     )
 
                     logger.info(f"Completed field group {group_idx + 1}/{len(field_groups)}")

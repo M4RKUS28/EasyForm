@@ -63,6 +63,8 @@ FRONTEND_BASE_URL = os.getenv("FRONTEND_BASE_URL", "https://piatto-cooks.com/aut
 
 
 AGENT_DEBUG_MODE = os.getenv("AGENT_DEBUG_MODE", "true").lower() == "true"
+AGENT_MAX_RETRIES = int(os.getenv("AGENT_MAX_RETRIES", "2"))
+AGENT_RETRY_DELAY_SECONDS = float(os.getenv("AGENT_RETRY_DELAY_SECONDS", "2.0"))
 
 # -------------------------
 DB_HOST = os.getenv("DB_HOST")  # 10.73.16.3
