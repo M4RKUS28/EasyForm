@@ -62,7 +62,17 @@
   "browser_specific_settings": {
     "gecko": {
       "id": "easyform@example.com",
-      "strict_min_version": "109.0"
+      "strict_min_version": "109.0",
+      "data_collection_permissions": {
+        "collects_account_info": "not_collected",
+        "collects_device_data": "not_collected",
+        "collects_financial_data": "not_collected",
+        "collects_form_data": "not_collected",
+        "collects_location_data": "not_collected",
+        "collects_personal_data": "not_collected",
+        "collects_user_content": "not_collected",
+        "collects_web_history": "not_collected"
+      }
     }
   }
 }
