@@ -62,3 +62,5 @@ If screenshots are provided, use them to:
 6. If no fields found, produce an empty list of fields
 7. Be precise with field types - distinguish between text, email, tel, number, etc.
 8. Include all visible context that might help understand what data should be entered
+
+! IGNORE SUBMIT-FIELDS LIKE SUBMIT-BUTTONS

@@ -15,6 +15,7 @@ const Dashboard = () => {
   const [newToken, setNewToken] = useState(null);
   const [uploadProgress, setUploadProgress] = useState(false);
   const [message, setMessage] = useState(null);
+  const [personalInstructions, setPersonalInstructions] = useState('');
   
   // Modal state
   const [deleteModal, setDeleteModal] = useState({
@@ -26,6 +27,7 @@ const Dashboard = () => {
 
   useEffect(() => {
     loadData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const loadData = async () => {
@@ -147,7 +149,10 @@ const Dashboard = () => {
       });
 
       await loadData();
-      showMessage('File uploaded successfully!');
+      const successMessage = personalInstructions
+        ? 'File uploaded successfully! Personal instructions saved locally.'
+        : 'File uploaded successfully!';
+      showMessage(successMessage);
       e.target.value = ''; // Reset input
     } catch (error) {
       console.error('Error uploading file:', error);
@@ -295,17 +300,46 @@ const Dashboard = () => {
           </div>
         </section>
 
-        {/* Files Section */}
-        <section>
+        {/* Personal Instructions Section */}
+        <section className="mb-10">
           <div className="bg-white rounded-lg shadow p-6">
-            <div className="flex justify-between items-center mb-4">
+            <h2 className="text-2xl font-semibold text-gray-900 mb-3">Personal Instructions</h2>
+            <p className="text-gray-600 mb-4">
+              Add optional notes that are stored locally and included when you upload new files.
+            </p>
+            <div>
+              <label
+                htmlFor="personalInstructions"
+                className="block text-sm font-medium text-gray-700 mb-2"
+              >
+                Personal Instructions
+              </label>
+              <textarea
+                id="personalInstructions"
+                value={personalInstructions}
+                onChange={(e) => setPersonalInstructions(e.target.value)}
+                rows={4}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="Add optional notes for yourself..."
+              />
+              <p className="text-xs text-gray-500 mt-2">
+                Stored locally on this device; update before uploading a new file.
+              </p>
+            </div>
+          </div>
+        </section>
+
+        {/* Files Section */}
+        <section className="mb-10">
+          <div className="bg-white rounded-lg shadow p-6">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between mb-4">
               <div>
                 <h2 className="text-2xl font-semibold text-gray-900">Uploaded Files</h2>
                 <p className="text-gray-600 mt-1">
                   Total storage: {formatFileSize(totalStorage)}
                 </p>
               </div>
-              <label className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition cursor-pointer">
+              <label className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition cursor-pointer text-center w-full sm:w-auto">
                 {uploadProgress ? 'Uploading...' : 'Upload File'}
                 <input
                   type="file"

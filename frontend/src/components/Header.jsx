@@ -1,13 +1,23 @@
+import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
 const Header = () => {
   const { isAuthenticated, user, logout } = useAuth();
   const navigate = useNavigate();
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
 
   const handleLogout = async () => {
-    await logout();
-    navigate('/');
+    try {
+      setIsLoggingOut(true);
+      await logout();
+      navigate('/');
+    } catch (error) {
+      console.error('Logout failed:', error);
+      navigate('/');
+    } finally {
+      setIsLoggingOut(false);
+    }
   };
 
   return (
@@ -39,10 +49,16 @@ const Header = () => {
                   Dashboard
                 </Link>
                 <button
+                  type="button"
                   onClick={handleLogout}
-                  className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition"
+                  disabled={isLoggingOut}
+                  className={`px-4 py-2 text-white rounded-lg transition ${
+                    isLoggingOut
+                      ? 'bg-red-400 cursor-not-allowed'
+                      : 'bg-red-600 hover:bg-red-700'
+                  }`}
                 >
-                  Logout
+                  {isLoggingOut ? 'Logging out...' : 'Logout'}
                 </button>
               </>
             ) : (
