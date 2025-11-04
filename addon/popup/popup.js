@@ -1,6 +1,7 @@
 // Minimal Popup Script for EasyForm
 
 let statusCheckInterval = null;
+let isCanceling = false;
 
 document.addEventListener('DOMContentLoaded', async () => {
   await checkBackendHealth();
@@ -222,7 +223,9 @@ async function checkAnalysisState() {
         startBtn.disabled = false;
         startBtn.textContent = 'Start';
         startBtn.style.display = 'block';
-        cancelBtn.classList.remove('show');
+        cancelBtn.classList.add('show');
+        cancelBtn.disabled = false;
+        cancelBtn.textContent = 'Reset';
         if (response.error) {
           showError(response.error);
           updateInfo('Analysis failed');
@@ -236,6 +239,8 @@ async function checkAnalysisState() {
         startBtn.textContent = 'Start';
         startBtn.style.display = 'block';
         cancelBtn.classList.remove('show');
+        cancelBtn.disabled = false;
+        cancelBtn.textContent = 'Cancel';
         break;
     }
   } catch (error) {
@@ -245,6 +250,11 @@ async function checkAnalysisState() {
 
 // Handle cancel button click
 async function handleCancelClick() {
+  if (isCanceling) {
+    console.log('[EasyForm Popup] ⏳ Cancel already in progress, ignoring extra click');
+    return;
+  }
+
   try {
     // Get current tab
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -255,6 +265,11 @@ async function handleCancelClick() {
 
     console.log('Canceling analysis for tab:', tab.id);
 
+    const cancelBtn = document.getElementById('cancelBtn');
+    cancelBtn.disabled = true;
+    cancelBtn.textContent = 'Canceling...';
+    isCanceling = true;
+
     // Send cancel request to background
     const response = await chrome.runtime.sendMessage({
       action: 'cancelRequest',
@@ -264,12 +279,24 @@ async function handleCancelClick() {
     if (response && response.success) {
       updateInfo('Analysis canceled');
       clearError();
+      const startBtn = document.getElementById('startBtn');
+      startBtn.disabled = false;
+      startBtn.textContent = 'Start';
+      startBtn.style.display = 'block';
+      cancelBtn.classList.remove('show');
+      cancelBtn.disabled = false;
+      cancelBtn.textContent = 'Cancel';
     } else {
       throw new Error(response.error || 'Failed to cancel');
     }
   } catch (error) {
     console.error('Error canceling analysis:', error);
     showError(error.message);
+    const cancelBtn = document.getElementById('cancelBtn');
+    cancelBtn.disabled = false;
+    cancelBtn.textContent = 'Cancel';
+  } finally {
+    isCanceling = false;
   }
 }
 

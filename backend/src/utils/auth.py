@@ -2,9 +2,12 @@
 Utility functions for authentication and authorization.
 """
 
+import asyncio
+import logging
 from typing import Any, Dict, Optional, Set
 from fastapi import Depends, HTTPException, status, Request
 from pydantic import BaseModel
+from sqlalchemy.exc import OperationalError
 
 from ..db.models import db_user as user_model
 from ..core import security, enums
@@ -20,6 +23,8 @@ WRITE_ACCESS_LEVELS: Set[AccessLevel] = {
     AccessLevel.WRITE_ONLY,
     AccessLevel.READ_WRITE,
 }
+
+logger = logging.getLogger(__name__)
 
 class TokenData(BaseModel):
     """Schema for the token data."""
@@ -195,46 +200,57 @@ async def get_user_id_from_api_token_or_cookie(
 
     # Check if it's an API token (starts with "easyform_")
     if token.startswith("easyform_"):
-        async with get_async_db_context() as db:
-            api_token = await api_tokens_crud.get_api_token_by_token_string(db, token)
+        max_attempts = 3
+        for attempt in range(1, max_attempts + 1):
+            try:
+                async with get_async_db_context() as db:
+                    api_token = await api_tokens_crud.get_api_token_by_token_string(db, token)
 
-            if not api_token:
-                raise HTTPException(
-                    status_code=status.HTTP_401_UNAUTHORIZED,
-                    detail="Invalid API token",
+                    if not api_token:
+                        raise HTTPException(
+                            status_code=status.HTTP_401_UNAUTHORIZED,
+                            detail="Invalid API token",
+                        )
+
+                    expires_at = api_token.expires_at
+                    if expires_at.tzinfo is None:
+                        expires_at = expires_at.replace(tzinfo=timezone.utc)
+
+                    if expires_at < datetime.now(timezone.utc):
+                        raise HTTPException(
+                            status_code=status.HTTP_401_UNAUTHORIZED,
+                            detail="API token expired",
+                        )
+
+                    if not api_token.is_active:
+                        raise HTTPException(
+                            status_code=status.HTTP_401_UNAUTHORIZED,
+                            detail="API token is inactive",
+                        )
+
+                    await api_tokens_crud.update_last_used(db, api_token.id)
+
+                    user = await users_crud.get_active_user_by_id(db, api_token.user_id)
+                    if not user:
+                        raise HTTPException(
+                            status_code=status.HTTP_401_UNAUTHORIZED,
+                            detail="User not found or inactive",
+                        )
+
+                    return api_token.user_id
+            except OperationalError as exc:
+                logger.warning(
+                    "Database operation failed for API token auth (attempt %d/%d): %s",
+                    attempt,
+                    max_attempts,
+                    exc,
                 )
-
-            # Check if token is expired
-            # Make expires_at timezone-aware if it's naive
-            expires_at = api_token.expires_at
-            if expires_at.tzinfo is None:
-                expires_at = expires_at.replace(tzinfo=timezone.utc)
-
-            if expires_at < datetime.now(timezone.utc):
-                raise HTTPException(
-                    status_code=status.HTTP_401_UNAUTHORIZED,
-                    detail="API token expired",
-                )
-
-            # Check if token is active
-            if not api_token.is_active:
-                raise HTTPException(
-                    status_code=status.HTTP_401_UNAUTHORIZED,
-                    detail="API token is inactive",
-                )
-
-            # Update last_used_at (async, don't wait)
-            await api_tokens_crud.update_last_used(db, api_token.id)
-
-            # Verify user exists and is active
-            user = await users_crud.get_active_user_by_id(db, api_token.user_id)
-            if not user:
-                raise HTTPException(
-                    status_code=status.HTTP_401_UNAUTHORIZED,
-                    detail="User not found or inactive",
-                )
-
-            return api_token.user_id
+                if attempt == max_attempts:
+                    raise HTTPException(
+                        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                        detail="Authentication backend unavailable",
+                    ) from exc
+                await asyncio.sleep(0.2 * attempt)
 
     # Otherwise, it's a regular JWT access token from cookie
     payload = security.verify_token(token)

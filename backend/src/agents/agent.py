@@ -6,6 +6,8 @@ import logging
 from abc import ABC, abstractmethod
 from typing import Any, Dict
 
+from pydantic import ValidationError
+
 from google.genai import types
 
 from ..config import settings
@@ -199,10 +201,24 @@ class StructuredAgent(ABC):
                                 logger.info(f"Cleaned text length: {len(cleaned_text)}")
                                 logger.info(f"Cleaned text preview (first 200 chars): {cleaned_text[:200]}")
 
-                                dict_response = json.loads(cleaned_text)
-                                logger.info(f"JSON parsing successful! Result type: {type(dict_response)}")
-                                logger.info(f"JSON result keys: {dict_response.keys() if isinstance(dict_response, dict) else 'NOT A DICT'}")
-                                return dict_response
+                                parsed_response = None
+
+                                output_model = getattr(self, "output_model", None)
+                                if output_model is not None:
+                                    try:
+                                        model_instance = output_model.model_validate_json(cleaned_text)
+                                        parsed_response = model_instance.model_dump()
+                                        logger.info("Structured output validated against %s", output_model.__name__)
+                                    except ValidationError as validation_error:
+                                        logger.error("Structured output validation failed: %s", validation_error)
+
+                                if parsed_response is None:
+                                    parsed_response = json.loads(cleaned_text)
+
+                                logger.info(f"JSON parsing successful! Result type: {type(parsed_response)}")
+                                if isinstance(parsed_response, dict):
+                                    logger.info(f"JSON result keys: {parsed_response.keys()}")
+                                return parsed_response
                             except json.JSONDecodeError as e:
                                 error_msg = f"Error parsing JSON response: {e}"
                                 logger.error(f"JSON parsing failed: {error_msg}")

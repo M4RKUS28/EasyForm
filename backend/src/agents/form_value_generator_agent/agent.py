@@ -2,7 +2,6 @@
 The Form Value Generator Agent generates appropriate values for form fields
 based on user context and field information.
 """
-from typing import Dict, Any
 
 from google.adk.agents import LlmAgent
 from google.adk.runners import Runner
@@ -10,6 +9,7 @@ from google.genai import types
 
 from ..agent import StructuredAgent
 from ..utils import load_instruction_from_file
+from .schema import FormValueGeneratorOutput
 
 
 class FormValueGeneratorAgent(StructuredAgent):
@@ -18,12 +18,20 @@ class FormValueGeneratorAgent(StructuredAgent):
 
         # Use provided model or default to Gemini 2.5 Pro
         self.model = model
+        self.output_model = FormValueGeneratorOutput
+        self._response_config = types.GenerateContentConfig(
+            response_mime_type="application/json",
+            temperature=0.2,
+            max_output_tokens=8192,
+        )
 
         generator_agent = LlmAgent(
             name="form_value_generator_agent",
             model=self.model,
             description="Agent for generating appropriate values for form fields based on user context.",
-            instruction=self.full_instructions
+            instruction=self.full_instructions,
+            output_schema=FormValueGeneratorOutput,
+            generate_content_config=self._response_config,
         )
 
         # Store references

@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { tokenAPI, fileAPI } from '../api/client';
 import Header from '../components/Header';
+import DeleteModal from '../components/DeleteModal';
+import '../components/DeleteModal.css';
 
 const Dashboard = () => {
   const { user } = useAuth();
@@ -13,6 +15,14 @@ const Dashboard = () => {
   const [newToken, setNewToken] = useState(null);
   const [uploadProgress, setUploadProgress] = useState(false);
   const [message, setMessage] = useState(null);
+  
+  // Modal state
+  const [deleteModal, setDeleteModal] = useState({
+    isOpen: false,
+    type: null, // 'token' or 'file'
+    item: null,
+    isDeleting: false
+  });
 
   useEffect(() => {
     loadData();
@@ -57,15 +67,47 @@ const Dashboard = () => {
   };
 
   const handleDeleteToken = async (tokenId) => {
-    if (!confirm('Are you sure you want to delete this token?')) return;
+    setDeleteModal({
+      isOpen: true,
+      type: 'token',
+      item: tokens.find(t => t.id === tokenId),
+      isDeleting: false
+    });
+  };
+
+  const handleDeleteFile = async (fileId) => {
+    setDeleteModal({
+      isOpen: true,
+      type: 'file',
+      item: files.find(f => f.id === fileId),
+      isDeleting: false
+    });
+  };
+
+  const confirmDelete = async () => {
+    setDeleteModal(prev => ({ ...prev, isDeleting: true }));
 
     try {
-      await tokenAPI.deleteToken(tokenId);
+      if (deleteModal.type === 'token') {
+        await tokenAPI.deleteToken(deleteModal.item.id);
+        showMessage('Token deleted successfully!');
+      } else if (deleteModal.type === 'file') {
+        await fileAPI.deleteFile(deleteModal.item.id);
+        showMessage('File deleted successfully!');
+      }
+      
       await loadData();
-      showMessage('Token deleted successfully!');
+      setDeleteModal({ isOpen: false, type: null, item: null, isDeleting: false });
     } catch (error) {
-      console.error('Error deleting token:', error);
-      showMessage('Error deleting token', 'error');
+      console.error(`Error deleting ${deleteModal.type}:`, error);
+      showMessage(`Error deleting ${deleteModal.type}`, 'error');
+      setDeleteModal(prev => ({ ...prev, isDeleting: false }));
+    }
+  };
+
+  const closeDeleteModal = () => {
+    if (!deleteModal.isDeleting) {
+      setDeleteModal({ isOpen: false, type: null, item: null, isDeleting: false });
     }
   };
 
@@ -125,19 +167,6 @@ const Dashboard = () => {
       };
       reader.onerror = (error) => reject(error);
     });
-  };
-
-  const handleDeleteFile = async (fileId) => {
-    if (!confirm('Are you sure you want to delete this file?')) return;
-
-    try {
-      await fileAPI.deleteFile(fileId);
-      await loadData();
-      showMessage('File deleted successfully!');
-    } catch (error) {
-      console.error('Error deleting file:', error);
-      showMessage('Error deleting file', 'error');
-    }
   };
 
   const formatFileSize = (bytes) => {
@@ -327,6 +356,23 @@ const Dashboard = () => {
           </div>
         </section>
       </main>
+
+      {/* Delete Confirmation Modal */}
+      <DeleteModal
+        isOpen={deleteModal.isOpen}
+        onClose={closeDeleteModal}
+        onConfirm={confirmDelete}
+        title={`Delete ${deleteModal.type === 'token' ? 'Token' : 'File'}?`}
+        message={`Are you sure you want to delete this ${deleteModal.type}? This action cannot be undone.`}
+        itemName={
+          deleteModal.item
+            ? deleteModal.type === 'token'
+              ? deleteModal.item.name || 'Unnamed Token'
+              : deleteModal.item.filename
+            : ''
+        }
+        isDeleting={deleteModal.isDeleting}
+      />
     </div>
   );
 };
