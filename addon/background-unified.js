@@ -624,6 +624,40 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       });
     return true;
   }
+
+  if (request.action === 'resetState') {
+    (async () => {
+      try {
+        const tabId = request.tabId;
+
+        if (tabId) {
+          stopPolling(tabId);
+          await cleanupRequestStorage(tabId);
+        } else {
+          // Fallback: stop all polls if no tab specified
+          for (const activeTabId of Array.from(activePolls.keys())) {
+            stopPolling(activeTabId);
+            await cleanupRequestStorage(activeTabId);
+          }
+        }
+
+        await chrome.storage.local.remove([
+          STORAGE_KEYS.ANALYSIS_RESULT,
+          STORAGE_KEYS.ANALYSIS_ERROR
+        ]);
+
+        await chrome.storage.local.set({
+          [STORAGE_KEYS.ANALYSIS_STATE]: ANALYSIS_STATES.IDLE
+        });
+
+        sendResponse({ success: true });
+      } catch (error) {
+        console.error('[EasyForm] ❌ Error resetting state:', error);
+        sendResponse({ success: false, error: error.message });
+      }
+    })();
+    return true;
+  }
 });
 
 async function analyzePage(tabId) {

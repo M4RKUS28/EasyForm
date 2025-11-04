@@ -13,6 +13,7 @@
       --accent-color: #667eea;
       --success-color: #4caf50;
       --error-color: #f44336;
+      --warning-color: #f5a623; /* Orange for pending status */
       --error-bg: #ffeeee;
       --error-text: #cc3333;
     }
@@ -26,6 +27,7 @@
         --accent-color: #7c8ef5;
         --success-color: #66bb6a;
         --error-color: #ef5350;
+        --warning-color: #f7b731; /* Brighter orange for dark mode */
         --error-bg: #3a1a1a;
         --error-text: #ff6b6b;
       }
@@ -64,6 +66,10 @@
 
     .status-dot.error {
       background: var(--error-color);
+    }
+
+    .status-dot.warning {
+      background: var(--warning-color);
     }
 
     .settings {
@@ -220,6 +226,13 @@
     </div>
     <button class="start-btn" id="startBtn">Start</button>
     <button class="cancel-btn" id="cancelBtn">Cancel</button>
+    <button class="cancel-btn" id="resetBtn" style="display: none;">Reset</button>
+    <button class="cancel-btn" id="resetBtn" style="display: none;">Reset</button>
+    <button class="cancel-btn" id="resetBtn" style="display: none;">Reset</button>
+    <button class="cancel-btn" id="resetBtn" style="display: none;">Reset</button>
+    <button class="cancel-btn" id="resetBtn" style="display: none;">Reset</button>
+    <button class="cancel-btn" id="resetBtn" style="display: none;">Reset</button>
+    <button class="cancel-btn" id="resetBtn" style="display: none;">Reset</button>
   </div>
 
   <div class="clipboard-section">

@@ -2,8 +2,11 @@
 
 let statusCheckInterval = null;
 let isCanceling = false;
+let lastAnalysisState = null;
+let lastAnalysisError = null;
 
 document.addEventListener('DOMContentLoaded', async () => {
+  setHealthStatus('pending'); // Set to orange initially
   await checkBackendHealth();
   await loadConfig();
   await loadStatus();
@@ -31,19 +34,24 @@ async function checkBackendHealth() {
     if (response.healthy) {
       // Backend is healthy - show green indicator
       console.log('[EasyForm Popup] ✅ Backend is healthy');
-      setHealthStatus(true);
-      clearError();
+    setHealthStatus('healthy');
+    clearError();
     } else {
       // Backend is not healthy
       console.warn('[EasyForm Popup] ⚠️ Backend is not healthy:', response.error);
+      setHealthStatus('unhealthy');
       showError(response.error || 'Backend health check failed');
     }
   } catch (error) {
     // Health check failed
     console.error('[EasyForm Popup] ❌ Health check failed:', error);
+    setHealthStatus('unhealthy');
     showError(error.message || 'Cannot connect to backend');
   }
 }
+
+// Prevent multiple polling intervals from being created
+let pollingStarted = false;
 
 async function loadConfig() {
   try {
@@ -121,6 +129,11 @@ function setupEventListeners() {
     await handleCancelClick();
   });
 
+  // Reset button
+  document.getElementById('resetBtn').addEventListener('click', async () => {
+    await handleResetClick();
+  });
+
   // Clipboard input - save to storage when edited
   const clipboardInput = document.getElementById('clipboardInput');
   let clipboardUpdateTimeout;
@@ -164,33 +177,41 @@ function updateInfo(text) {
   document.getElementById('infoText').textContent = text;
 }
 
-function setHealthStatus(isHealthy) {
+function setHealthStatus(status) { // status can be 'healthy', 'unhealthy', 'pending'
   const statusDot = document.getElementById('statusDot');
-  if (isHealthy) {
-    statusDot.classList.remove('error');
+  statusDot.classList.remove('error', 'warning');
+
+  if (status === 'healthy') {
+    // Green
+  } else if (status === 'unhealthy') {
+    statusDot.classList.add('error'); // Red
   } else {
-    statusDot.classList.add('error');
+    statusDot.classList.add('warning'); // Orange
   }
 }
 
 function showError(message) {
-  const statusDot = document.getElementById('statusDot');
   const errorDiv = document.getElementById('errorMessage');
 
-  statusDot.classList.add('error');
+  setHealthStatus('unhealthy');
   errorDiv.textContent = message;
   errorDiv.classList.add('show');
 }
 
-function clearError() {
-  const statusDot = document.getElementById('statusDot');
-  const errorDiv = document.getElementById('errorMessage');
+function clearError(nextStatus = null) {
+  if (nextStatus) {
+    setHealthStatus(nextStatus);
+  } else {
+    const statusDot = document.getElementById('statusDot');
+    statusDot.classList.remove('error');
+  }
 
-  statusDot.classList.remove('error');
+  const errorDiv = document.getElementById('errorMessage');
   errorDiv.textContent = '';
   errorDiv.classList.remove('show');
 }
 
+// Handle start button click
 async function handleStartClick() {
   const startBtn = document.getElementById('startBtn');
 
@@ -203,8 +224,9 @@ async function handleStartClick() {
       throw new Error('No active tab found');
     }
 
-    // Clear previous state
-    clearError();
+  // Clear previous state
+  setHealthStatus('pending');
+  clearError();
     updateInfo('Starting analysis...');
     startBtn.disabled = true;
     startBtn.textContent = 'Running...';
@@ -238,16 +260,32 @@ async function handleStartClick() {
 async function checkAnalysisState() {
   try {
     const response = await chrome.runtime.sendMessage({ action: 'getAnalysisState' });
-    console.log('[EasyForm Popup] 📊 Analysis state:', response?.state);
-
     if (!response) return;
+
+    const currentState = response.state || 'idle';
+    const currentError = response.error || null;
+
+    if (currentState === lastAnalysisState && currentError === lastAnalysisError) {
+      return;
+    }
+
+    lastAnalysisState = currentState;
+    lastAnalysisError = currentError;
+
+    console.log('[EasyForm Popup] 📊 Analysis state changed:', currentState, currentError ? `- ${currentError}` : '');
 
     const startBtn = document.getElementById('startBtn');
     const cancelBtn = document.getElementById('cancelBtn');
+    const resetBtn = document.getElementById('resetBtn');
 
-    switch (response.state) {
+    resetBtn.style.display = 'none';
+    resetBtn.disabled = false;
+    resetBtn.textContent = 'Reset';
+    cancelBtn.classList.remove('show');
+
+    switch (currentState) {
       case 'running':
-        console.log('[EasyForm Popup] 🔄 State: running');
+        setHealthStatus('pending');
         startBtn.disabled = true;
         startBtn.textContent = 'Running...';
         startBtn.style.display = 'none';
@@ -257,11 +295,10 @@ async function checkAnalysisState() {
         break;
 
       case 'success':
-        console.log('[EasyForm Popup] ✅ State: success');
+        setHealthStatus('healthy');
         startBtn.disabled = false;
         startBtn.textContent = 'Start';
         startBtn.style.display = 'block';
-        cancelBtn.classList.remove('show');
         if (response.result && response.result.actions) {
           const count = response.result.actions.length;
           console.log('[EasyForm Popup] 📋 Actions found:', count);
@@ -273,28 +310,23 @@ async function checkAnalysisState() {
         break;
 
       case 'error':
-        console.log('[EasyForm Popup] ❌ State: error -', response.error);
         startBtn.disabled = false;
         startBtn.textContent = 'Start';
         startBtn.style.display = 'block';
-        cancelBtn.classList.add('show');
-        cancelBtn.disabled = false;
-        cancelBtn.textContent = 'Reset';
-        if (response.error) {
-          showError(response.error);
+        resetBtn.style.display = 'block';
+        if (currentError) {
+          showError(currentError);
           updateInfo('Analysis failed');
         }
         break;
 
       case 'idle':
       default:
-        console.log('[EasyForm Popup] ⏸️ State: idle');
         startBtn.disabled = false;
         startBtn.textContent = 'Start';
         startBtn.style.display = 'block';
-        cancelBtn.classList.remove('show');
-        cancelBtn.disabled = false;
-        cancelBtn.textContent = 'Cancel';
+        updateInfo('Ready');
+        clearError();
         break;
     }
   } catch (error) {
@@ -354,15 +386,68 @@ async function handleCancelClick() {
   }
 }
 
+// Handle reset button click
+async function handleResetClick() {
+  console.log('[EasyForm Popup] 🔄 Resetting state...');
+  const resetBtn = document.getElementById('resetBtn');
+  try {
+    resetBtn.disabled = true;
+    resetBtn.textContent = 'Resetting...';
+
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    const tabId = tab?.id;
+
+    const response = await chrome.runtime.sendMessage({ action: 'resetState', tabId });
+    if (response && response.success === false) {
+      throw new Error(response.error || 'Could not reset state');
+    }
+
+    lastAnalysisState = null;
+    lastAnalysisError = null;
+
+    setHealthStatus('pending');
+    clearError();
+    updateInfo('Ready');
+
+    const startBtn = document.getElementById('startBtn');
+    startBtn.disabled = false;
+    startBtn.textContent = 'Start';
+    startBtn.style.display = 'block';
+
+  const cancelBtn = document.getElementById('cancelBtn');
+  cancelBtn.classList.remove('show');
+
+    const clipboardInput = document.getElementById('clipboardInput');
+    clipboardInput.value = '';
+    await chrome.storage.local.remove('customClipboard');
+
+    await checkBackendHealth();
+    await checkAnalysisState();
+
+  resetBtn.style.display = 'none';
+
+    console.log('[EasyForm Popup] ✅ State reset successfully');
+  } catch (error) {
+    console.error('[EasyForm Popup] ❌ Error resetting state:', error);
+    showError('Failed to reset state. Please close and reopen the popup.');
+  } finally {
+    resetBtn.disabled = false;
+    resetBtn.textContent = 'Reset';
+  }
+}
+
 // Start polling for status updates
 function startStatusPolling() {
   // Clear any existing interval
+  if (pollingStarted) return;
+  pollingStarted = true;
+  // Clear any existing interval (safety)
   stopStatusPolling();
 
-  // Poll every 500ms for status updates
+  // Poll every 1000ms for status updates
   statusCheckInterval = setInterval(async () => {
     await checkAnalysisState();
-  }, 500);
+  }, 1000);
 }
 
 // Stop polling
@@ -370,5 +455,7 @@ function stopStatusPolling() {
   if (statusCheckInterval) {
     clearInterval(statusCheckInterval);
     statusCheckInterval = null;
+    pollingStarted = false;
   }
 }
+
