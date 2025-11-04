@@ -177,9 +177,18 @@ const ActionExecutor = {
       throw new Error('Element is not a radio button');
     }
 
-    element.checked = true;
-    element.dispatchEvent(new Event('input', { bubbles: true }));
-    element.dispatchEvent(new Event('change', { bubbles: true }));
+    if (element.checked) {
+      return { skipped: true, reason: 'Radio already selected' };
+    }
+
+    element.focus();
+    element.click();
+
+    if (!element.checked) {
+      element.checked = true;
+      element.dispatchEvent(new Event('input', { bubbles: true }));
+      element.dispatchEvent(new Event('change', { bubbles: true }));
+    }
   },
 
   /**
@@ -192,9 +201,19 @@ const ActionExecutor = {
 
     // Value can be boolean or string ('true'/'false')
     const shouldCheck = value === true || value === 'true' || value === '1';
-    element.checked = shouldCheck;
-    element.dispatchEvent(new Event('input', { bubbles: true }));
-    element.dispatchEvent(new Event('change', { bubbles: true }));
+
+    if (element.checked === shouldCheck) {
+      return { skipped: true, reason: 'Checkbox already in desired state' };
+    }
+
+    element.focus();
+    element.click();
+
+    if (element.checked !== shouldCheck) {
+      element.checked = shouldCheck;
+      element.dispatchEvent(new Event('input', { bubbles: true }));
+      element.dispatchEvent(new Event('change', { bubbles: true }));
+    }
   },
 
   /**
