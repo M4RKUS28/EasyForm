@@ -30,7 +30,7 @@ router = APIRouter(
 )
 async def analyze_form_async(
     form_request: form_schema.FormAnalyzeRequest,
-    background_tasks: BackgroundTasks,
+    _background_tasks: BackgroundTasks,
     request: Request,
     db: AsyncSession = Depends(get_db),
 ):
@@ -67,9 +67,8 @@ async def analyze_form_async(
         db, user_id=user_id
     )
 
-    # Start background task
-    background_tasks.add_task(
-        form_service.process_form_analysis_async,
+    # Start background task (tracked so it can be cancelled later)
+    form_service.schedule_form_analysis_task(
         form_request_db.id,
         user_id,
         form_request
@@ -194,21 +193,23 @@ async def delete_request(
     Cancel or delete a form analysis request.
 
     This will:
+    - Cancel any in-flight background processing for the request
     - Delete the request from database
     - Delete all associated actions (cascade)
-
-    **Note:** Background task will continue running but results won't be saved.
     """
     # Get user_id from either API token or cookie
     user_id = await get_user_id_from_api_token_or_cookie(request)
 
-    # Delete request (with authorization check)
-    deleted = await form_requests_crud.delete_form_request(db, request_id, user_id)
+    form_request = await form_requests_crud.get_form_request(db, request_id, user_id)
 
-    if not deleted:
+    if not form_request:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Form request {request_id} not found"
         )
+
+    await form_service.cancel_form_analysis_task(request_id)
+
+    await form_requests_crud.delete_form_request(db, request_id, user_id)
 
     return None  # 204 No Content

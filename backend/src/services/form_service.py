@@ -4,10 +4,12 @@ Service for form analysis and field value generation.
 This service analyzes HTML forms and generates appropriate values
 using AI and user context (uploaded files).
 """
+import asyncio
 import base64
 import logging
+import re
 from collections import Counter
-from typing import List, Optional
+from typing import Dict, List, Optional, Tuple
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -28,6 +30,53 @@ def get_agent_service() -> AgentService:
     if _agent_service is None:
         _agent_service = AgentService()
     return _agent_service
+
+
+_active_analysis_tasks: Dict[str, asyncio.Task] = {}
+
+
+def _sanitize_prompt_text(text: Optional[str], *, collapse_whitespace: bool = True) -> Optional[str]:
+    if text is None:
+        return None
+    sanitized = text.replace("\r\n", "\n").replace("\r", "\n")
+    sanitized = sanitized.replace("\t", " ").replace("\x0c", " ")
+    if collapse_whitespace:
+        sanitized = re.sub(r"[ \u00a0]{2,}", " ", sanitized)
+    sanitized = re.sub(r"\n{3,}", "\n\n", sanitized)
+    sanitized = sanitized.strip()
+    return sanitized
+
+
+def _extract_sanitized_inputs(request_data: form_schema.FormAnalyzeRequest) -> Tuple[str, str, str]:
+    html_clean = _sanitize_prompt_text(request_data.html, collapse_whitespace=False) or ""
+    visible_clean = _sanitize_prompt_text(request_data.visible_text) or ""
+    clipboard_clean = _sanitize_prompt_text(request_data.clipboard_text) or ""
+    return html_clean, visible_clean, clipboard_clean
+
+
+def schedule_form_analysis_task(
+    request_id: str,
+    user_id: str,
+    request_data: form_schema.FormAnalyzeRequest,
+) -> None:
+    loop = asyncio.get_running_loop()
+    task = loop.create_task(process_form_analysis_async(request_id, user_id, request_data))
+    _active_analysis_tasks[request_id] = task
+
+
+async def cancel_form_analysis_task(request_id: str) -> bool:
+    task = _active_analysis_tasks.pop(request_id, None)
+    if not task:
+        return False
+    if not task.done():
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            logger.info("[AsyncTask %s] Background analysis cancelled", request_id)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("[AsyncTask %s] Cancellation surfaced exception: %s", request_id, exc)
+    return True
 
 
 async def analyze_form(
@@ -53,9 +102,25 @@ async def analyze_form(
     try:
         logger.info(f"=== Starting form analysis for user {user_id} ===")
         logger.info(f"Request mode: {request.mode}")
-        logger.info(f"HTML length: {len(request.html) if request.html else 0} chars")
-        logger.info(f"Visible text length: {len(request.visible_text) if request.visible_text else 0} chars")
-        logger.info(f"Clipboard text length: {len(request.clipboard_text) if request.clipboard_text else 0} chars")
+        html_clean, visible_clean, clipboard_clean = _extract_sanitized_inputs(request)
+        raw_html_len = len(request.html or "")
+        raw_visible_len = len(request.visible_text or "")
+        raw_clipboard_len = len(request.clipboard_text or "")
+        logger.info(
+            "HTML length: raw=%d chars, sanitized=%d chars",
+            raw_html_len,
+            len(html_clean),
+        )
+        logger.info(
+            "Visible text length: raw=%d chars, sanitized=%d chars",
+            raw_visible_len,
+            len(visible_clean),
+        )
+        logger.info(
+            "Clipboard text length: raw=%d chars, sanitized=%d chars",
+            raw_clipboard_len,
+            len(clipboard_clean),
+        )
         logger.info(f"Screenshots provided: {len(request.screenshots) if request.screenshots else 0}")
 
         # Get AgentService singleton
@@ -88,17 +153,19 @@ async def analyze_form(
         # Call HTML Form Parser Agent
         logger.info("Calling HTML Form Parser Agent...")
         logger.info(
-            f"Parser input - user_id: {user_id}, html length: {len(request.html)}, "
-            f"dom_text length: {len(request.visible_text) if request.visible_text else 0}, "
-            f"clipboard length: {len(request.clipboard_text) if request.clipboard_text else 0}, "
-            f"screenshots: {len(screenshot_bytes) if screenshot_bytes else 0}"
+            "Parser input - user_id: %s, html length: %d, dom_text length: %d, clipboard length: %d, screenshots: %d",
+            user_id,
+            len(html_clean),
+            len(visible_clean),
+            len(clipboard_clean),
+            len(screenshot_bytes) if screenshot_bytes else 0,
         )
 
         parser_result = await agent_service.parse_form_structure(
             user_id=user_id,
-            html=request.html,
-            dom_text=request.visible_text,
-            clipboard_text=request.clipboard_text,
+            html=html_clean,
+            dom_text=visible_clean,
+            clipboard_text=clipboard_clean,
             screenshots=screenshot_bytes,
             quality=request.quality
         )
@@ -191,16 +258,16 @@ async def analyze_form(
         logger.info("Calling Form Value Generator Agent...")
         logger.info(
             f"Generator input - user_id: {user_id}, fields count: {len(fields)}, "
-            f"visible_text length: {len(request.visible_text) if request.visible_text else 0}, "
-            f"clipboard length: {len(request.clipboard_text) if request.clipboard_text else 0}, "
+            f"visible_text length: {len(visible_clean)}, "
+            f"clipboard length: {len(clipboard_clean)}, "
             f"user_files count: {len(user_files)}"
         )
 
         generator_result = await agent_service.generate_form_values(
             user_id=user_id,
             fields=fields,
-            visible_text=request.visible_text,
-            clipboard_text=request.clipboard_text,
+            visible_text=visible_clean,
+            clipboard_text=clipboard_clean,
             user_files=user_files,
             quality=request.quality
         )
@@ -320,6 +387,17 @@ async def process_form_analysis_async(
     """
     try:
         logger.info(f"[AsyncTask {request_id}] Starting background analysis for user {user_id}")
+        html_clean, visible_clean, clipboard_clean = _extract_sanitized_inputs(request_data)
+        logger.info(
+            "[AsyncTask %s] Input lengths - HTML raw=%d/sanitized=%d, visible raw=%d/sanitized=%d, clipboard raw=%d/sanitized=%d",
+            request_id,
+            len(request_data.html or ""),
+            len(html_clean),
+            len(request_data.visible_text or ""),
+            len(visible_clean),
+            len(request_data.clipboard_text or ""),
+            len(clipboard_clean),
+        )
 
         async with get_async_db_context() as db:
             # Update status to processing_step_1 (parsing HTML form structure)
@@ -351,9 +429,9 @@ async def process_form_analysis_async(
             # Call HTML Form Parser Agent
             parser_result = await agent_service.parse_form_structure(
                 user_id=user_id,
-                html=request_data.html,
-                dom_text=request_data.visible_text,
-                clipboard_text=request_data.clipboard_text,
+                html=html_clean,
+                dom_text=visible_clean,
+                clipboard_text=clipboard_clean,
                 screenshots=screenshot_bytes,
                 quality=request_data.quality
             )
@@ -395,8 +473,8 @@ async def process_form_analysis_async(
             generator_result = await agent_service.generate_form_values(
                 user_id=user_id,
                 fields=fields,
-                visible_text=request_data.visible_text,
-                clipboard_text=request_data.clipboard_text,
+                visible_text=visible_clean,
+                clipboard_text=clipboard_clean,
                 user_files=user_files,
                 quality=request_data.quality
             )
@@ -449,6 +527,9 @@ async def process_form_analysis_async(
             )
             logger.info(f"[AsyncTask {request_id}] Status updated to 'completed'")
 
+    except asyncio.CancelledError:
+        logger.info(f"[AsyncTask {request_id}] Cancelled before completion")
+        raise
     except Exception as e:
         logger.exception(f"[AsyncTask {request_id}] Exception during async analysis: {e}")
 
@@ -463,3 +544,5 @@ async def process_form_analysis_async(
                 )
         except Exception as db_error:
             logger.error(f"[AsyncTask {request_id}] Failed to update error status: {db_error}")
+    finally:
+        _active_analysis_tasks.pop(request_id, None)
