@@ -47,6 +47,42 @@ def _sanitize_prompt_text(text: Optional[str], *, collapse_whitespace: bool = Tr
     return sanitized
 
 
+def _clean_label_text(text: Optional[str]) -> Optional[str]:
+    if text is None or not isinstance(text, str):
+        return None if text is None else str(text)
+    cleaned = re.sub(r"\s+", " ", text)
+    return cleaned.strip()
+
+
+def _normalize_parser_field(field: dict) -> dict:
+    normalized = dict(field)
+
+    for key in ("label", "name"):
+        value = normalized.get(key)
+        if isinstance(value, str):
+            normalized[key] = _clean_label_text(value)
+
+    description = normalized.get("description")
+    if isinstance(description, str):
+        desc = description.replace("\r\n", "\n").replace("\r", "\n")
+        desc = re.sub(r"\n{3,}", "\n\n", desc)
+        normalized["description"] = desc.strip()
+
+    options = normalized.get("options")
+    if isinstance(options, list):
+        cleaned_options = []
+        for option in options:
+            if isinstance(option, str):
+                cleaned = _clean_label_text(option)
+                if cleaned:
+                    cleaned_options.append(cleaned)
+            else:
+                cleaned_options.append(option)
+        normalized["options"] = cleaned_options
+
+    return normalized
+
+
 def _extract_sanitized_inputs(request_data: form_schema.FormAnalyzeRequest) -> Tuple[str, str, str]:
     html_clean = _sanitize_prompt_text(request_data.html, collapse_whitespace=False) or ""
     visible_clean = _sanitize_prompt_text(request_data.visible_text) or ""
@@ -202,12 +238,17 @@ async def analyze_form(
         # Provide richer diagnostics about the detected fields to help debug parsing issues
         normalized_fields = []
         for field in fields:
+            normalized: Optional[dict] = None
             if hasattr(field, "model_dump"):
-                normalized_fields.append(field.model_dump())
+                normalized = field.model_dump()
             elif isinstance(field, dict):
-                normalized_fields.append(dict(field))
+                normalized = dict(field)
             else:
                 logger.warning("Unexpected field type returned from parser: %s", type(field))
+                continue
+
+            normalized = _normalize_parser_field(normalized)
+            normalized_fields.append(normalized)
 
         if normalized_fields:
             summaries = [
@@ -373,11 +414,13 @@ async def analyze_form(
                     )
                     continue
 
+                label = _clean_label_text(action_data.get("label"))
+
                 action = form_schema.FormAction(
                     action_type=action_type,
                     selector=action_data.get("selector", ""),
                     value=value,
-                    label=action_data.get("label", "")
+                    label=label or ""
                 )
                 actions.append(action)
                 logger.info("Action %d: Successfully created FormAction", idx)

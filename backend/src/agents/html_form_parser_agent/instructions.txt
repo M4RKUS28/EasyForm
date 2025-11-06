@@ -35,6 +35,7 @@ Analyze the HTML and identify ALL interactive form fields including:
    - Check for aria-label attributes
    - Check for placeholder text
    - Look at nearby text content
+   - Trim leading/trailing whitespace and collapse repeated spaces so the label is concise (avoid stray tabs or line breaks)
    - Combine multiple sources if helpful
 
 5. **description**: Additional context about this field (keep it concise)
@@ -53,6 +54,7 @@ Analyze the HTML and identify ALL interactive form fields including:
    - For checkboxes: If part of a group, list all related checkboxes
    - Set to null if not applicable
    - When radios/checkboxes are implemented via ARIA roles, still list the visible option labels so downstream agents can match answers
+   - Remove leading/trailing whitespace from each option value so they match the on-screen text exactly
 
 
 ## Additional Analysis (if screenshots provided)
