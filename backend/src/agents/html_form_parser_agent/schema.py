@@ -14,22 +14,22 @@ class FormField(BaseModel):
 
     selector: str = Field(..., description="Unique CSS selector pointing to the field element.")
     type: str = Field(..., description="Normalized field type such as text, email, select, checkbox, etc.")
+    group_id: Optional[str] = Field(
+        None,
+        description="Stable identifier shared by all controls belonging to the same logical question (e.g., radio options in one group).",
+    )
     label: Optional[str] = Field(
         None,
         description="Human readable label associated with the field if available.",
     )
     description: Optional[str] = Field(
         None,
-        description="Additional hints or help text describing the field. Or Information from surrounding context.",
+        description="Additional hints or help text describing the field, e.g. information from surrounding context, placeholder text, default value or field validation rules.",
     )
 
     options: Optional[List[str]] = Field(
         None,
         description="Selectable options for dropdowns, radios, or grouped checkboxes.",
-    )
-    default_value: Optional[FieldValue] = Field(
-        None,
-        description="Any detected default value populated in the field.",
     )
 
 

@@ -25,21 +25,29 @@ Analyze the HTML and identify ALL interactive form fields including:
 
 2. **type**: The field type (text, email, tel, number, select, radio, checkbox, textarea, date, time, url, etc.)
 
-3. **label**: The human-readable label for this field
+3. **group_id**: Identifier shared by all controls that belong to the same logical question
+   - Use the field's `name` attribute when present
+   - Otherwise derive it from the nearest group container (e.g., the id of the closest element with `role='radiogroup'` / `role='group'`, or the Google Forms block id such as `div[jsmodel='CP1oW']`)
+   - As a final fallback, hash together stable structural hints (e.g., parent selector + heading text) so every question keeps a consistent id across runs
+
+4. **label**: The human-readable label for this field
    - Look for <label> tags associated with this input
    - Check for aria-label attributes
    - Check for placeholder text
    - Look at nearby text content
    - Combine multiple sources if helpful
 
-4. **description**: Additional context about this field (keep it concise)
+5. **description**: Additional context about this field (keep it concise)
    - Look for help text near the field
    - Check for aria-describedby
    - Look at nearby paragraphs or spans with hints
    - Include validation requirements if visible (e.g., "Must be at least 8 characters") and Important surrounding context
-   - Include **validation_pattern**: Any validation hints e.g. email fields: "email"
+   - Include validation_pattern: Any validation hints e.g. email fields: "email"
+   - Include default or placeholder values
+   - Capture the currently selected or filled value whenever it is visible in the DOM (e.g., selected radio label, dropdown selection, existing text input content) and place it at the end of the description using the format `Current value: <value>`
 
-5. **options**: For select/radio/checkbox groups, list all available options
+
+6. **options**: For select/radio/checkbox groups, list all available options
    - For select: Extract all <option> text values
    - For radio groups: List all radio values in the same group (same name)
    - For checkboxes: If part of a group, list all related checkboxes
@@ -65,5 +73,6 @@ If screenshots are provided, use them to:
 7. Be precise with field types - distinguish between text, email, tel, number, etc.
 8. Include all visible context that might help understand what data should be entered
 9. When fields use complex custom widgets that do not map cleanly to standard types, describe the interaction in the description and set the selector to the best clickable node. If no standard type fits, set the `type` to `custom` and mention that a click fallback is required.
+10. Always populate `group_id` so that all options of the same question share the same identifier. If nothing suitable exists, create a deterministic synthetic id (e.g., `group_<hash_of_selector_path>`).
 
 ! IGNORE SUBMIT-FIELDS LIKE SUBMIT-BUTTONS

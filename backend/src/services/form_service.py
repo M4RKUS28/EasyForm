@@ -8,8 +8,8 @@ import asyncio
 import base64
 import logging
 import re
-from collections import Counter
-from typing import Dict, List, Optional, Tuple
+from collections import Counter, OrderedDict
+from typing import Dict, List, Optional, Set, Tuple
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -205,7 +205,7 @@ async def analyze_form(
             if hasattr(field, "model_dump"):
                 normalized_fields.append(field.model_dump())
             elif isinstance(field, dict):
-                normalized_fields.append(field)
+                normalized_fields.append(dict(field))
             else:
                 logger.warning("Unexpected field type returned from parser: %s", type(field))
 
@@ -258,6 +258,52 @@ async def analyze_form(
         # ===== PHASE 2: Generate Field Values =====
         logger.info("Phase 2: Generating values for %d fields", len(fields))
 
+        field_groups = build_field_groups(normalized_fields)
+        total_group_fields = sum(len(group) for group in field_groups)
+        logger.info(
+            "Prepared %d field groups containing %d total fields for value generation",
+            len(field_groups),
+            total_group_fields,
+        )
+
+        max_group_log = 15
+        for group_idx, group in enumerate(field_groups[:max_group_log]):
+            if not group:
+                continue
+
+            primary = group[0]
+            group_id = primary.get("group_id", "<none>")
+            labels = {
+                (field.get("label") or field.get("name") or field.get("selector") or f"field_{idx}")
+                for idx, field in enumerate(group)
+            }
+            types = {field.get("type", "unknown") for field in group}
+            logger.info(
+                "Field group %d (group_id=%s) -> labels=%s, types=%s, size=%d",
+                group_idx,
+                group_id,
+                sorted(labels),
+                sorted(types),
+                len(group),
+            )
+
+            for field in group:
+                logger.info(
+                    "  - selector=%s | type=%s | label=%s | required=%s | options=%d",
+                    field.get("selector"),
+                    field.get("type"),
+                    field.get("label"),
+                    field.get("required"),
+                    len(field.get("options") or []),
+                )
+
+        if len(field_groups) > max_group_log:
+            logger.info(
+                "Field groups truncated in logs: showing %d of %d entries",
+                max_group_log,
+                len(field_groups),
+            )
+
         # Get user's uploaded files
         logger.info("Fetching user files from database...")
         user_files = await files_crud.get_user_files(db, user_id)
@@ -270,7 +316,7 @@ async def analyze_form(
         logger.info(
             "Generator input - user_id: %s, fields count: %d, visible_text length: %d, clipboard length: %d, user_files count: %d",
             user_id,
-            len(fields),
+            total_group_fields,
             len(visible_clean),
             len(clipboard_clean),
             len(user_files),
@@ -278,7 +324,7 @@ async def analyze_form(
 
         generator_result = await agent_service.generate_form_values(
             user_id=user_id,
-            fields=fields,
+            field_groups=field_groups,
             visible_text=visible_clean,
             clipboard_text=clipboard_clean,
             user_files=user_files,
@@ -316,10 +362,21 @@ async def analyze_form(
                 action_type = map_action_type(original_type)
                 logger.info("Action %d: Mapped type '%s' -> '%s'", idx, original_type, action_type)
 
+                value = action_data.get("value")
+                requires_value = {"fillText", "setText", "selectDropdown", "selectCheckbox"}
+                if action_type in requires_value and value is None:
+                    logger.info(
+                        "Action %d skipped: '%s' requires value but received None (selector=%s)",
+                        idx,
+                        action_type,
+                        action_data.get("selector"),
+                    )
+                    continue
+
                 action = form_schema.FormAction(
                     action_type=action_type,
                     selector=action_data.get("selector", ""),
-                    value=action_data.get("value"),
+                    value=value,
                     label=action_data.get("label", "")
                 )
                 actions.append(action)
@@ -329,19 +386,21 @@ async def analyze_form(
                 logger.exception("Action %d conversion error details:", idx)
                 continue
 
-        logger.info("Phase 2 complete: Generated %d actions", len(actions))
-        logger.info("Actions summary: %s", [f"{a.action_type}:{a.label}" for a in actions[:5]])
+        optimized_actions = optimize_actions(actions)
+
+        logger.info("Phase 2 complete: Generated %d actions (optimized to %d)", len(actions), len(optimized_actions))
+        logger.info("Actions summary: %s", [f"{a.action_type}:{a.label}" for a in optimized_actions[:5]])
 
         # Return success response
         logger.info(
             "=== Form analysis complete: %d fields, %d actions ===",
             len(fields),
-            len(actions),
+            len(optimized_actions),
         )
         return form_schema.FormAnalyzeResponse(
             status="success",
             message=f"Successfully analyzed form with {len(fields)} fields",
-            actions=actions,
+            actions=optimized_actions,
             fields_detected=len(fields)
         )
 
@@ -381,6 +440,109 @@ def map_action_type(agent_action_type: str) -> str:
     }
 
     return mapping.get(agent_action_type, "fillText")  # Default to fillText
+
+
+def build_field_groups(fields: List[dict]) -> List[List[dict]]:
+    """Group parsed fields by their shared group_id for downstream processing.
+
+    Ensures a stable identifier exists for every field. When the parser omits
+    `group_id`, the function synthesizes a unique value so those controls remain
+    isolated in their own groups.
+    """
+
+    groups: "OrderedDict[str, List[dict]]" = OrderedDict()
+    fallback_counter = 0
+
+    for field in fields:
+        if not isinstance(field, dict):
+            continue
+
+        field_copy = dict(field)
+        group_id = field_copy.get("group_id")
+
+        if not group_id:
+            selector = field_copy.get("selector")
+            if selector:
+                group_id = f"selector::{selector}"
+            else:
+                group_id = f"field::{fallback_counter}"
+                fallback_counter += 1
+
+            field_copy["group_id"] = group_id
+            logger.debug("Synthesized group_id '%s' for selector '%s'", group_id, selector)
+
+        groups.setdefault(group_id, []).append(field_copy)
+
+    return list(groups.values())
+
+
+def optimize_actions(actions: List[form_schema.FormAction]) -> List[form_schema.FormAction]:
+    """Remove redundant actions and keep intent for single-choice groups.
+
+    Google Forms radio questions often appear as individual options in the parser output.
+    The value generator may therefore emit multiple `selectRadio` actions that map to
+    the same logical question. We keep only the last action per group while still
+    allowing distinct grid rows to execute.
+    """
+
+    if not actions:
+        return []
+
+    optimized: List[form_schema.FormAction] = []
+
+    seen_radio_keys: Set[str] = set()
+    seen_generic_keys: Set[Tuple[str, str, str]] = set()
+
+    for action in reversed(actions):
+        if action.action_type == "selectRadio":
+            key = _radio_group_key(action)
+            if key in seen_radio_keys:
+                logger.debug("Dropping redundant radio action for key %s selector=%s", key, action.selector)
+                continue
+            seen_radio_keys.add(key)
+
+        generic_key = (
+            action.action_type,
+            (action.selector or "").strip(),
+            repr(action.value).strip() if action.value is not None else "",
+        )
+
+        if generic_key in seen_generic_keys:
+            logger.debug(
+                "Dropping duplicate action type=%s selector=%s value=%s",
+                action.action_type,
+                action.selector,
+                action.value,
+            )
+            continue
+
+        seen_generic_keys.add(generic_key)
+
+        optimized.append(action)
+
+    optimized.reverse()
+    return optimized
+
+
+def _radio_group_key(action: form_schema.FormAction) -> str:
+    label = (action.label or "").strip().lower()
+    selector = action.selector or ""
+
+    # Preserve distinct rows in grid questions by incorporating field indices if present
+    for marker in ("data-field-index", "data-row-index", "data-row-id", "data-question-id"):
+        marker_pos = selector.find(marker)
+        if marker_pos != -1:
+            # Extract marker and immediate value portion for stability
+            fragment = selector[marker_pos:]
+            # Limit length to avoid consuming entire selector
+            fragment = fragment.split(']', 1)[0]
+            return f"radio:{label}:{fragment}"
+
+    if selector:
+        # Use trimmed selector to keep uniqueness per question when label missing
+        return f"radio:{label}:{selector.strip()}"
+
+    return f"radio:{label or 'unknown'}"
 
 
 # ===== NEW: Async Background Task for Form Analysis =====
@@ -493,6 +655,28 @@ async def process_form_analysis_async(
                 )
                 return
 
+            normalized_fields_async = []
+            for field in fields:
+                if hasattr(field, "model_dump"):
+                    normalized_fields_async.append(field.model_dump())
+                elif isinstance(field, dict):
+                    normalized_fields_async.append(dict(field))
+                else:
+                    logger.warning(
+                        "[AsyncTask %s] Unexpected field type returned from parser: %s",
+                        request_id,
+                        type(field),
+                    )
+
+            async_field_groups = build_field_groups(normalized_fields_async)
+            async_total_group_fields = sum(len(group) for group in async_field_groups)
+            logger.info(
+                "[AsyncTask %s] Prepared %d field groups containing %d total fields",
+                request_id,
+                len(async_field_groups),
+                async_total_group_fields,
+            )
+
         # ===== PHASE 2: Generate Field Values =====
         async with get_async_db_context() as db:
             # Update status to processing_step_2 (generating field values)
@@ -504,7 +688,7 @@ async def process_form_analysis_async(
             logger.info(
                 "[AsyncTask %s] Phase 2: Generating values for %d fields",
                 request_id,
-                len(fields),
+                async_total_group_fields,
             )
 
             # Get user's uploaded files
@@ -518,7 +702,7 @@ async def process_form_analysis_async(
             # Call Form Value Generator Agent
             generator_result = await agent_service.generate_form_values(
                 user_id=user_id,
-                fields=fields,
+                field_groups=async_field_groups,
                 visible_text=visible_clean,
                 clipboard_text=clipboard_clean,
                 user_files=user_files,

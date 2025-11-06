@@ -214,7 +214,7 @@ const ActionExecutor = {
   /**
    * Select a radio button
    */
-  selectRadio(element) {
+  async selectRadio(element) {
     const control = this.resolveControl(element, 'radio');
 
     if (!control) {
@@ -251,13 +251,13 @@ const ActionExecutor = {
       return { skipped: true, reason: 'Radio already selected' };
     }
 
-    this.performAriaToggle(ariaElement, true, 'radio');
+    await this.performAriaToggle(ariaElement, true, 'radio');
   },
 
   /**
    * Select/deselect a checkbox
    */
-  selectCheckbox(element, value) {
+  async selectCheckbox(element, value) {
     const control = this.resolveControl(element, 'checkbox');
 
     if (!control) {
@@ -297,34 +297,45 @@ const ActionExecutor = {
       return { skipped: true, reason: 'Checkbox already in desired state' };
     }
 
-    this.performAriaToggle(ariaElement, shouldCheck, 'checkbox');
+    await this.performAriaToggle(ariaElement, shouldCheck, 'checkbox');
   },
 
   /**
    * Select dropdown option
    */
-  selectDropdown(element, value) {
-    if (element.tagName !== 'SELECT') {
-      throw new Error('Element is not a select dropdown');
-    }
+  async selectDropdown(element, value) {
+    if (element.tagName === 'SELECT') {
+      // Try to find option by value or text
+      let optionFound = false;
 
-    // Try to find option by value or text
-    let optionFound = false;
-
-    // Try by value
-    for (const option of element.options) {
-      if (option.value === value || option.text === value) {
-        option.selected = true;
-        optionFound = true;
-        break;
+      for (const option of element.options) {
+        if (option.value === value || option.text === value) {
+          option.selected = true;
+          optionFound = true;
+          break;
+        }
       }
+
+      if (!optionFound) {
+        throw new Error(`Option not found: ${value}`);
+      }
+
+      element.dispatchEvent(new Event('change', { bubbles: true }));
+      return;
     }
 
-    if (!optionFound) {
-      throw new Error(`Option not found: ${value}`);
+    const role = element.getAttribute?.('role');
+    if (role === 'listbox') {
+      await this.selectFromAriaListbox(element, value);
+      return;
     }
 
-    element.dispatchEvent(new Event('change', { bubbles: true }));
+    if (role === 'option') {
+      this.click(element);
+      return;
+    }
+
+    throw new Error('Element is not a select dropdown');
   },
 
   /**
@@ -408,6 +419,13 @@ const ActionExecutor = {
       return { element, mode: 'contentEditable' };
     }
 
+    if (element instanceof HTMLInputElement && (element.type || '').toLowerCase() === 'hidden') {
+      const visibleInput = this.findVisibleInputForHidden(element);
+      if (visibleInput) {
+        return this.resolveTextTarget(visibleInput);
+      }
+    }
+
     const descendant = element.querySelector('input, textarea, [contenteditable="true"], [role="textbox"]');
     if (descendant && descendant !== element) {
       this.log('🧭 resolveTextTarget exploring descendant', {
@@ -427,7 +445,7 @@ const ActionExecutor = {
 
     if (element instanceof HTMLInputElement) {
       const type = (element.type || 'text').toLowerCase();
-      return !['button', 'submit', 'reset', 'checkbox', 'radio', 'file', 'image', 'range', 'color'].includes(type);
+      return !['button', 'submit', 'reset', 'checkbox', 'radio', 'file', 'image', 'range', 'color', 'hidden'].includes(type);
     }
 
     return false;
@@ -521,7 +539,7 @@ const ActionExecutor = {
     return null;
   },
 
-  performAriaToggle(element, shouldCheck, role) {
+  async performAriaToggle(element, shouldCheck, role) {
     this.log('🔁 performAriaToggle start', {
       role,
       desiredState: shouldCheck,
@@ -531,7 +549,7 @@ const ActionExecutor = {
     element.focus();
 
     this.click(element);
-    const postClick = this.getAriaChecked(element);
+    const postClick = await this.waitForAriaState(element, shouldCheck);
     this.log('🔁 performAriaToggle after click', {
       role,
       desiredState: shouldCheck,
@@ -542,7 +560,7 @@ const ActionExecutor = {
     }
 
     this.triggerKeyboardToggle(element, role === 'radio' ? ' ' : ' ');
-    const postKey = this.getAriaChecked(element);
+    const postKey = await this.waitForAriaState(element, shouldCheck);
     this.log('🔁 performAriaToggle after keypress', {
       role,
       desiredState: shouldCheck,
@@ -550,6 +568,21 @@ const ActionExecutor = {
     });
     if (postKey === shouldCheck) {
       return;
+    }
+
+    if (typeof element.setAttribute === 'function') {
+      element.setAttribute('aria-checked', shouldCheck ? 'true' : 'false');
+      element.dispatchEvent(new Event('input', { bubbles: true }));
+      element.dispatchEvent(new Event('change', { bubbles: true }));
+      const forcedState = this.getAriaChecked(element);
+      this.log('🔁 performAriaToggle forced state', {
+        role,
+        desiredState: shouldCheck,
+        currentState: forcedState
+      });
+      if (forcedState === shouldCheck) {
+        return;
+      }
     }
 
     throw new Error(`Failed to update ${role} state`);
@@ -579,7 +612,70 @@ const ActionExecutor = {
       return false;
     }
     return false;
-  }
+  },
+
+  findVisibleInputForHidden(hiddenInput) {
+    if (!hiddenInput) {
+      return null;
+    }
+
+    const name = hiddenInput.getAttribute?.('name');
+    if (name && name.endsWith('_sentinel')) {
+      const normalizedName = name.replace(/_sentinel$/i, '');
+      const candidate = document.querySelector(`input[name='${normalizedName}']`);
+      if (candidate && this.isStandardTextInput(candidate)) {
+        return candidate;
+      }
+    }
+
+    const container = hiddenInput.closest('[jsname], [role], .rFrNMe, .quantumWizTextinputPapertextareaEl, .quantumWizTextinputPaperinputEl');
+    if (container) {
+      const candidate = container.querySelector('input[type="text"], textarea, [contenteditable="true"], [role="textbox"]');
+      if (candidate) {
+        return candidate;
+      }
+    }
+
+    const fallback = document.querySelector('input[type="text"][aria-label], textarea[aria-label]');
+    return fallback || null;
+  },
+
+  async waitForAriaState(element, desiredState, retries = 6, delayMs = 50) {
+    for (let attempt = 0; attempt <= retries; attempt++) {
+      const current = this.getAriaChecked(element);
+      if (current === desiredState) {
+        return current;
+      }
+      if (attempt === retries) {
+        return current;
+      }
+      await this.delay(delayMs);
+    }
+    return this.getAriaChecked(element);
+  },
+
+  async selectFromAriaListbox(listboxElement, value) {
+    this.click(listboxElement);
+    await this.delay(100);
+
+    const options = Array.from(document.querySelectorAll("[role='option']"));
+    let target = null;
+    for (const option of options) {
+      const optionValue = option.getAttribute('data-value') ?? option.getAttribute('data-answer-value');
+      const optionLabel = option.textContent?.trim();
+      if (optionValue === value || optionLabel === value) {
+        target = option;
+        break;
+      }
+    }
+
+    if (!target) {
+      throw new Error(`Option not found in listbox: ${value}`);
+    }
+
+    this.click(target);
+    await this.delay(100);
+  },
 };
 
 // Make available globally

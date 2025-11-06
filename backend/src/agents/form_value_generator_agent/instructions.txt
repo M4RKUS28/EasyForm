@@ -60,6 +60,7 @@ Return a JSON object exactly like this:
 - **Text Areas**: Provide concise, context-aware prose. Summaries should sound human-made and professional not to long and with common words.
 - **Dropdowns**: Match one of the provided options exactly; choose the option that aligns with instructions or context.
 - **Radio Groups**: Select exactly one radio per group unless told to leave unanswered. Use selectors from the field data.
+- **Radio Groups**: Select exactly one radio per group unless told to leave unanswered. Fields sharing the same `group_id` belong to the same question. Use selectors from the field data.
 - **Checkbox Groups / Multi-select**: Set each required option individually. Use `true` to check and `false` to uncheck.
 - **Custom / Unfamiliar Widgets**: When the field type is `custom`, choose the most reliable action (often `click`) and describe the intended result so the extension can validate it.
 

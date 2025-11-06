@@ -91,7 +91,7 @@ Personal Instructions:
     async def generate_form_values(
         self,
         user_id: str,
-        fields: list,
+        field_groups: list,
         visible_text: str,
         clipboard_text: str | None = None,
         user_files: list | None = None,
@@ -116,10 +116,10 @@ Personal Instructions:
                     images.append(file.data)
 
         if is_ultra:
-            logger.info(f"Using ultra processing mode with {step2_model} for {len(fields)} field groups")
+            logger.info(f"Using ultra processing mode with {step2_model} for {len(field_groups)} field groups")
             return await self._generate_form_values_ultra(
                 user_id=user_id,
-                field_groups=fields,
+                field_groups=field_groups,
                 visible_text=visible_text,
                 clipboard_text=clipboard_text,
                 pdf_files=pdf_files,
@@ -128,10 +128,23 @@ Personal Instructions:
                 personal_instructions=personal_instructions,
             )
 
-        logger.info(f"Using regular processing mode with {step2_model} for {len(fields)} field groups")
+        flat_fields = []
+        for group in field_groups:
+            if isinstance(group, list):
+                flat_fields.extend(group)
+            else:
+                flat_fields.append(group)
+
+        logger.info(
+            "Using regular processing mode with %s for %d fields across %d groups",
+            step2_model,
+            len(flat_fields),
+            len(field_groups),
+        )
+
         return await self._generate_form_values_batch(
             user_id=user_id,
-            fields=fields,
+            fields=flat_fields,
             visible_text=visible_text,
             clipboard_text=clipboard_text,
             pdf_files=pdf_files,
@@ -157,6 +170,20 @@ Personal Instructions:
         generator_agent = self.generator_flash if model == "gemini-2.0-flash" else self.generator_pro
 
         instructions_text = personal_instructions or "No personal instructions provided."
+
+        max_field_log = 25
+        for idx, field in enumerate(fields[:max_field_log]):
+            logger.info(
+                "Generator batch field[%d]: group_id=%s | label=%s | type=%s | selector=%s",
+                idx,
+                field.get("group_id"),
+                field.get("label"),
+                field.get("type"),
+                field.get("selector"),
+            )
+
+        if len(fields) > max_field_log:
+            logger.info("Generator batch field log truncated at %d of %d entries", max_field_log, len(fields))
 
         query = f"""Please generate appropriate values for the following form fields.
 Follow these directives strictly:
@@ -229,6 +256,22 @@ Please analyze all provided context and generate appropriate values for each fie
             async with semaphore:
                 try:
                     logger.info(f"Processing field group {group_idx + 1}/{len(field_groups)}")
+
+                    for field in group_fields[:10]:
+                        logger.info(
+                            "  - group=%d label=%s | type=%s | selector=%s",
+                            group_idx,
+                            field.get("label"),
+                            field.get("type"),
+                            field.get("selector"),
+                        )
+
+                    if len(group_fields) > 10:
+                        logger.info(
+                            "  Group %d field log truncated at 10 of %d entries",
+                            group_idx,
+                            len(group_fields),
+                        )
 
                     query = f"""Please generate appropriate values for the following form field group.
 Follow these directives strictly:
