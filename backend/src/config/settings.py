@@ -80,5 +80,21 @@ if not DATABASE_URL:
 
 PERSONAL_INSTRUCTIONS_MAX_LENGTH = int(os.getenv("PERSONAL_INSTRUCTIONS_MAX_LENGTH", "4000"))
 
+# =============================================
+# RAG (Retrieval-Augmented Generation) Settings
+# =============================================
 
+# ChromaDB Configuration
+CHROMA_HOST = os.getenv("CHROMA_HOST", "localhost")
+CHROMA_PORT = int(os.getenv("CHROMA_PORT", "8000"))
+CHROMA_AUTH_TOKEN = os.getenv("CHROMA_AUTH_TOKEN", "")
 
+# RAG Processing Configuration
+RAG_CHUNK_SIZE = int(os.getenv("RAG_CHUNK_SIZE", "1000"))  # tokens per chunk
+RAG_CHUNK_OVERLAP = int(os.getenv("RAG_CHUNK_OVERLAP", "200"))  # token overlap
+RAG_TOP_K_RESULTS = int(os.getenv("RAG_TOP_K_RESULTS", "10"))  # number of chunks to retrieve
+
+# Tesseract OCR Path
+# Windows: Set to Tesseract installation path (e.g., C:\Program Files\Tesseract-OCR\tesseract.exe)
+# Docker/Linux: Leave as "tesseract" to use system default
+TESSERACT_CMD = os.getenv("TESSERACT_CMD", "tesseract")
