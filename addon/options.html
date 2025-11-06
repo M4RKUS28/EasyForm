@@ -182,14 +182,12 @@
       <div class="input-group">
         <label for="quality">Quality Level</label>
         <select id="quality" class="quality-select">
-          <option value="fast">Fast (Flash/Flash - Batch)</option>
-          <option value="fast-ultra">Fast Ultra (Flash/Flash - Per-Group)</option>
-          <option value="medium" selected>Medium (Flash/Pro - Batch)</option>
-          <option value="medium-ultra">Medium Ultra (Flash/Pro - Per-Group)</option>
-          <option value="exact">Exact (Pro/Pro - Batch)</option>
-          <option value="exact-ultra">Exact Ultra (Pro/Pro - Per-Group)</option>
+          <option value="fast" selected>Fast (Flash parser & Flash generator)</option>
+          <option value="fast-pro">Fast Pro (Pro parser & Flash generator)</option>
+          <option value="exact">Exact (Flash parser & Pro generator)</option>
+          <option value="exact-pro">Exact Pro (Pro parser & Pro generator)</option>
         </select>
-        <div class="help-text">Controls AI model selection and processing method. Ultra modes process field groups individually for higher accuracy.</div>
+        <div class="help-text">Controls AI model pairing. All modes process each question individually for consistent accuracy.</div>
       </div>
     </div>
 

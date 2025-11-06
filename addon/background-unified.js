@@ -62,7 +62,7 @@ async function getConfig() {
           executionMode: result.executionMode || result.mode,
           analysisMode: result.analysisMode || 'basic',
           apiToken: result.apiToken || '',
-          quality: result.quality || 'medium'
+          quality: result.quality || 'fast'
         });
       }
     );
@@ -164,7 +164,7 @@ async function handlePageAnalysisAsync(pageData, tabId) {
     const baseUrl = config.backendUrl || CONFIG.backendUrl;
     const executionMode = config.executionMode || CONFIG.mode;
     const analysisMode = config.analysisMode || 'basic';
-    const quality = config.quality || 'medium';
+  const quality = config.quality || 'fast';
     const apiToken = config.apiToken || '';
 
     console.log('[EasyForm API] 📝 Config:', { executionMode, analysisMode, quality });
@@ -528,7 +528,7 @@ chrome.runtime.onInstalled.addListener(() => {
       chrome.storage.sync.set({ analysisMode: 'basic' });
     }
     if (!result.quality) {
-      chrome.storage.sync.set({ quality: 'medium' });
+      chrome.storage.sync.set({ quality: 'fast' });
     }
   });
 
@@ -585,7 +585,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         executionMode: config.executionMode || CONFIG.mode,
         analysisMode: config.analysisMode || 'basic',
         apiToken: config.apiToken || '',
-        quality: config.quality || 'medium'
+  quality: config.quality || 'fast'
       });
     });
     return true;

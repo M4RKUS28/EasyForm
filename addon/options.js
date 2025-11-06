@@ -16,7 +16,7 @@ async function loadSettings() {
     document.getElementById('apiToken').value = response.apiToken || '';
 
     // Set quality dropdown
-    const quality = response.quality || 'medium';
+  const quality = response.quality || 'fast';
     document.getElementById('quality').value = quality;
   } catch (error) {
     console.error('Error loading settings:', error);

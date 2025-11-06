@@ -21,11 +21,13 @@ class FormAnalyzeRequest(BaseModel):
         "basic",
         description="Analysis mode: 'basic' (HTML + text only) or 'extended' (includes screenshots)"
     )
-    quality: Literal["fast", "fast-ultra", "medium", "medium-ultra", "exact", "exact-ultra"] = Field(
-        "medium",
-        description="Analysis quality: determines models and processing method. "
-                    "fast=Flash/Flash, medium=Flash/Pro, exact=Pro/Pro. "
-                    "Ultra variants use per-group parallel processing in step 2."
+    quality: Literal["fast", "fast-pro", "exact", "exact-pro"] = Field(
+        "fast",
+        description=(
+            "Analysis quality controlling parser and generator models. "
+            "fast=Flash/Flash per-question, fast-pro=Pro/Flash per-question, "
+            "exact=Flash/Pro per-question, exact-pro=Pro/Pro per-question."
+        )
     )
 
 
