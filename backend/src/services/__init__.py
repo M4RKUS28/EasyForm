@@ -11,13 +11,10 @@ from .form_service import (
     process_form_analysis_async
 )
 from .user_service import (
-    create_user,
-    authenticate_user,
+    get_users,
     update_user,
-    delete_user,
-    get_user_by_id,
-    get_user_by_username,
-    get_user_by_email
+    change_password,
+    delete_user
 )
 
 # RAG Services
@@ -48,13 +45,10 @@ __all__ = [
     "cancel_form_analysis_task",
     "process_form_analysis_async",
     # User service
-    "create_user",
-    "authenticate_user",
+    "get_users",
     "update_user",
+    "change_password",
     "delete_user",
-    "get_user_by_id",
-    "get_user_by_username",
-    "get_user_by_email",
     # RAG services
     "DocumentProcessingService",
     "get_document_processing_service",
