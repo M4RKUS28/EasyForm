@@ -1,9 +1,15 @@
 // Minimal Popup Script for EasyForm
 
+const DEFAULT_BACKEND_URL = 'https://easyform.m4rkus28.de';
+
 let statusCheckInterval = null;
 let isCanceling = false;
 let lastAnalysisState = null;
 let lastAnalysisError = null;
+let cachedBackendUrl = DEFAULT_BACKEND_URL;
+let infoResetTimeout = null;
+let lastInfoMessage = 'Ready';
+let lastPersistentInfoMessage = 'Ready';
 
 document.addEventListener('DOMContentLoaded', async () => {
   setHealthStatus('pending'); // Set to orange initially
@@ -23,6 +29,12 @@ document.addEventListener('DOMContentLoaded', async () => {
 // Stop polling when popup is closed/unloaded
 window.addEventListener('beforeunload', () => {
   stopStatusPolling();
+});
+
+chrome.storage.onChanged.addListener((changes, areaName) => {
+  if (areaName === 'sync' && changes.backendUrl) {
+    cachedBackendUrl = normalizeBackendUrl(changes.backendUrl.newValue) || DEFAULT_BACKEND_URL;
+  }
 });
 
 async function checkBackendHealth() {
@@ -58,6 +70,8 @@ async function loadConfig() {
     const response = await chrome.runtime.sendMessage({ action: 'getConfig' });
     const executionMode = response.executionMode || response.mode || 'automatic'; // Backward compat
     const analysisMode = response.analysisMode || 'basic';
+
+    cachedBackendUrl = normalizeBackendUrl(response.backendUrl) || DEFAULT_BACKEND_URL;
 
     // Set dropdown values
     document.getElementById('executionMode').value = executionMode;
@@ -134,6 +148,18 @@ function setupEventListeners() {
     await handleResetClick();
   });
 
+  document.getElementById('toggleOverlayBtn').addEventListener('click', async () => {
+    await handleToggleOverlayClick();
+  });
+
+  document.getElementById('openSettingsBtn').addEventListener('click', () => {
+    handleOpenSettingsClick();
+  });
+
+  document.getElementById('openBackendBtn').addEventListener('click', async () => {
+    await handleOpenBackendClick();
+  });
+
   // Clipboard input - save to storage when edited
   const clipboardInput = document.getElementById('clipboardInput');
   let clipboardUpdateTimeout;
@@ -164,6 +190,9 @@ function setupEventListeners() {
 
 async function setConfig(config) {
   try {
+    if (config.backendUrl !== undefined) {
+      cachedBackendUrl = normalizeBackendUrl(config.backendUrl) || DEFAULT_BACKEND_URL;
+    }
     await chrome.runtime.sendMessage({
       action: 'setConfig',
       ...config
@@ -173,8 +202,24 @@ async function setConfig(config) {
   }
 }
 
-function updateInfo(text) {
+function updateInfo(text, options = {}) {
+  const { persistent = true } = options;
+  if (persistent) {
+    lastPersistentInfoMessage = text;
+  }
+  lastInfoMessage = text;
   document.getElementById('infoText').textContent = text;
+}
+
+function setTemporaryInfo(text, duration = 2000) {
+  const fallbackMessage = lastPersistentInfoMessage;
+  updateInfo(text, { persistent: false });
+  clearTimeout(infoResetTimeout);
+  infoResetTimeout = setTimeout(() => {
+    if (lastInfoMessage === text) {
+      updateInfo(fallbackMessage, { persistent: false });
+    }
+  }, duration);
 }
 
 function setHealthStatus(status) { // status can be 'healthy', 'unhealthy', 'pending'
@@ -190,10 +235,13 @@ function setHealthStatus(status) { // status can be 'healthy', 'unhealthy', 'pen
   }
 }
 
-function showError(message) {
+function showError(message, options = {}) {
+  const { affectHealth = true } = options;
   const errorDiv = document.getElementById('errorMessage');
 
-  setHealthStatus('unhealthy');
+  if (affectHealth) {
+    setHealthStatus('unhealthy');
+  }
   errorDiv.textContent = message;
   errorDiv.classList.add('show');
 }
@@ -433,6 +481,107 @@ async function handleResetClick() {
   } finally {
     resetBtn.disabled = false;
     resetBtn.textContent = 'Reset';
+  }
+}
+
+async function handleToggleOverlayClick() {
+  const errorMessage = 'Unable to toggle content window';
+  try {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+
+    if (!tab?.id) {
+      setTemporaryInfo('No active tab');
+      return;
+    }
+
+    await chrome.tabs.sendMessage(tab.id, { action: 'toggleOverlay' });
+    setTemporaryInfo('Content window toggled');
+    clearErrorIfMatches(errorMessage);
+  } catch (error) {
+    console.error('[EasyForm Popup] ❌ Error toggling overlay:', error);
+    setTemporaryInfo('Toggle failed');
+    showError(errorMessage, { affectHealth: false });
+    setTimeout(() => {
+      clearErrorIfMatches(errorMessage);
+    }, 4000);
+  }
+}
+
+function handleOpenSettingsClick() {
+  const errorMessage = 'Unable to open settings';
+
+  const handleFailure = (error) => {
+    console.error('[EasyForm Popup] ❌ Error opening settings:', error);
+    setTemporaryInfo('Settings unavailable');
+    showError(errorMessage, { affectHealth: false });
+    setTimeout(() => {
+      clearErrorIfMatches(errorMessage);
+    }, 4000);
+  };
+
+  try {
+    const maybePromise = chrome.runtime.openOptionsPage();
+    if (maybePromise && typeof maybePromise.then === 'function') {
+      setTemporaryInfo('Opening settings...');
+      maybePromise
+        .then(() => {
+          clearErrorIfMatches(errorMessage);
+          setTemporaryInfo('Settings opened');
+        })
+        .catch(handleFailure);
+    } else {
+      setTemporaryInfo('Settings opened');
+      clearErrorIfMatches(errorMessage);
+    }
+  } catch (error) {
+    handleFailure(error);
+  }
+}
+
+async function handleOpenBackendClick() {
+  const errorMessage = 'Unable to open backend';
+  try {
+    const targetUrl = normalizeBackendUrl(cachedBackendUrl) || DEFAULT_BACKEND_URL;
+    await createTab(targetUrl);
+    setTemporaryInfo('Backend opened');
+    clearErrorIfMatches(errorMessage);
+  } catch (error) {
+    console.error('[EasyForm Popup] ❌ Error opening backend:', error);
+    setTemporaryInfo('Open failed');
+    showError(errorMessage, { affectHealth: false });
+    setTimeout(() => {
+      clearErrorIfMatches(errorMessage);
+    }, 4000);
+  }
+}
+
+function normalizeBackendUrl(url) {
+  if (!url) return null;
+  const trimmed = url.trim();
+  if (!trimmed) return null;
+  if (/^https?:\/\//i.test(trimmed)) {
+    return trimmed;
+  }
+  return `https://${trimmed}`;
+}
+
+function createTab(url) {
+  return new Promise((resolve, reject) => {
+    chrome.tabs.create({ url }, (tab) => {
+      const error = chrome.runtime.lastError;
+      if (error) {
+        reject(new Error(error.message || 'Could not open tab'));
+      } else {
+        resolve(tab);
+      }
+    });
+  });
+}
+
+function clearErrorIfMatches(message) {
+  const errorDiv = document.getElementById('errorMessage');
+  if (errorDiv.textContent === message) {
+    clearError();
   }
 }
 

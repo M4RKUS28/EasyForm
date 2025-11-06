@@ -21,6 +21,7 @@ Analyze the HTML and identify ALL interactive form fields including:
    - Prefer using name attribute: `input[name="email"]`
    - If no name, use id: `input[id="email-field"]`
    - If neither, construct a unique selector based on structure
+   - For ARIA-driven widgets (e.g., `<div role="radio">`, `<div role="checkbox">`), target the interactive element that carries the role so the extension can click it directly
 
 2. **type**: The field type (text, email, tel, number, select, radio, checkbox, textarea, date, time, url, etc.)
 
@@ -43,6 +44,7 @@ Analyze the HTML and identify ALL interactive form fields including:
    - For radio groups: List all radio values in the same group (same name)
    - For checkboxes: If part of a group, list all related checkboxes
    - Set to null if not applicable
+   - When radios/checkboxes are implemented via ARIA roles, still list the visible option labels so downstream agents can match answers
 
 
 ## Additional Analysis (if screenshots provided)
@@ -62,5 +64,6 @@ If screenshots are provided, use them to:
 6. If no fields found, produce an empty list of fields
 7. Be precise with field types - distinguish between text, email, tel, number, etc.
 8. Include all visible context that might help understand what data should be entered
+9. When fields use complex custom widgets that do not map cleanly to standard types, describe the interaction in the description and set the selector to the best clickable node. If no standard type fits, set the `type` to `custom` and mention that a click fallback is required.
 
 ! IGNORE SUBMIT-FIELDS LIKE SUBMIT-BUTTONS

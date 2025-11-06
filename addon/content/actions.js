@@ -135,18 +135,24 @@ const ActionExecutor = {
    * Fill text input field
    */
   fillText(element, value) {
-    // Focus element
-    element.focus();
+    const target = this.resolveTextTarget(element);
+    if (!target) {
+      throw new Error('Element is not a text input');
+    }
 
-    // Set value
-  element.value = value ?? '';
+    const textValue = value != null ? String(value) : '';
 
-    // Trigger input events to simulate user typing
-    element.dispatchEvent(new Event('input', { bubbles: true }));
-    element.dispatchEvent(new Event('change', { bubbles: true }));
+    if (target.mode === 'contentEditable') {
+      this.fillContentEditable(target.element, textValue);
+      return;
+    }
 
-    // Blur element
-    element.blur();
+    const inputElement = target.element;
+    inputElement.focus();
+    inputElement.value = textValue;
+    inputElement.dispatchEvent(new Event('input', { bubbles: true }));
+    inputElement.dispatchEvent(new Event('change', { bubbles: true }));
+    inputElement.blur();
   },
 
   /**
@@ -173,47 +179,74 @@ const ActionExecutor = {
    * Select a radio button
    */
   selectRadio(element) {
-    if (element.type !== 'radio') {
+    const control = this.resolveControl(element, 'radio');
+
+    if (!control) {
       throw new Error('Element is not a radio button');
     }
 
-    if (element.checked) {
+    if (control.mode === 'input') {
+      const inputElement = control.element;
+      if (inputElement.checked) {
+        return { skipped: true, reason: 'Radio already selected' };
+      }
+
+      inputElement.focus();
+      inputElement.click();
+
+      if (!inputElement.checked) {
+        inputElement.checked = true;
+        inputElement.dispatchEvent(new Event('input', { bubbles: true }));
+        inputElement.dispatchEvent(new Event('change', { bubbles: true }));
+      }
+      return;
+    }
+
+    const ariaElement = control.element;
+    const currentState = this.getAriaChecked(ariaElement);
+    if (currentState === true) {
       return { skipped: true, reason: 'Radio already selected' };
     }
 
-    element.focus();
-    element.click();
-
-    if (!element.checked) {
-      element.checked = true;
-      element.dispatchEvent(new Event('input', { bubbles: true }));
-      element.dispatchEvent(new Event('change', { bubbles: true }));
-    }
+    this.performAriaToggle(ariaElement, true, 'radio');
   },
 
   /**
    * Select/deselect a checkbox
    */
   selectCheckbox(element, value) {
-    if (element.type !== 'checkbox') {
+    const control = this.resolveControl(element, 'checkbox');
+
+    if (!control) {
       throw new Error('Element is not a checkbox');
     }
 
-    // Value can be boolean or string ('true'/'false')
-    const shouldCheck = value === true || value === 'true' || value === '1';
+    const shouldCheck = this.toBoolean(value);
 
-    if (element.checked === shouldCheck) {
+    if (control.mode === 'input') {
+      const inputElement = control.element;
+      if (inputElement.checked === shouldCheck) {
+        return { skipped: true, reason: 'Checkbox already in desired state' };
+      }
+
+      inputElement.focus();
+      inputElement.click();
+
+      if (inputElement.checked !== shouldCheck) {
+        inputElement.checked = shouldCheck;
+        inputElement.dispatchEvent(new Event('input', { bubbles: true }));
+        inputElement.dispatchEvent(new Event('change', { bubbles: true }));
+      }
+      return;
+    }
+
+    const ariaElement = control.element;
+    const currentState = this.getAriaChecked(ariaElement);
+    if (currentState !== null && currentState === shouldCheck) {
       return { skipped: true, reason: 'Checkbox already in desired state' };
     }
 
-    element.focus();
-    element.click();
-
-    if (element.checked !== shouldCheck) {
-      element.checked = shouldCheck;
-      element.dispatchEvent(new Event('input', { bubbles: true }));
-      element.dispatchEvent(new Event('change', { bubbles: true }));
-    }
+    this.performAriaToggle(ariaElement, shouldCheck, 'checkbox');
   },
 
   /**
@@ -260,6 +293,207 @@ const ActionExecutor = {
     setTimeout(() => {
       element.style.outline = originalOutline;
     }, duration);
+  },
+
+  resolveControl(element, role) {
+    if (!element || typeof role !== 'string') {
+      return null;
+    }
+
+    const normalizedRole = role.toLowerCase();
+
+    if (this.isInputOfType(element, normalizedRole)) {
+      return { element, mode: 'input' };
+    }
+
+    if (this.hasAriaRole(element, normalizedRole)) {
+      return { element, mode: 'aria' };
+    }
+
+    const inputSelector = normalizedRole === 'radio'
+      ? "input[type='radio']"
+      : normalizedRole === 'checkbox'
+        ? "input[type='checkbox']"
+        : '';
+
+    if (inputSelector) {
+      const descendantInput = element.querySelector(inputSelector);
+      if (descendantInput && descendantInput !== element && this.isInputOfType(descendantInput, normalizedRole)) {
+        return { element: descendantInput, mode: 'input' };
+      }
+    }
+
+    const ariaDescendant = element.querySelector(`[role='${normalizedRole}']`);
+    if (ariaDescendant && ariaDescendant !== element) {
+      return { element: ariaDescendant, mode: 'aria' };
+    }
+
+    return null;
+  },
+
+  resolveTextTarget(element) {
+    if (!element) {
+      return null;
+    }
+
+    if (this.isStandardTextInput(element)) {
+      return { element, mode: 'input' };
+    }
+
+    if (this.isContentEditable(element)) {
+      return { element, mode: 'contentEditable' };
+    }
+
+    const descendant = element.querySelector('input, textarea, [contenteditable="true"], [role="textbox"]');
+    if (descendant && descendant !== element) {
+      return this.resolveTextTarget(descendant);
+    }
+
+    return null;
+  },
+
+  isStandardTextInput(element) {
+    if (element instanceof HTMLTextAreaElement) {
+      return true;
+    }
+
+    if (element instanceof HTMLInputElement) {
+      const type = (element.type || 'text').toLowerCase();
+      return !['button', 'submit', 'reset', 'checkbox', 'radio', 'file', 'image', 'range', 'color'].includes(type);
+    }
+
+    return false;
+  },
+
+  isContentEditable(element) {
+    if (!element || typeof element.getAttribute !== 'function') {
+      return false;
+    }
+
+    if (element.isContentEditable) {
+      return true;
+    }
+
+    const attr = element.getAttribute('contenteditable');
+    if (attr && attr.toLowerCase() === 'true') {
+      return true;
+    }
+
+    const role = element.getAttribute('role');
+    return role && role.toLowerCase() === 'textbox';
+  },
+
+  fillContentEditable(element, value) {
+    element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    element.focus();
+
+    const selection = window.getSelection?.();
+    if (selection) {
+      selection.removeAllRanges();
+      const range = document.createRange();
+      range.selectNodeContents(element);
+      selection.addRange(range);
+      selection.deleteFromDocument();
+    }
+
+    element.textContent = value;
+    element.dispatchEvent(new Event('input', { bubbles: true }));
+    element.dispatchEvent(new Event('change', { bubbles: true }));
+    element.blur();
+  },
+
+  isInputOfType(element, type) {
+    return element instanceof HTMLInputElement && (element.type || '').toLowerCase() === type;
+  },
+
+  hasAriaRole(element, role) {
+    if (!element || typeof element.getAttribute !== 'function') {
+      return false;
+    }
+    const ariaRole = element.getAttribute('role');
+    return ariaRole && ariaRole.toLowerCase() === role;
+  },
+
+  getAriaChecked(element) {
+    if (!element) {
+      return null;
+    }
+
+    if (typeof element.checked === 'boolean') {
+      return element.checked;
+    }
+
+    const ariaChecked = element.getAttribute?.('aria-checked');
+    if (ariaChecked === 'true') {
+      return true;
+    }
+    if (ariaChecked === 'false') {
+      return false;
+    }
+    if (ariaChecked === 'mixed') {
+      return true;
+    }
+
+    const ariaPressed = element.getAttribute?.('aria-pressed');
+    if (ariaPressed === 'true') {
+      return true;
+    }
+    if (ariaPressed === 'false') {
+      return false;
+    }
+
+    const datasetChecked = element.dataset?.checked ?? element.getAttribute?.('data-checked');
+    if (datasetChecked === 'true') {
+      return true;
+    }
+    if (datasetChecked === 'false') {
+      return false;
+    }
+
+    return null;
+  },
+
+  performAriaToggle(element, shouldCheck, role) {
+    element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    element.focus();
+
+    this.click(element);
+    if (this.getAriaChecked(element) === shouldCheck) {
+      return;
+    }
+
+    this.triggerKeyboardToggle(element, role === 'radio' ? ' ' : ' ');
+    if (this.getAriaChecked(element) === shouldCheck) {
+      return;
+    }
+
+    throw new Error(`Failed to update ${role} state`);
+  },
+
+  triggerKeyboardToggle(element, key = ' ') {
+    if (!element || typeof element.dispatchEvent !== 'function') {
+      return;
+    }
+
+    const eventInit = {
+      key,
+      code: key === ' ' ? 'Space' : 'Enter',
+      bubbles: true,
+      cancelable: true,
+    };
+
+    element.dispatchEvent(new KeyboardEvent('keydown', eventInit));
+    element.dispatchEvent(new KeyboardEvent('keyup', eventInit));
+  },
+
+  toBoolean(value) {
+    if (value === true || value === 'true' || value === '1' || value === 1) {
+      return true;
+    }
+    if (value === false || value === 'false' || value === '0' || value === 0) {
+      return false;
+    }
+    return false;
   }
 };
 

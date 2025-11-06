@@ -186,28 +186,78 @@
     .footer {
       padding: 8px 10px;
       background: var(--bg-primary);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .footer-side {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .footer-side--end {
+      justify-content: flex-end;
+    }
+
+    .footer-status {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-height: 18px;
+    }
+
+    .status-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 22px;
+      height: 22px;
+      border: 1px solid var(--border-color);
+      border-radius: 3px;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      cursor: pointer;
+      padding: 0;
+      transition: border-color 0.15s, background-color 0.15s;
+    }
+
+    .status-btn:hover {
+      border-color: var(--accent-color);
+      background: rgba(102, 126, 234, 0.08);
+    }
+
+    .status-btn:focus {
+      outline: none;
+      border-color: var(--accent-color);
+    }
+
+    .status-btn svg {
+      fill: currentColor;
+      pointer-events: none;
     }
 
     .info-text {
       font-size: 10px;
       color: var(--text-muted);
-      text-align: center;
       line-height: 1.4;
     }
 
     .error-message {
       background: var(--error-bg);
       color: var(--error-text);
-      padding: 6px;
+      padding: 4px 6px;
       border-radius: 3px;
       font-size: 9px;
-      margin-top: 6px;
-      display: none;
       line-height: 1.3;
+      display: none;
     }
 
     .error-message.show {
-      display: block;
+      display: inline-flex;
+      align-items: center;
     }
   </style>
 </head>
@@ -227,12 +277,6 @@
     <button class="start-btn" id="startBtn">Start</button>
     <button class="cancel-btn" id="cancelBtn">Cancel</button>
     <button class="cancel-btn" id="resetBtn" style="display: none;">Reset</button>
-    <button class="cancel-btn" id="resetBtn" style="display: none;">Reset</button>
-    <button class="cancel-btn" id="resetBtn" style="display: none;">Reset</button>
-    <button class="cancel-btn" id="resetBtn" style="display: none;">Reset</button>
-    <button class="cancel-btn" id="resetBtn" style="display: none;">Reset</button>
-    <button class="cancel-btn" id="resetBtn" style="display: none;">Reset</button>
-    <button class="cancel-btn" id="resetBtn" style="display: none;">Reset</button>
   </div>
 
   <div class="clipboard-section">
@@ -245,8 +289,31 @@
   </div>
 
   <div class="footer">
-    <div class="info-text" id="infoText">Ready</div>
-    <div class="error-message" id="errorMessage"></div>
+    <div class="footer-side">
+      <button type="button" class="status-btn" id="toggleOverlayBtn" title="Toggle content window" aria-label="Toggle content window">
+        <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true" focusable="false">
+          <rect x="1" y="1" width="10" height="2" rx="1"></rect>
+          <rect x="1" y="5" width="10" height="2" rx="1"></rect>
+          <rect x="1" y="9" width="10" height="2" rx="1"></rect>
+        </svg>
+      </button>
+    </div>
+    <div class="footer-status">
+      <span class="info-text" id="infoText">Ready</span>
+      <span class="error-message" id="errorMessage"></span>
+    </div>
+    <div class="footer-side footer-side--end">
+      <button type="button" class="status-btn" id="openSettingsBtn" title="Open settings" aria-label="Open settings">
+        <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true" focusable="false">
+          <path d="M4.8 1l.4 1.6a3.2 3.2 0 011.6 0L7.2 1h1.6l.4 1.6a3.2 3.2 0 011.2.7l1.5-.7.8 1.4-1.3.9c.1.5.1 1 0 1.5l1.3.9-.8 1.4-1.5-.7a3.2 3.2 0 01-1.2.7L8.8 11H7.2l-.4-1.6a3.2 3.2 0 01-1.6 0L4.8 11H3.2l-.4-1.6a3.2 3.2 0 01-1.2-.7l-1.5.7-.8-1.4 1.3-.9a3.2 3.2 0 010-1.5L-.7 3.3l.8-1.4 1.5.7a3.2 3.2 0 011.2-.7L3.2 1h1.6zm1.2 4a1.2 1.2 0 100 2.4 1.2 1.2 0 000-2.4z" fill-rule="evenodd"></path>
+        </svg>
+      </button>
+      <button type="button" class="status-btn" id="openBackendBtn" title="Open backend" aria-label="Open backend">
+        <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true" focusable="false">
+          <path d="M2 2h3v1H3v6h6V7h1v3a1 1 0 01-1 1H3a1 1 0 01-1-1V3a1 1 0 011-1zm6-1h3v3h-1V2.7L5.9 6.8 5.2 6.1 9.3 2H8V1z"></path>
+        </svg>
+      </button>
+    </div>
   </div>
 
   <script src="popup.js"></script>
