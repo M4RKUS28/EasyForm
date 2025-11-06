@@ -26,3 +26,17 @@ beautifulsoup4>=4.12.0
 lxml>=4.9.0
 PyPDF2>=3.0.0
 json-repair>=0.23.0
+
+# RAG & Vector Database
+chromadb>=0.4.22
+chromadb-client>=0.4.22
+
+# PDF Processing (upgrade from PyPDF2 for better chunking)
+pymupdf>=1.23.0
+pytesseract>=0.3.10
+
+# Text Processing
+tiktoken>=0.5.0
+
+# Google Embeddings
+google-generativeai>=0.3.0
