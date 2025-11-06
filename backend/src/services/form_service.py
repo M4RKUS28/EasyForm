@@ -14,9 +14,10 @@ from typing import Dict, List, Optional, Set, Tuple
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..api.schemas import form as form_schema
-from ..db.crud import files_crud, form_requests_crud, users_crud
+from ..db.crud import files_crud, form_requests_crud, users_crud, document_chunks_crud
 from ..db.database import get_async_db_context
 from .agent_service import AgentService
+from .rag_service import get_rag_service
 
 logger = logging.getLogger(__name__)
 
@@ -345,33 +346,68 @@ async def analyze_form(
                 len(field_groups),
             )
 
-        # Get user's uploaded files
-        logger.info("Fetching user files from database...")
-        user_files = await files_crud.get_user_files(db, user_id)
-        logger.info("Found %d user files for context", len(user_files))
-        if user_files:
-            logger.info("User files: %s", [f.filename for f in user_files[:5]])
+        # Get user context - use RAG or direct depending on file count/size
+        logger.info("Fetching user context...")
+        rag_service = get_rag_service()
+        use_rag = await rag_service.should_use_rag(db, user_id)
 
-        # Call Form Value Generator Agent
-        logger.info("Calling Form Value Generator Agent...")
-        logger.info(
-            "Generator input - user_id: %s, fields count: %d, visible_text length: %d, clipboard length: %d, user_files count: %d",
-            user_id,
-            total_group_fields,
-            len(visible_clean),
-            len(clipboard_clean),
-            len(user_files),
-        )
+        if use_rag:
+            logger.info("Using RAG for context retrieval")
 
-        generator_result = await agent_service.generate_form_values(
-            user_id=user_id,
-            field_groups=field_groups,
-            visible_text=visible_clean,
-            clipboard_text=clipboard_clean,
-            user_files=user_files,
-            quality=request.quality,
-            personal_instructions=instructions_clean,
-        )
+            # Build search query from field labels
+            query = build_search_query_from_fields(normalized_fields)
+            logger.info(f"RAG search query: {query[:100]}...")
+
+            # Retrieve relevant chunks
+            context = await rag_service.retrieve_relevant_context(
+                db=db,
+                query=query,
+                user_id=user_id,
+                top_k=10
+            )
+
+            logger.info(f"Retrieved {len(context['text_chunks'])} text chunks and {len(context['image_chunks'])} image chunks")
+
+            # Call Form Value Generator Agent with RAG context
+            logger.info("Calling Form Value Generator Agent with RAG context...")
+            generator_result = await agent_service.generate_form_values(
+                user_id=user_id,
+                field_groups=field_groups,
+                visible_text=visible_clean,
+                clipboard_text=clipboard_clean,
+                user_files=None,  # Will use text_context and image_context instead
+                quality=request.quality,
+                personal_instructions=instructions_clean,
+            )
+        else:
+            logger.info("Using direct context (all files)")
+
+            # Fetch all files (current approach)
+            user_files = await files_crud.get_user_files(db, user_id)
+            logger.info("Found %d user files for context", len(user_files))
+            if user_files:
+                logger.info("User files: %s", [f.filename for f in user_files[:5]])
+
+            # Call Form Value Generator Agent with direct files
+            logger.info("Calling Form Value Generator Agent with direct context...")
+            logger.info(
+                "Generator input - user_id: %s, fields count: %d, visible_text length: %d, clipboard length: %d, user_files count: %d",
+                user_id,
+                total_group_fields,
+                len(visible_clean),
+                len(clipboard_clean),
+                len(user_files),
+            )
+
+            generator_result = await agent_service.generate_form_values(
+                user_id=user_id,
+                field_groups=field_groups,
+                visible_text=visible_clean,
+                clipboard_text=clipboard_clean,
+                user_files=user_files,
+                quality=request.quality,
+                personal_instructions=instructions_clean,
+            )
 
         logger.info("Form Value Generator Agent returned result type: %s", type(generator_result))
         logger.info(
@@ -734,24 +770,64 @@ async def process_form_analysis_async(
                 async_total_group_fields,
             )
 
-            # Get user's uploaded files
-            user_files = await files_crud.get_user_files(db, user_id)
-            logger.info(
-                "[AsyncTask %s] Found %d user files for context",
-                request_id,
-                len(user_files),
-            )
+            # Get user context - use RAG or direct depending on file count/size
+            logger.info("[AsyncTask %s] Fetching user context...", request_id)
+            rag_service = get_rag_service()
+            use_rag = await rag_service.should_use_rag(db, user_id)
 
-            # Call Form Value Generator Agent
-            generator_result = await agent_service.generate_form_values(
-                user_id=user_id,
-                field_groups=async_field_groups,
-                visible_text=visible_clean,
-                clipboard_text=clipboard_clean,
-                user_files=user_files,
-                quality=request_data.quality,
-                personal_instructions=instructions_clean,
-            )
+            if use_rag:
+                logger.info("[AsyncTask %s] Using RAG for context retrieval", request_id)
+
+                # Build search query from field labels
+                query = build_search_query_from_fields(normalized_fields_async)
+                logger.info("[AsyncTask %s] RAG search query: %s...", request_id, query[:100])
+
+                # Retrieve relevant chunks
+                context = await rag_service.retrieve_relevant_context(
+                    db=db,
+                    query=query,
+                    user_id=user_id,
+                    top_k=10
+                )
+
+                logger.info(
+                    "[AsyncTask %s] Retrieved %d text chunks and %d image chunks",
+                    request_id,
+                    len(context['text_chunks']),
+                    len(context['image_chunks'])
+                )
+
+                # Call Form Value Generator Agent with RAG context
+                generator_result = await agent_service.generate_form_values(
+                    user_id=user_id,
+                    field_groups=async_field_groups,
+                    visible_text=visible_clean,
+                    clipboard_text=clipboard_clean,
+                    user_files=None,  # Will use text_context and image_context instead
+                    quality=request_data.quality,
+                    personal_instructions=instructions_clean,
+                )
+            else:
+                logger.info("[AsyncTask %s] Using direct context (all files)", request_id)
+
+                # Get user's uploaded files
+                user_files = await files_crud.get_user_files(db, user_id)
+                logger.info(
+                    "[AsyncTask %s] Found %d user files for context",
+                    request_id,
+                    len(user_files),
+                )
+
+                # Call Form Value Generator Agent with direct files
+                generator_result = await agent_service.generate_form_values(
+                    user_id=user_id,
+                    field_groups=async_field_groups,
+                    visible_text=visible_clean,
+                    clipboard_text=clipboard_clean,
+                    user_files=user_files,
+                    quality=request_data.quality,
+                    personal_instructions=instructions_clean,
+                )
 
             # Validate generator result
             if not generator_result or "actions" not in generator_result:
@@ -831,3 +907,22 @@ async def process_form_analysis_async(
             logger.error("[AsyncTask %s] Failed to update error status: %s", request_id, db_error)
     finally:
         _active_analysis_tasks.pop(request_id, None)
+
+
+def build_search_query_from_fields(fields: List[dict]) -> str:
+    """
+    Build a search query from form field labels for RAG retrieval.
+
+    Args:
+        fields: List of form field dictionaries
+
+    Returns:
+        Search query string
+    """
+    labels = []
+    for field in fields[:15]:  # Use first 15 fields for query
+        label = field.get("label") or field.get("name") or ""
+        if label:
+            labels.append(label)
+
+    return " ".join(labels) if labels else "form information"
