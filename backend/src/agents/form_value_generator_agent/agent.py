@@ -22,7 +22,7 @@ class FormValueGeneratorAgent(StructuredAgent):
         self._response_config = types.GenerateContentConfig(
             response_mime_type="application/json",
             temperature=0.2,
-            max_output_tokens=8192,
+            max_output_tokens=65535,
         )
 
         generator_agent = LlmAgent(

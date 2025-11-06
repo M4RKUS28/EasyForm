@@ -1,9 +1,42 @@
 """Schemas describing the structured output for the HTML form parser agent."""
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import List, Optional
 
 from pydantic import BaseModel, Field
+
+
+class QuestionMetadata(BaseModel):
+    """Structured metadata for advanced form controls like grids and scales."""
+
+    rows: Optional[List[str]] = Field(
+        None,
+        description="Row labels for grid/matrix questions.",
+    )
+    columns: Optional[List[str]] = Field(
+        None,
+        description="Column labels for grid/matrix questions.",
+    )
+    scale_min: Optional[str] = Field(
+        None,
+        description="Minimum value for scale questions.",
+    )
+    scale_max: Optional[str] = Field(
+        None,
+        description="Maximum value for scale questions.",
+    )
+    step: Optional[str] = Field(
+        None,
+        description="Step value for numeric inputs or sliders.",
+    )
+    format: Optional[str] = Field(
+        None,
+        description="Expected format for special input types (e.g., 'MM/DD/YYYY' for dates).",
+    )
+    options: Optional[List[str]] = Field(
+        None,
+        description="Available options for custom widgets not captured elsewhere.",
+    )
 
 
 class FormInput(BaseModel):
@@ -73,7 +106,7 @@ class FormQuestion(BaseModel):
         default_factory=list,
         description="All interactable inputs/options associated with this question.",
     )
-    metadata: Optional[Dict[str, Any]] = Field(
+    metadata: Optional[QuestionMetadata] = Field(
         None,
         description="Structured metadata for advanced clients (e.g., row/column labels for grids).",
     )
