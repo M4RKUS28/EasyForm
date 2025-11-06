@@ -6,13 +6,24 @@ const ActionExecutor = {
   defaultDelay: 100,
 
   /**
+   * Lightweight logger helper to keep messages consistent
+   */
+  log(message, details) {
+    if (details !== undefined) {
+      console.log(`[ActionExecutor] ${message}`, details);
+    } else {
+      console.log(`[ActionExecutor] ${message}`);
+    }
+  },
+
+  /**
    * Execute a list of actions
    * @param {Array} actions - List of action objects
    * @param {boolean} autoExecute - Whether to execute immediately
    * @returns {Promise<Object>} Execution result
    */
   async executeActions(actions, autoExecute = true) {
-    console.log('[ActionExecutor] 🚀 executeActions called:', {
+    this.log('🚀 executeActions called:', {
       actionsCount: actions?.length,
       autoExecute,
       timestamp: new Date().toISOString(),
@@ -29,9 +40,10 @@ const ActionExecutor = {
     let failCount = 0;
     let skipCount = 0;
 
-    console.log('[ActionExecutor] 🔄 Starting action execution loop...');
+    this.log('🔄 Starting action execution loop...');
     for (const action of actions) {
       try {
+        this.log('▶️ Executing action', action);
         const executionResult = await this.executeAction(action);
 
         if (executionResult?.skipped) {
@@ -42,11 +54,20 @@ const ActionExecutor = {
             skipped: true,
             message: executionResult.reason
           });
+          this.log('⏭️ Action skipped', {
+            selector: action.selector,
+            type: action.action_type ?? action.type,
+            reason: executionResult.reason
+          });
         } else {
           successCount++;
           results.push({
             action,
             success: true
+          });
+          this.log('✅ Action completed', {
+            selector: action.selector,
+            type: action.action_type ?? action.type
           });
         }
 
@@ -59,7 +80,7 @@ const ActionExecutor = {
           success: false,
           error: error.message
         });
-        console.error('Action failed:', action, error);
+        console.error('[ActionExecutor] ❌ Action failed:', action, error);
       }
     }
 
@@ -71,7 +92,7 @@ const ActionExecutor = {
       results
     };
 
-    console.log('[ActionExecutor] 🏁 executeActions finished:', finalResult);
+    this.log('🏁 executeActions finished:', finalResult);
     return finalResult;
   },
 
@@ -102,10 +123,19 @@ const ActionExecutor = {
       };
     }
 
+    this.log('🔍 Resolving selector', { actionType, selector });
     const element = document.querySelector(selector);
     if (!element) {
       throw new Error(`Element not found: ${selector}`);
     }
+
+    this.log('🎯 Element resolved', {
+      actionType,
+      selector,
+      tagName: element.tagName,
+      role: element.getAttribute?.('role') ?? null,
+      inputType: element.type ?? null
+    });
 
     switch (actionType) {
       case 'fillText':
@@ -139,6 +169,12 @@ const ActionExecutor = {
     if (!target) {
       throw new Error('Element is not a text input');
     }
+
+    this.log('✏️ fillText target resolved', {
+      mode: target.mode,
+      tagName: target.element.tagName,
+      role: target.element.getAttribute?.('role') ?? null
+    });
 
     const textValue = value != null ? String(value) : '';
 
@@ -185,6 +221,13 @@ const ActionExecutor = {
       throw new Error('Element is not a radio button');
     }
 
+    this.log('🎚️ selectRadio control resolved', {
+      mode: control.mode,
+      tagName: control.element.tagName,
+      role: control.element.getAttribute?.('role') ?? null,
+      ariaChecked: this.getAriaChecked(control.element)
+    });
+
     if (control.mode === 'input') {
       const inputElement = control.element;
       if (inputElement.checked) {
@@ -221,7 +264,15 @@ const ActionExecutor = {
       throw new Error('Element is not a checkbox');
     }
 
+    this.log('☑️ selectCheckbox control resolved', {
+      mode: control.mode,
+      tagName: control.element.tagName,
+      role: control.element.getAttribute?.('role') ?? null,
+      ariaChecked: this.getAriaChecked(control.element)
+    });
+
     const shouldCheck = this.toBoolean(value);
+    this.log('☑️ Desired checkbox state', { shouldCheck, rawValue: value });
 
     if (control.mode === 'input') {
       const inputElement = control.element;
@@ -302,6 +353,14 @@ const ActionExecutor = {
 
     const normalizedRole = role.toLowerCase();
 
+    if (element !== document && element !== window) {
+      this.log('🧭 resolveControl inspecting element', {
+        requestedRole: normalizedRole,
+        tagName: element.tagName,
+        role: element.getAttribute?.('role') ?? null
+      });
+    }
+
     if (this.isInputOfType(element, normalizedRole)) {
       return { element, mode: 'input' };
     }
@@ -325,6 +384,11 @@ const ActionExecutor = {
 
     const ariaDescendant = element.querySelector(`[role='${normalizedRole}']`);
     if (ariaDescendant && ariaDescendant !== element) {
+      this.log('🧭 resolveControl using descendant aria role', {
+        requestedRole: normalizedRole,
+        tagName: ariaDescendant.tagName,
+        role: ariaDescendant.getAttribute?.('role') ?? null
+      });
       return { element: ariaDescendant, mode: 'aria' };
     }
 
@@ -346,6 +410,10 @@ const ActionExecutor = {
 
     const descendant = element.querySelector('input, textarea, [contenteditable="true"], [role="textbox"]');
     if (descendant && descendant !== element) {
+      this.log('🧭 resolveTextTarget exploring descendant', {
+        selectorMatch: descendant.tagName,
+        role: descendant.getAttribute?.('role') ?? null
+      });
       return this.resolveTextTarget(descendant);
     }
 
@@ -454,16 +522,33 @@ const ActionExecutor = {
   },
 
   performAriaToggle(element, shouldCheck, role) {
+    this.log('🔁 performAriaToggle start', {
+      role,
+      desiredState: shouldCheck,
+      currentState: this.getAriaChecked(element)
+    });
     element.scrollIntoView({ behavior: 'smooth', block: 'center' });
     element.focus();
 
     this.click(element);
-    if (this.getAriaChecked(element) === shouldCheck) {
+    const postClick = this.getAriaChecked(element);
+    this.log('🔁 performAriaToggle after click', {
+      role,
+      desiredState: shouldCheck,
+      currentState: postClick
+    });
+    if (postClick === shouldCheck) {
       return;
     }
 
     this.triggerKeyboardToggle(element, role === 'radio' ? ' ' : ' ');
-    if (this.getAriaChecked(element) === shouldCheck) {
+    const postKey = this.getAriaChecked(element);
+    this.log('🔁 performAriaToggle after keypress', {
+      role,
+      desiredState: shouldCheck,
+      currentState: postKey
+    });
+    if (postKey === shouldCheck) {
       return;
     }
 

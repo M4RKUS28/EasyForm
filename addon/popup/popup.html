@@ -152,12 +152,12 @@
       color: white;
     }
 
-    .clipboard-section {
+    .instructions-section {
       padding: 10px;
       border-bottom: 1px solid var(--border-color);
     }
 
-    .clipboard-input {
+    .instructions-input {
       width: 100%;
       padding: 6px 8px;
       border: 1px solid var(--border-color);
@@ -172,13 +172,13 @@
       line-height: 1.3;
     }
 
-    .clipboard-input:focus {
+    .instructions-input:focus {
       outline: none;
       border-color: var(--accent-color);
       box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.1);
     }
 
-    .clipboard-input::placeholder {
+    .instructions-input::placeholder {
       color: var(--text-muted);
       font-style: italic;
     }
@@ -279,11 +279,11 @@
     <button class="cancel-btn" id="resetBtn" style="display: none;">Reset</button>
   </div>
 
-  <div class="clipboard-section">
+  <div class="instructions-section">
     <textarea 
-      class="clipboard-input" 
-      id="clipboardInput" 
-      placeholder="Clipboard content will appear here..."
+      class="instructions-input" 
+      id="sessionInstructionsInput" 
+      placeholder="Add session instructions for EasyForm (optional)..."
       rows="1"
     ></textarea>
   </div>

@@ -16,7 +16,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   await checkBackendHealth();
   await loadConfig();
   await loadStatus();
-  await loadClipboard();
+  await loadSessionInstructions();
   setupEventListeners();
 
   // Check analysis state on popup open
@@ -96,29 +96,18 @@ async function loadStatus() {
   }
 }
 
-async function loadClipboard() {
-  const clipboardInput = document.getElementById('clipboardInput');
-  
-  try {
-    // First try to load saved custom clipboard
-    const storage = await chrome.storage.local.get('customClipboard');
-    if (storage.customClipboard !== undefined && storage.customClipboard !== null) {
-      clipboardInput.value = storage.customClipboard;
-      console.log('[EasyForm Popup] 💾 Loaded saved clipboard:', storage.customClipboard.substring(0, 50) + '...');
-      return;
-    }
+async function loadSessionInstructions() {
+  const instructionsInput = document.getElementById('sessionInstructionsInput');
 
-    // Otherwise, try to read system clipboard
-    const text = await navigator.clipboard.readText();
-    if (text) {
-      clipboardInput.value = text;
-      // Save it for future use
-      await chrome.storage.local.set({ customClipboard: text });
-      console.log('[EasyForm Popup] 📋 Clipboard loaded:', text.substring(0, 50) + '...');
+  try {
+    const storage = await chrome.storage.local.get('sessionInstructions');
+    const savedInstructions = storage.sessionInstructions;
+    if (typeof savedInstructions === 'string' && savedInstructions.length > 0) {
+      instructionsInput.value = savedInstructions;
+      console.log('[EasyForm Popup] � Loaded saved session instructions:', savedInstructions.substring(0, 50) + '...');
     }
   } catch (error) {
-    console.warn('[EasyForm Popup] ⚠️ Could not read clipboard:', error);
-    clipboardInput.placeholder = 'Could not access clipboard. You can paste content manually.';
+    console.warn('[EasyForm Popup] ⚠️ Could not load session instructions:', error);
   }
 }
 
@@ -161,29 +150,29 @@ function setupEventListeners() {
   });
 
   // Clipboard input - save to storage when edited
-  const clipboardInput = document.getElementById('clipboardInput');
-  let clipboardUpdateTimeout;
+  const instructionsInput = document.getElementById('sessionInstructionsInput');
+  let instructionsUpdateTimeout;
   
-  clipboardInput.addEventListener('input', () => {
+  instructionsInput.addEventListener('input', () => {
     // Debounce the update
-    clearTimeout(clipboardUpdateTimeout);
-    clipboardUpdateTimeout = setTimeout(async () => {
-      const newValue = clipboardInput.value;
-      console.log('[EasyForm Popup] 📝 Clipboard updated:', newValue.substring(0, 50) + '...');
+    clearTimeout(instructionsUpdateTimeout);
+    instructionsUpdateTimeout = setTimeout(async () => {
+      const newValue = instructionsInput.value;
+      console.log('[EasyForm Popup] 📝 Session instructions updated:', newValue.substring(0, 50) + '...');
       
-      // Store the updated clipboard value
+      // Store the updated session instructions value
       try {
-        await chrome.storage.local.set({ customClipboard: newValue });
+        await chrome.storage.local.set({ sessionInstructions: newValue });
       } catch (error) {
-        console.error('[EasyForm Popup] Error saving clipboard:', error);
+        console.error('[EasyForm Popup] Error saving session instructions:', error);
       }
     }, 500);
   });
 
   // Listen for clipboard changes (when user pastes)
-  clipboardInput.addEventListener('paste', () => {
+  instructionsInput.addEventListener('paste', () => {
     setTimeout(() => {
-      console.log('[EasyForm Popup] 📋 Pasted into clipboard input');
+      console.log('[EasyForm Popup] 📋 Pasted into session instructions input');
     }, 10);
   });
 }
@@ -465,9 +454,9 @@ async function handleResetClick() {
   const cancelBtn = document.getElementById('cancelBtn');
   cancelBtn.classList.remove('show');
 
-    const clipboardInput = document.getElementById('clipboardInput');
-    clipboardInput.value = '';
-    await chrome.storage.local.remove('customClipboard');
+  const instructionsInput = document.getElementById('sessionInstructionsInput');
+  instructionsInput.value = '';
+  await chrome.storage.local.remove('sessionInstructions');
 
     await checkBackendHealth();
     await checkAnalysisState();
