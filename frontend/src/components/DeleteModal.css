@@ -34,6 +34,12 @@
   animation: slideUp 0.3s ease-out;
 }
 
+.dark .modal-content {
+  background: #0f172a;
+  border: 1px solid rgba(51, 65, 85, 0.7);
+  box-shadow: 0 30px 45px -15px rgba(15, 23, 42, 0.6), 0 20px 25px -15px rgba(15, 23, 42, 0.4);
+}
+
 @keyframes slideUp {
   from {
     transform: translateY(20px);
@@ -62,6 +68,10 @@
   justify-content: center;
 }
 
+.dark .modal-icon-danger {
+  background-color: rgba(248, 113, 113, 0.2);
+}
+
 .modal-icon-svg {
   width: 36px;
   height: 36px;
@@ -73,6 +83,10 @@
   font-weight: 700;
   color: #111827;
   margin: 0;
+}
+
+.dark .modal-title {
+  color: #f8fafc;
 }
 
 /* Modal Body */
@@ -88,6 +102,10 @@
   text-align: center;
 }
 
+.dark .modal-message {
+  color: #cbd5f5;
+}
+
 .modal-item-name {
   background-color: #f3f4f6;
   border-radius: 8px;
@@ -99,6 +117,15 @@
 
 .modal-item-name strong {
   color: #111827;
+}
+
+.dark .modal-item-name {
+  background-color: rgba(30, 41, 59, 0.7);
+  color: #e2e8f0;
+}
+
+.dark .modal-item-name strong {
+  color: #f8fafc;
 }
 
 /* Modal Footer */
@@ -139,6 +166,17 @@
   border-color: #9ca3af;
 }
 
+.dark .modal-button-cancel {
+  background-color: transparent;
+  color: #cbd5f5;
+  border: 2px solid rgba(148, 163, 184, 0.6);
+}
+
+.dark .modal-button-cancel:hover:not(:disabled) {
+  background-color: rgba(148, 163, 184, 0.1);
+  border-color: rgba(203, 213, 225, 0.6);
+}
+
 .modal-button-delete {
   background-color: #dc2626;
   color: white;
@@ -150,6 +188,19 @@
 
 .modal-button-delete:active:not(:disabled) {
   background-color: #991b1b;
+}
+
+.dark .modal-button-delete {
+  background-color: #f87171;
+  color: #0f172a;
+}
+
+.dark .modal-button-delete:hover:not(:disabled) {
+  background-color: #fb7185;
+}
+
+.dark .modal-button-delete:active:not(:disabled) {
+  background-color: #f43f5e;
 }
 
 /* Spinner Animation */

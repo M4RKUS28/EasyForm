@@ -1,7 +1,31 @@
 @import "tailwindcss";
 
+@variant dark (&:is(.dark, .dark *));
+
 @layer base {
+  :root {
+    color-scheme: light;
+  }
+  
+  :root.dark {
+    color-scheme: dark;
+  }
+  
+  html {
+    height: 100%;
+  }
   body {
-    @apply bg-gray-50 text-gray-900;
+    min-height: 100%;
+    background-color: #f9fafb;
+    color: #111827;
+    -webkit-font-smoothing: antialiased;
+    transition: background-color 0.3s ease-in-out, color 0.3s ease-in-out;
+  }
+  #root {
+    min-height: 100%;
+  }
+  .dark body {
+    background-color: #020617;
+    color: #f8fafc;
   }
 }

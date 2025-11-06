@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { tokenAPI, fileAPI, userAPI } from '../api/client';
 import Header from '../components/Header';
@@ -219,31 +220,43 @@ const Dashboard = () => {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50">
+      <div className="min-h-screen bg-gray-50 dark:bg-slate-950 transition-colors duration-300">
         <Header />
         <div className="flex items-center justify-center py-20">
-          <div className="text-xl text-gray-600">Loading...</div>
+          <div className="text-xl text-gray-600 dark:text-gray-300 transition-colors">Loading...</div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50 dark:bg-slate-950 transition-colors duration-300">
       <Header />
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Welcome Section */}
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900">Welcome, {user?.username}!</h1>
-          <p className="text-gray-600 mt-2">Manage your API tokens and uploaded files</p>
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-3xl font-bold text-gray-900 dark:text-white transition-colors">Welcome, {user?.username}!</h1>
+              <p className="text-gray-600 dark:text-gray-300 mt-2 transition-colors">Manage your API tokens and uploaded files</p>
+            </div>
+            <Link
+              to="/test-form"
+              className="px-6 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 dark:bg-purple-500 dark:hover:bg-purple-600 font-medium transition-colors"
+            >
+              Test Form
+            </Link>
+          </div>
         </div>
 
         {/* Message */}
         {message && (
           <div
             className={`mb-6 p-4 rounded-lg ${
-              message.type === 'error' ? 'bg-red-50 text-red-800' : 'bg-green-50 text-green-800'
+              message.type === 'error'
+                ? 'bg-red-50 text-red-800 dark:bg-red-950/40 dark:text-red-200'
+                : 'bg-green-50 text-green-800 dark:bg-emerald-950/40 dark:text-emerald-200'
             }`}
           >
             {message.text}
@@ -252,9 +265,9 @@ const Dashboard = () => {
 
         {/* API Tokens Section */}
         <section className="mb-10">
-          <div className="bg-white rounded-lg shadow p-6">
-            <h2 className="text-2xl font-semibold text-gray-900 mb-4">API Tokens</h2>
-            <p className="text-gray-600 mb-6">
+          <div className="bg-white/95 dark:bg-slate-900/95 rounded-lg shadow dark:shadow-slate-900/50 border border-gray-100 dark:border-slate-800 p-6 transition-colors">
+            <h2 className="text-2xl font-semibold text-gray-900 dark:text-white mb-4 transition-colors">API Tokens</h2>
+            <p className="text-gray-600 dark:text-gray-300 mb-6 transition-colors">
               Create tokens for your browser extension. Tokens are valid for at least 1 year.
             </p>
 
@@ -264,13 +277,13 @@ const Dashboard = () => {
                 <input
                   type="text"
                   placeholder="Token name (optional)"
-                  className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="flex-1 px-4 py-2 border border-gray-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-400 transition-colors"
                   value={tokenName}
                   onChange={(e) => setTokenName(e.target.value)}
                 />
                 <button
                   type="submit"
-                  className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
+                  className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600 transition-colors"
                 >
                   Create Token
                 </button>
@@ -279,24 +292,24 @@ const Dashboard = () => {
 
             {/* New Token Display (shown once after creation) */}
             {newToken && (
-              <div className="mb-6 p-4 bg-yellow-50 border-2 border-yellow-200 rounded-lg">
-                <p className="text-sm font-semibold text-yellow-900 mb-2">
+              <div className="mb-6 p-4 bg-yellow-50 dark:bg-amber-950/40 border-2 border-yellow-200 dark:border-amber-800 rounded-lg transition-colors">
+                <p className="text-sm font-semibold text-yellow-900 dark:text-amber-100 mb-2 transition-colors">
                   ⚠️ Save this token now! It won't be shown again.
                 </p>
                 <div className="flex gap-2">
-                  <code className="flex-1 p-3 bg-white rounded border border-yellow-300 text-sm break-all">
+                  <code className="flex-1 p-3 bg-white dark:bg-slate-950 rounded border border-yellow-300 dark:border-amber-700 text-sm break-all text-gray-900 dark:text-gray-100 transition-colors">
                     {newToken.token}
                   </code>
                   <button
                     onClick={() => copyToClipboard(newToken.token)}
-                    className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition whitespace-nowrap"
+                    className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600 transition-colors whitespace-nowrap"
                   >
                     Copy
                   </button>
                 </div>
                 <button
                   onClick={() => setNewToken(null)}
-                  className="mt-2 text-sm text-gray-600 hover:text-gray-800"
+                  className="mt-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 transition-colors"
                 >
                   Dismiss
                 </button>
@@ -306,27 +319,27 @@ const Dashboard = () => {
             {/* Token List */}
             <div className="space-y-3">
               {tokens.length === 0 ? (
-                <p className="text-gray-500 italic">No tokens created yet.</p>
+                <p className="text-gray-500 dark:text-gray-400 italic transition-colors">No tokens created yet.</p>
               ) : (
                 tokens.map((token) => (
                   <div
                     key={token.id}
-                    className="flex items-center justify-between p-4 border border-gray-200 rounded-lg"
+                    className="flex items-center justify-between p-4 border border-gray-200 dark:border-slate-700 rounded-lg bg-white/70 dark:bg-slate-900/70 transition-colors"
                   >
                     <div>
-                      <p className="font-medium">{token.name || 'Unnamed Token'}</p>
-                      <p className="text-sm text-gray-500">
+                      <p className="font-medium text-gray-900 dark:text-gray-100 transition-colors">{token.name || 'Unnamed Token'}</p>
+                      <p className="text-sm text-gray-500 dark:text-gray-400 transition-colors">
                         Created: {new Date(token.created_at).toLocaleDateString()}
                       </p>
                       {token.last_used_at && (
-                        <p className="text-sm text-gray-500">
+                        <p className="text-sm text-gray-500 dark:text-gray-400 transition-colors">
                           Last used: {new Date(token.last_used_at).toLocaleDateString()}
                         </p>
                       )}
                     </div>
                     <button
                       onClick={() => handleDeleteToken(token.id)}
-                      className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 transition"
+                      className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 dark:bg-red-500 dark:hover:bg-red-600 transition-colors"
                     >
                       Delete
                     </button>
@@ -339,15 +352,15 @@ const Dashboard = () => {
 
         {/* Personal Instructions Section */}
         <section className="mb-10">
-          <div className="bg-white rounded-lg shadow p-6">
-            <h2 className="text-2xl font-semibold text-gray-900 mb-3">Personal Instructions</h2>
-            <p className="text-gray-600 mb-4">
+          <div className="bg-white/95 dark:bg-slate-900/95 rounded-lg shadow dark:shadow-slate-900/50 border border-gray-100 dark:border-slate-800 p-6 transition-colors">
+            <h2 className="text-2xl font-semibold text-gray-900 dark:text-white mb-3 transition-colors">Personal Instructions</h2>
+            <p className="text-gray-600 dark:text-gray-300 mb-4 transition-colors">
               Add optional notes that are stored locally and included when you upload new files.
             </p>
             <div>
               <label
                 htmlFor="personalInstructions"
-                className="block text-sm font-medium text-gray-700 mb-2"
+                className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-2 transition-colors"
               >
                 Personal Instructions
               </label>
@@ -359,16 +372,16 @@ const Dashboard = () => {
                   setInstructionsDirty(true);
                 }}
                 rows={4}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full px-3 py-2 border border-gray-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-400 transition-colors"
                 placeholder="Add optional notes for yourself..."
               />
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mt-3">
                 <div>
-                  <p className="text-xs text-gray-500">
+                  <p className="text-xs text-gray-500 dark:text-gray-400 transition-colors">
                     These notes are stored with your account and sent to the AI when analyzing forms.
                   </p>
                   {instructionsDirty && (
-                    <p className="text-xs text-amber-600 font-medium mt-1">
+                    <p className="text-xs text-amber-600 dark:text-amber-400 font-medium mt-1 transition-colors">
                       Unsaved changes — click Save to keep them.
                     </p>
                   )}
@@ -379,8 +392,8 @@ const Dashboard = () => {
                   disabled={instructionsSaving || !instructionsDirty}
                   className={`px-6 py-2 rounded-lg text-white transition ${
                     instructionsSaving || !instructionsDirty
-                      ? 'bg-blue-300 cursor-not-allowed'
-                      : 'bg-blue-600 hover:bg-blue-700'
+                      ? 'bg-blue-300 dark:bg-blue-700/60 cursor-not-allowed'
+                      : 'bg-blue-600 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600'
                   }`}
                 >
                   {instructionsSaving ? 'Saving...' : 'Save Instructions'}
@@ -392,15 +405,15 @@ const Dashboard = () => {
 
         {/* Files Section */}
         <section className="mb-10">
-          <div className="bg-white rounded-lg shadow p-6">
+          <div className="bg-white/95 dark:bg-slate-900/95 rounded-lg shadow dark:shadow-slate-900/50 border border-gray-100 dark:border-slate-800 p-6 transition-colors">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between mb-4">
               <div>
-                <h2 className="text-2xl font-semibold text-gray-900">Uploaded Files</h2>
-                <p className="text-gray-600 mt-1">
+                <h2 className="text-2xl font-semibold text-gray-900 dark:text-white transition-colors">Uploaded Files</h2>
+                <p className="text-gray-600 dark:text-gray-300 mt-1 transition-colors">
                   Total storage: {formatFileSize(totalStorage)}
                 </p>
               </div>
-              <label className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition cursor-pointer text-center w-full sm:w-auto">
+              <label className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600 transition-colors cursor-pointer text-center w-full sm:w-auto">
                 {uploadProgress ? 'Uploading...' : 'Upload File'}
                 <input
                   type="file"
@@ -412,27 +425,27 @@ const Dashboard = () => {
               </label>
             </div>
 
-            <p className="text-sm text-gray-500 mb-6">
+            <p className="text-sm text-gray-500 dark:text-gray-400 mb-6 transition-colors">
               Supported formats: PNG, JPEG, GIF, WEBP, PDF (max 200MB per file)
             </p>
 
             {/* File List */}
             <div className="space-y-3">
               {files.length === 0 ? (
-                <p className="text-gray-500 italic">No files uploaded yet.</p>
+                <p className="text-gray-500 dark:text-gray-400 italic transition-colors">No files uploaded yet.</p>
               ) : (
                 files.map((file) => (
                   <div
                     key={file.id}
-                    className="flex items-center justify-between p-4 border border-gray-200 rounded-lg"
+                    className="flex items-center justify-between p-4 border border-gray-200 dark:border-slate-700 rounded-lg bg-white/70 dark:bg-slate-900/70 transition-colors"
                   >
                     <div className="flex items-center gap-4">
                       <div className="text-3xl">
                         {file.content_type.startsWith('image/') ? '🖼️' : '📄'}
                       </div>
                       <div>
-                        <p className="font-medium">{file.filename}</p>
-                        <p className="text-sm text-gray-500">
+                        <p className="font-medium text-gray-900 dark:text-gray-100 transition-colors">{file.filename}</p>
+                        <p className="text-sm text-gray-500 dark:text-gray-400 transition-colors">
                           {formatFileSize(file.file_size)} • Uploaded{' '}
                           {new Date(file.created_at).toLocaleDateString()}
                         </p>
@@ -440,7 +453,7 @@ const Dashboard = () => {
                     </div>
                     <button
                       onClick={() => handleDeleteFile(file.id)}
-                      className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 transition"
+                      className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 dark:bg-red-500 dark:hover:bg-red-600 transition-colors"
                     >
                       Delete
                     </button>

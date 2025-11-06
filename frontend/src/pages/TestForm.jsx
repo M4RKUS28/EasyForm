@@ -1,8 +1,9 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import Header from '../components/Header';
 import './TestForm.css';
 
-const checkboxGroupFields = new Set(['ethicsQ2', 'ethicsQ16', 'ethicsQ22', 'ethicsQ29']);
+const checkboxGroupFields = new Set(['ethicsQ2', 'ethicsQ16', 'ethicsQ22', 'ethicsQ29', 'ariaMultipleChoice']);
 
 function TestForm() {
   const [formData, setFormData] = useState({
@@ -52,7 +53,16 @@ function TestForm() {
     // Additional
     bio: '',
     rating: '5',
-    agree: false
+    agree: false,
+    
+    // Google Forms style fields with ARIA
+    ariaName: '',
+    ariaSize: '',
+    ariaStartsWithA: '',
+    ariaMath: '',
+    ariaFavoriteNumber: '',
+    ariaMultipleChoice: [],
+    ariaDropdown: ''
   });
 
   const handleChange = (e) => {
@@ -82,10 +92,20 @@ function TestForm() {
     <div className="test-form-page">
       <Header />
       <div className="test-form-container">
-        <h1>Addon Test Form</h1>
-        <p className="form-description">
-          This form is designed to test the browser addon with various input types.
-        </p>
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <h1>Addon Test Form</h1>
+            <p className="form-description">
+              This form is designed to test the browser addon with various input types.
+            </p>
+          </div>
+          <Link
+            to="/dashboard"
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600 font-medium transition-colors whitespace-nowrap"
+          >
+            Dashboard
+          </Link>
+        </div>
         
         <form onSubmit={handleSubmit} className="test-form">
           {/* Personal Information Section */}
@@ -688,6 +708,349 @@ function TestForm() {
                 placeholder="Erklären Sie die Spannung..."
               />
             </div>
+
+            {/* ENDE: HIER DEN NEUEN JSX-CODE EINFÜGEN */}
+          </section>
+
+          {/* Google Forms Style Section with ARIA attributes */}
+          <section className="form-section">
+            <h2>Google Forms Style Fields (ARIA attributes, no input classes)</h2>
+            <p className="form-description">Diese Felder verwenden ARIA-Attribute ähnlich wie Google Forms</p>
+
+            {/* Text Input with ARIA */}
+            <div className="form-group" role="group">
+              <div id="ariaNameLabel" role="heading" aria-level="3">
+                <span>Name</span>
+                <span aria-label="Pflichtfrage"> *</span>
+              </div>
+              <div id="ariaNameDesc"></div>
+              <div>
+                <input
+                  type="text"
+                  name="ariaName"
+                  value={formData.ariaName}
+                  onChange={handleChange}
+                  required
+                  aria-labelledby="ariaNameLabel"
+                  aria-describedby="ariaNameDesc ariaNameError"
+                  aria-disabled="false"
+                  autoComplete="off"
+                  tabIndex="0"
+                  dir="auto"
+                  data-initial-dir="auto"
+                  data-initial-value=""
+                />
+              </div>
+              <div id="ariaNameError" role="alert"></div>
+            </div>
+
+            {/* Radio Group with ARIA (T-Shirt Size) */}
+            <div className="form-group" role="group">
+              <div id="ariaSizeLabel" role="heading" aria-level="3">
+                <span>T-Shirt-Größe</span>
+              </div>
+              <div id="ariaSizeDesc"></div>
+              <div 
+                role="radiogroup" 
+                aria-labelledby="ariaSizeLabel"
+                aria-describedby="ariaSizeDesc ariaSizeError"
+              >
+                {['XS', 'S', 'M', 'L', 'XL'].map((size, index) => (
+                  <label key={size}>
+                    <div
+                      role="radio"
+                      aria-label={size}
+                      aria-checked={formData.ariaSize === size}
+                      aria-posinset={index + 1}
+                      aria-setsize="5"
+                      tabIndex={index === 0 ? 0 : -1}
+                      data-value={size}
+                    >
+                      <input
+                        type="radio"
+                        name="ariaSize"
+                        value={size}
+                        checked={formData.ariaSize === size}
+                        onChange={handleChange}
+                        style={{ position: 'absolute', opacity: 0 }}
+                      />
+                      <span>{size}</span>
+                    </div>
+                  </label>
+                ))}
+              </div>
+              <div id="ariaSizeError" role="alert"></div>
+            </div>
+
+            {/* Radio Group: Which word starts with A */}
+            <div className="form-group" role="group">
+              <div id="ariaStartsWithALabel" role="heading" aria-level="3">
+                <span>Which word starts with A</span>
+              </div>
+              <div id="ariaStartsWithADesc"></div>
+              <div 
+                role="radiogroup" 
+                aria-labelledby="ariaStartsWithALabel"
+                aria-describedby="ariaStartsWithADesc ariaStartsWithAError"
+              >
+                {[
+                  { value: 'abend', label: 'Abend' },
+                  { value: 'beta', label: 'Beta' },
+                  { value: 'ceta', label: 'Ceta' }
+                ].map((option, index) => (
+                  <label key={option.value} className="radio-label">
+                    <div
+                      role="radio"
+                      aria-label={option.label}
+                      aria-checked={formData.ariaStartsWithA === option.value}
+                      aria-posinset={index + 1}
+                      aria-setsize="3"
+                      tabIndex={formData.ariaStartsWithA === option.value ? 0 : -1}
+                      data-value={option.value}
+                    >
+                      <input
+                        type="radio"
+                        name="ariaStartsWithA"
+                        value={option.value}
+                        checked={formData.ariaStartsWithA === option.value}
+                        onChange={handleChange}
+                      />
+                      <span>{option.label}</span>
+                    </div>
+                  </label>
+                ))}
+              </div>
+              <div id="ariaStartsWithAError" role="alert"></div>
+            </div>
+
+            {/* Radio Group: Math question */}
+            <div className="form-group" role="group">
+              <div id="ariaMathLabel" role="heading" aria-level="3">
+                <span>was ist 2+2</span>
+              </div>
+              <div id="ariaMathDesc"></div>
+              <div 
+                role="radiogroup" 
+                aria-labelledby="ariaMathLabel"
+                aria-describedby="ariaMathDesc ariaMathError"
+              >
+                {['1', '2', '3', '4'].map((num, index) => (
+                  <label key={num} className="radio-label">
+                    <div
+                      role="radio"
+                      aria-label={num}
+                      aria-checked={formData.ariaMath === num}
+                      aria-posinset={index + 1}
+                      aria-setsize="4"
+                      tabIndex={formData.ariaMath === num ? 0 : -1}
+                      data-value={num}
+                    >
+                      <input
+                        type="radio"
+                        name="ariaMath"
+                        value={num}
+                        checked={formData.ariaMath === num}
+                        onChange={handleChange}
+                      />
+                      <span>{num}</span>
+                    </div>
+                  </label>
+                ))}
+              </div>
+              <div id="ariaMathError" role="alert"></div>
+            </div>
+
+            {/* Radio Group with "Other" option */}
+            <div className="form-group" role="group">
+              <div id="ariaFavoriteNumberLabel" role="heading" aria-level="3">
+                <span>Choose your Favourite Number</span>
+              </div>
+              <div id="ariaFavoriteNumberDesc"></div>
+              <div 
+                role="radiogroup" 
+                aria-labelledby="ariaFavoriteNumberLabel"
+                aria-describedby="ariaFavoriteNumberDesc ariaFavoriteNumberError"
+              >
+                {['Option 1', 'Option 2', 'Option 3', 'Option 4'].map((option, index) => (
+                  <label key={option} className="radio-label">
+                    <div
+                      role="radio"
+                      aria-label={option}
+                      aria-checked={formData.ariaFavoriteNumber === option}
+                      aria-posinset={index + 1}
+                      aria-setsize="5"
+                      tabIndex={formData.ariaFavoriteNumber === option ? 0 : -1}
+                      data-value={option}
+                    >
+                      <input
+                        type="radio"
+                        name="ariaFavoriteNumber"
+                        value={option}
+                        checked={formData.ariaFavoriteNumber === option}
+                        onChange={handleChange}
+                      />
+                      <span>{option}</span>
+                    </div>
+                  </label>
+                ))}
+                {/* "Sonstiges" (Other) option with text input */}
+                <label className="radio-label">
+                  <div
+                    role="radio"
+                    aria-checked={formData.ariaFavoriteNumber && !['Option 1', 'Option 2', 'Option 3', 'Option 4'].includes(formData.ariaFavoriteNumber)}
+                    aria-posinset="5"
+                    aria-setsize="5"
+                    tabIndex="0"
+                    data-value="__other_option__"
+                  >
+                    <input
+                      type="radio"
+                      name="ariaFavoriteNumber"
+                      value="__other_option__"
+                      checked={formData.ariaFavoriteNumber && !['Option 1', 'Option 2', 'Option 3', 'Option 4'].includes(formData.ariaFavoriteNumber)}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setFormData(prev => ({ ...prev, ariaFavoriteNumber: '' }));
+                        }
+                      }}
+                    />
+                    <span>Sonstiges:</span>
+                  </div>
+                  <input
+                    type="text"
+                    value={formData.ariaFavoriteNumber && !['Option 1', 'Option 2', 'Option 3', 'Option 4'].includes(formData.ariaFavoriteNumber) ? formData.ariaFavoriteNumber : ''}
+                    onChange={(e) => setFormData(prev => ({ ...prev, ariaFavoriteNumber: e.target.value }))}
+                    aria-label="Sonstige Antwort"
+                    autoComplete="off"
+                    tabIndex="0"
+                    dir="auto"
+                    data-initial-dir="auto"
+                    disabled={['Option 1', 'Option 2', 'Option 3', 'Option 4'].includes(formData.ariaFavoriteNumber)}
+                  />
+                </label>
+              </div>
+              <div id="ariaFavoriteNumberError" role="alert"></div>
+            </div>
+
+            {/* Checkbox Group (Multiple Choice) */}
+            <div className="form-group" role="group">
+              <div id="ariaMultipleChoiceLabel" role="heading" aria-level="3">
+                <span>choose all1</span>
+              </div>
+              <div id="ariaMultipleChoiceDesc"></div>
+              <div 
+                role="list" 
+                aria-labelledby="ariaMultipleChoiceLabel"
+                aria-describedby="ariaMultipleChoiceDesc ariaMultipleChoiceError"
+              >
+                {['Option 1', 'Option 2', 'Option 3', 'Option 4'].map((option) => (
+                  <div key={option} role="listitem" className="checkbox-group">
+                    <label>
+                      <div
+                        role="checkbox"
+                        aria-label={option}
+                        aria-checked={formData.ariaMultipleChoice.includes(option)}
+                        tabIndex="0"
+                        data-answer-value={option}
+                      >
+                        <input
+                          type="checkbox"
+                          name="ariaMultipleChoice"
+                          value={option}
+                          checked={formData.ariaMultipleChoice.includes(option)}
+                          onChange={handleChange}
+                        />
+                        <span>{option}</span>
+                      </div>
+                    </label>
+                  </div>
+                ))}
+                {/* "Sonstiges" option with text input */}
+                <div role="listitem" className="checkbox-group">
+                  <label>
+                    <div
+                      role="checkbox"
+                      aria-label="Sonstiges:"
+                      aria-checked={formData.ariaMultipleChoice.some(item => !['Option 1', 'Option 2', 'Option 3', 'Option 4'].includes(item))}
+                      tabIndex="0"
+                      data-answer-value="__other_option__"
+                      data-other-checkbox="true"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={formData.ariaMultipleChoice.some(item => !['Option 1', 'Option 2', 'Option 3', 'Option 4'].includes(item))}
+                        onChange={(e) => {
+                          if (!e.target.checked) {
+                            setFormData(prev => ({
+                              ...prev,
+                              ariaMultipleChoice: prev.ariaMultipleChoice.filter(item => 
+                                ['Option 1', 'Option 2', 'Option 3', 'Option 4'].includes(item)
+                              )
+                            }));
+                          }
+                        }}
+                      />
+                      <span>Sonstiges:</span>
+                    </div>
+                    <input
+                      type="text"
+                      aria-label="Sonstige Antwort"
+                      autoComplete="off"
+                      tabIndex="0"
+                      dir="auto"
+                      data-initial-dir="auto"
+                      data-initial-value=""
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        setFormData(prev => {
+                          const filtered = prev.ariaMultipleChoice.filter(item => 
+                            ['Option 1', 'Option 2', 'Option 3', 'Option 4'].includes(item)
+                          );
+                          return {
+                            ...prev,
+                            ariaMultipleChoice: value ? [...filtered, value] : filtered
+                          };
+                        });
+                      }}
+                      aria-disabled="false"
+                    />
+                  </label>
+                </div>
+              </div>
+              <div id="ariaMultipleChoiceError" role="alert"></div>
+            </div>
+
+            {/* Dropdown with ARIA */}
+            <div className="form-group" role="group">
+              <div id="ariaDropdownLabel" role="heading" aria-level="3">
+                <span>Choose 2</span>
+              </div>
+              <div id="ariaDropdownDesc"></div>
+              <div
+                role="listbox"
+                aria-expanded="false"
+                aria-describedby="ariaDropdownDesc ariaDropdownError"
+                aria-labelledby="ariaDropdownLabel"
+              >
+                <select
+                  name="ariaDropdown"
+                  value={formData.ariaDropdown}
+                  onChange={handleChange}
+                  tabIndex="0"
+                >
+                  <option value="" aria-selected={formData.ariaDropdown === ''} role="option">Auswählen</option>
+                  <option value="Option 1" aria-selected={formData.ariaDropdown === 'Option 1'} role="option">Option 1</option>
+                  <option value="Option 2" aria-selected={formData.ariaDropdown === 'Option 2'} role="option">Option 2</option>
+                  <option value="Option 3" aria-selected={formData.ariaDropdown === 'Option 3'} role="option">Option 3</option>
+                  <option value="Option 4" aria-selected={formData.ariaDropdown === 'Option 4'} role="option">Option 4</option>
+                </select>
+              </div>
+              <div id="ariaDropdownError" role="alert"></div>
+            </div>
+
+          </section>
+
+          <section className="form-section">
 
             {/* ENDE: HIER DEN NEUEN JSX-CODE EINFÜGEN */}
 
