@@ -66,8 +66,8 @@ HTML Code:
 Visible Text Content:
 {dom_text}
 
-Clipboard Content:
-{clipboard_text if clipboard_text else 'No clipboard content provided'}
+Session Instructions:
+{clipboard_text if clipboard_text else 'No session instructions provided'}
 
 Personal Instructions:
 {instructions_text}
@@ -160,7 +160,7 @@ Personal Instructions:
 
         query = f"""Please generate appropriate values for the following form fields.
 Follow these directives strictly:
-- Treat clipboard content as authoritative instructions.
+- Treat session instructions as authoritative guidance.
 - Blend the user's personal instructions with any other context when deciding on values.
 - Provide a best-effort value for every field; only return null when the user explicitly requests a blank or when no responsible inference is possible.
 - For multiple-choice fields, select one of the provided options; for checkboxes output true/false for each required option.
@@ -174,8 +174,8 @@ Form Fields (structured data from HTML analysis):
 Page Visible Text:
 {visible_text}
 
-Clipboard Content:
-{clipboard_text if clipboard_text else 'No clipboard content provided'}
+Session Instructions:
+{clipboard_text if clipboard_text else 'No session instructions provided'}
 
 Personal Instructions:
 {instructions_text}
@@ -232,7 +232,7 @@ Please analyze all provided context and generate appropriate values for each fie
 
                     query = f"""Please generate appropriate values for the following form field group.
 Follow these directives strictly:
-- Treat clipboard content as authoritative instructions.
+- Treat session instructions as authoritative guidance.
 - Blend the user's personal instructions with any other context when deciding on values.
 - Provide a best-effort value for every field; only return null when the user explicitly requests a blank or when no responsible inference is possible.
 - Keep values consistent with each other and respect validation hints or dependencies.
@@ -245,8 +245,8 @@ Form Fields:
 Page Visible Text:
 {visible_text}
 
-Clipboard Content:
-{clipboard_text if clipboard_text else 'No clipboard content provided'}
+Session Instructions:
+{clipboard_text if clipboard_text else 'No session instructions provided'}
 
 Personal Instructions:
 {instructions_text}

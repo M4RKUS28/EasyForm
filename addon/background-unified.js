@@ -185,22 +185,32 @@ async function handlePageAnalysisAsync(pageData, tabId) {
     const headers = { 'Content-Type': 'application/json' };
     if (apiToken) headers['Authorization'] = `Bearer ${apiToken}`;
 
-    // Check if there's a custom clipboard value from the popup
-    let clipboardText = pageData.clipboard;
+    // Load optional session instructions entered in the popup (fallback to legacy data if needed)
+    let sessionInstructions = null;
     try {
-      const storage = await chrome.storage.local.get('customClipboard');
-      if (storage.customClipboard !== undefined && storage.customClipboard !== null) {
-        clipboardText = storage.customClipboard;
-        console.log('[EasyForm API] 📋 Using custom clipboard from popup');
+      const storage = await chrome.storage.local.get('sessionInstructions');
+      if (typeof storage.sessionInstructions === 'string') {
+        sessionInstructions = storage.sessionInstructions;
+        if (sessionInstructions.length > 0) {
+          console.log('[EasyForm API] � Using session instructions from popup');
+        }
       }
     } catch (error) {
-      console.warn('[EasyForm API] Could not load custom clipboard:', error);
+      console.warn('[EasyForm API] Could not load session instructions:', error);
+    }
+
+    if (sessionInstructions === null && typeof pageData?.sessionInstructions === 'string') {
+      sessionInstructions = pageData.sessionInstructions;
+    }
+
+    if (sessionInstructions === null && typeof pageData?.clipboard === 'string') {
+      sessionInstructions = pageData.clipboard;
     }
 
     const requestBody = {
       html: pageData.html,
       visible_text: pageData.text,
-      clipboard_text: clipboardText,
+      clipboard_text: sessionInstructions,
       mode: analysisMode,
       quality: quality,
       screenshots: screenshots
@@ -209,7 +219,7 @@ async function handlePageAnalysisAsync(pageData, tabId) {
     console.log('[EasyForm API] 📦 Request body prepared:', {
       htmlLength: requestBody.html?.length,
       visibleTextLength: requestBody.visible_text?.length,
-      clipboardLength: requestBody.clipboard_text?.length,
+      sessionInstructionsLength: requestBody.clipboard_text?.length,
       mode: requestBody.mode,
       screenshotCount: screenshots?.length || 0
     });
@@ -683,11 +693,21 @@ async function analyzePage(tabId) {
     });
 
     if (response && response.data) {
+  let sessionInstructionsLength = 0;
+      try {
+        const storage = await chrome.storage.local.get('sessionInstructions');
+        if (typeof storage.sessionInstructions === 'string') {
+          sessionInstructionsLength = storage.sessionInstructions.length;
+        }
+      } catch (error) {
+        console.warn('[EasyForm] ⚠️ Could not read session instructions length:', error);
+      }
+
       console.log('[EasyForm] ✅ Received page data:', {
         url: response.data.url,
         textLength: response.data.text?.length,
         htmlLength: response.data.html?.length,
-        clipboardLength: response.data.clipboard?.length
+        sessionInstructionsLength
       });
       await handlePageAnalysisAsync(response.data, tabId);
     } else {

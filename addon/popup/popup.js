@@ -149,7 +149,7 @@ function setupEventListeners() {
     await handleOpenBackendClick();
   });
 
-  // Clipboard input - save to storage when edited
+  // Session instructions input - save to storage when edited
   const instructionsInput = document.getElementById('sessionInstructionsInput');
   let instructionsUpdateTimeout;
   
@@ -169,7 +169,7 @@ function setupEventListeners() {
     }, 500);
   });
 
-  // Listen for clipboard changes (when user pastes)
+  // Listen for paste events (when user pastes text)
   instructionsInput.addEventListener('paste', () => {
     setTimeout(() => {
       console.log('[EasyForm Popup] 📋 Pasted into session instructions input');

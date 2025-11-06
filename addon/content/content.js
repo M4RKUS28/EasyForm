@@ -81,14 +81,12 @@
    * Extract page data (text and HTML)
    */
   async function getPageData() {
-    const clipboard = await readClipboard();
-
     const data = {
       url: window.location.href,
       title: document.title,
       text: document.body.innerText,
       html: document.documentElement.outerHTML,
-      clipboard,
+      sessionInstructions: null,
       timestamp: new Date().toISOString()
     };
     console.log('[EasyForm Content] Page data extracted:', {
@@ -96,21 +94,9 @@
       title: data.title,
       textLength: data.text?.length,
       htmlLength: data.html?.length,
-      clipboardLength: data.clipboard?.length
+      sessionInstructionsLength: data.sessionInstructions?.length || 0
     });
     return data;
-  }
-
-  async function readClipboard() {
-    try {
-      if (navigator.clipboard?.readText) {
-        const text = await navigator.clipboard.readText();
-        return text || null;
-      }
-    } catch (error) {
-      console.warn('[EasyForm Content] Clipboard read failed:', error);
-    }
-    return null;
   }
 
   /**
