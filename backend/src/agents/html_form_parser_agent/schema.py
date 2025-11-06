@@ -1,42 +1,88 @@
 """Schemas describing the structured output for the HTML form parser agent."""
 from __future__ import annotations
 
-from typing import Any, List, Optional, Union
+from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field
 
 
-FieldValue = Union[str, int, float, bool, None, List[str]]
+class FormInput(BaseModel):
+    """Concrete interactable element belonging to a logical question."""
 
-
-class FormField(BaseModel):
-    """Structured description of a single form field detected in the page."""
-
-    selector: str = Field(..., description="Unique CSS selector pointing to the field element.")
-    type: str = Field(..., description="Normalized field type such as text, email, select, checkbox, etc.")
-    group_id: Optional[str] = Field(
-        None,
-        description="Stable identifier shared by all controls belonging to the same logical question (e.g., radio options in one group).",
+    input_id: str = Field(
+        ..., description="Stable identifier unique within the question (e.g. question_id::option)."
     )
-    label: Optional[str] = Field(
+    selector: str = Field(
+        ..., description="Precise CSS selector pointing to this input element so the extension can act on it."
+    )
+    input_type: str = Field(
+        ..., description="Specific control type such as text, textarea, radio_option, checkbox_option, dropdown_option, date_part, etc."
+    )
+    option_label: Optional[str] = Field(
         None,
-        description="Human readable label associated with the field if available.",
+        description="Human readable label for this specific option/input when applicable.",
+    )
+    value_hint: Optional[str] = Field(
+        None,
+        description="The value attribute or canonical choice associated with the input if known.",
+    )
+    current_value: Optional[str] = Field(
+        None,
+        description="Currently filled/selected value for this control when visible in the DOM.",
+    )
+    is_default: Optional[bool] = Field(
+        None,
+        description="True if this option is pre-selected or represents the default state.",
+    )
+    constraints: Optional[str] = Field(
+        None,
+        description="Summary of validation constraints specific to this input (e.g., min/max, format hints).",
+    )
+    notes: Optional[str] = Field(
+        None,
+        description="Additional clarifications that apply only to this input (kept concise).",
+    )
+
+
+class FormQuestion(BaseModel):
+    """Logical form question containing one or more concrete inputs."""
+
+    question_id: str = Field(
+        ..., description="Stable identifier for the question derived from the DOM (e.g. name/id of the group)."
+    )
+    question_type: str = Field(
+        ..., description="Normalized question type such as text, textarea, radio_scale, checkbox_grid, date, time, etc."
+    )
+    title: Optional[str] = Field(
+        None,
+        description="Primary label or prompt shown to the user.",
     )
     description: Optional[str] = Field(
         None,
-        description="Additional hints or help text describing the field, e.g. information from surrounding context, placeholder text, default value or field validation rules.",
+        description="Additional help text, validation hints, or contextual instructions for the question.",
     )
-
-    options: Optional[List[str]] = Field(
+    context: Optional[str] = Field(
         None,
-        description="Selectable options for dropdowns, radios, or grouped checkboxes.",
+        description="Concise surrounding context such as section headers or preceding text when relevant.",
+    )
+    hints: Optional[List[str]] = Field(
+        None,
+        description="Optional short bullet-like hints to retain extra guidance without bloating descriptions.",
+    )
+    inputs: List[FormInput] = Field(
+        default_factory=list,
+        description="All interactable inputs/options associated with this question.",
+    )
+    metadata: Optional[Dict[str, Any]] = Field(
+        None,
+        description="Structured metadata for advanced clients (e.g., row/column labels for grids).",
     )
 
 
 class HtmlFormParserOutput(BaseModel):
     """Top-level structured response returned by the HTML form parser."""
 
-    fields: List[FormField] = Field(
+    questions: List[FormQuestion] = Field(
         default_factory=list,
-        description="List of detected form fields with their metadata.",
+        description="Ordered list of logical questions detected in the form.",
     )

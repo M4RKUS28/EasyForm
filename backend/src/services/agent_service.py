@@ -30,10 +30,26 @@ class AgentService:
         self.app_name = "EasyForm"
 
         logger.info("Initializing parser and generator agents")
-        self.parser_flash = HtmlFormParserAgent(self.app_name, self.session_service, model="gemini-2.0-flash")
-        self.parser_pro = HtmlFormParserAgent(self.app_name, self.session_service, model="gemini-2.5-pro")
-        self.generator_flash = FormValueGeneratorAgent(self.app_name, self.session_service, model="gemini-2.0-flash")
-        self.generator_pro = FormValueGeneratorAgent(self.app_name, self.session_service, model="gemini-2.5-pro")
+        self.parser_flash = HtmlFormParserAgent(
+            self.app_name,
+            self.session_service,
+            model="gemini-2.0-flash",
+        )
+        self.parser_pro = HtmlFormParserAgent(
+            self.app_name,
+            self.session_service,
+            model="gemini-2.5-pro",
+        )
+        self.generator_flash = FormValueGeneratorAgent(
+            self.app_name,
+            self.session_service,
+            model="gemini-2.0-flash",
+        )
+        self.generator_pro = FormValueGeneratorAgent(
+            self.app_name,
+            self.session_service,
+            model="gemini-2.5-pro",
+        )
         logger.info("Agents initialized successfully")
 
     async def parse_form_structure(
@@ -46,7 +62,7 @@ class AgentService:
         quality: str = "medium",
         personal_instructions: Optional[str] = None,
     ) -> dict:
-        """Parse HTML form structure using the parser agent."""
+        """Parse HTML to extract structured form questions for downstream processing."""
 
         from ..agents.utils import create_multipart_query
 
@@ -55,8 +71,11 @@ class AgentService:
 
         instructions_text = personal_instructions or "No personal instructions provided."
 
-        query = f"""Please analyze the following HTML and extract all form fields.
-Group related fields together when appropriate (e.g., address fields, name fields).
+        query = f"""Please analyze the following HTML and describe every form question with its inputs and context.
+Follow these directives:
+- Group inputs into a single question when they belong together (e.g., name, address, date ranges).
+- Capture helpful metadata such as labels, hints, validation cues, dependencies, and any detected existing values.
+- Use the JSON structure specified in your system instructions and avoid inventing fields not grounded in the HTML.
 
 HTML Code:
 ```html
@@ -91,22 +110,19 @@ Personal Instructions:
     async def generate_form_values(
         self,
         user_id: str,
-        field_groups: list,
+        questions: list,
         visible_text: str,
         clipboard_text: str | None = None,
         user_files: list | None = None,
         quality: str = "medium",
         personal_instructions: Optional[str] = None,
     ) -> dict:
-        """Generate values for form fields using the Form Value Generator Agent."""
-        from ..agents.utils import create_multipart_query
+        """Generate actions for form questions using the Form Value Generator Agent."""
 
-        # Get model configuration for this quality level
         _, step2_model, is_ultra = MODEL_CONFIG.get(quality, MODEL_CONFIG["medium"])
 
-        # Prepare user files for context
-        pdf_files = []
-        images = []
+        pdf_files: List[bytes] = []
+        images: List[bytes] = []
 
         if user_files:
             for file in user_files:
@@ -115,11 +131,18 @@ Personal Instructions:
                 elif file.content_type.startswith("image/"):
                     images.append(file.data)
 
+        total_inputs = sum(len(question.get("inputs") or []) for question in questions)
+
         if is_ultra:
-            logger.info(f"Using ultra processing mode with {step2_model} for {len(field_groups)} field groups")
-            return await self._generate_form_values_ultra(
+            logger.info(
+                "Using ultra processing mode with %s for %d questions (%d inputs)",
+                step2_model,
+                len(questions),
+                total_inputs,
+            )
+            return await self._generate_form_values_ultra_questions(
                 user_id=user_id,
-                field_groups=field_groups,
+                questions=questions,
                 visible_text=visible_text,
                 clipboard_text=clipboard_text,
                 pdf_files=pdf_files,
@@ -128,23 +151,16 @@ Personal Instructions:
                 personal_instructions=personal_instructions,
             )
 
-        flat_fields = []
-        for group in field_groups:
-            if isinstance(group, list):
-                flat_fields.extend(group)
-            else:
-                flat_fields.append(group)
-
         logger.info(
-            "Using regular processing mode with %s for %d fields across %d groups",
+            "Using regular processing mode with %s for %d questions (%d inputs)",
             step2_model,
-            len(flat_fields),
-            len(field_groups),
+            len(questions),
+            total_inputs,
         )
 
-        return await self._generate_form_values_batch(
+        return await self._generate_form_values_batch_questions(
             user_id=user_id,
-            fields=flat_fields,
+            questions=questions,
             visible_text=visible_text,
             clipboard_text=clipboard_text,
             pdf_files=pdf_files,
@@ -153,49 +169,53 @@ Personal Instructions:
             personal_instructions=personal_instructions,
         )
 
-    async def _generate_form_values_batch(
+    async def _generate_form_values_batch_questions(
         self,
         user_id: str,
-        fields: list,
+        questions: list,
         visible_text: str,
         clipboard_text: str | None,
-        pdf_files: list,
-        images: list,
+        pdf_files: List[bytes],
+        images: List[bytes],
         model: str,
         personal_instructions: Optional[str] = None,
     ) -> dict:
-        """Generate values for all fields in a single batch (regular mode)."""
+        """Generate actions for all questions in a single batch (regular mode)."""
+
         from ..agents.utils import create_multipart_query
 
         generator_agent = self.generator_flash if model == "gemini-2.0-flash" else self.generator_pro
 
         instructions_text = personal_instructions or "No personal instructions provided."
 
-        max_field_log = 25
-        for idx, field in enumerate(fields[:max_field_log]):
+        max_question_log = 25
+        for idx, question in enumerate(questions[:max_question_log]):
             logger.info(
-                "Generator batch field[%d]: group_id=%s | label=%s | type=%s | selector=%s",
+                "Generator batch question[%d]: id=%s | type=%s | title=%s | inputs=%d",
                 idx,
-                field.get("group_id"),
-                field.get("label"),
-                field.get("type"),
-                field.get("selector"),
+                question.get("question_id"),
+                question.get("question_type"),
+                question.get("title"),
+                len(question.get("inputs") or []),
             )
 
-        if len(fields) > max_field_log:
-            logger.info("Generator batch field log truncated at %d of %d entries", max_field_log, len(fields))
+        if len(questions) > max_question_log:
+            logger.info(
+                "Generator batch question log truncated at %d of %d entries",
+                max_question_log,
+                len(questions),
+            )
 
-        query = f"""Please generate appropriate values for the following form fields.
+        query = f"""Please generate appropriate actions for the following form questions.
 Follow these directives strictly:
 - Treat session instructions as authoritative guidance.
-- Blend the user's personal instructions with any other context when deciding on values.
-- Provide a best-effort value for every field; only return null when the user explicitly requests a blank or when no responsible inference is possible.
-- For multiple-choice fields, select one of the provided options; for checkboxes output true/false for each required option.
-- Keep values consistent with each other (e.g., same person details across fields) and respect validation hints.
+- Respect existing answers noted via `current_value` fields and avoid redundant actions.
+- Provide best-effort answers when required; only return null when explicitly instructed to leave a question blank or when no responsible answer exists.
+- Keep responses mutually consistent and honor validation hints and constraints.
 
-Form Fields (structured data from HTML analysis):
+Form Questions (structured data from HTML analysis):
 ```json
-{json.dumps(fields, indent=2)}
+{json.dumps(questions, indent=2)}
 ```
 
 Page Visible Text:
@@ -209,14 +229,14 @@ Personal Instructions:
 
 User has uploaded {len(pdf_files)} PDF(s) and {len(images)} image(s) that may contain relevant information.
 
-When information is missing, infer realistic sample data that fits the context of the form. Return null only when explicitly instructed to leave a field empty.
-Please analyze all provided context and generate appropriate values for each field while keeping answers fluent and human-sounding.
+When information is missing, infer realistic sample data that fits the context of the form. Return null only when explicitly instructed to leave a question blank or when no responsible answer exists.
+Analyze every question, decide whether an action is required, and produce concise, human-sounding answers.
 """
 
         content = create_multipart_query(
             query=query,
             pdf_files=pdf_files if pdf_files else None,
-            images=images if images else None
+            images=images if images else None,
         )
 
         result = await generator_agent.run(
@@ -230,21 +250,22 @@ Please analyze all provided context and generate appropriate values for each fie
 
         return result
 
-    async def _generate_form_values_ultra(
+    async def _generate_form_values_ultra_questions(
         self,
         user_id: str,
-        field_groups: list,
+        questions: list,
         visible_text: str,
         clipboard_text: str | None,
-        pdf_files: list,
-        images: list,
+        pdf_files: List[bytes],
+        images: List[bytes],
         model: str,
         personal_instructions: Optional[str] = None,
     ) -> dict:
-        """Generate values for field groups individually with parallel execution (ultra mode)."""
+        """Generate actions question-by-question with parallel execution (ultra mode)."""
+
         from ..agents.utils import create_multipart_query
 
-        logger.info(f"Starting ultra processing for {len(field_groups)} field groups")
+        logger.info("Starting ultra processing for %d questions", len(questions))
 
         generator_agent = self.generator_flash if model == "gemini-2.0-flash" else self.generator_pro
 
@@ -252,37 +273,28 @@ Please analyze all provided context and generate appropriate values for each fie
 
         semaphore = asyncio.Semaphore(10)
 
-        async def process_group(group_idx: int, group_fields: list):
+        async def process_question(question_idx: int, question: dict):
             async with semaphore:
                 try:
-                    logger.info(f"Processing field group {group_idx + 1}/{len(field_groups)}")
+                    logger.info(
+                        "Processing question %d/%d -> id=%s | type=%s | title=%s | inputs=%d",
+                        question_idx + 1,
+                        len(questions),
+                        question.get("question_id"),
+                        question.get("question_type"),
+                        question.get("title"),
+                        len(question.get("inputs") or []),
+                    )
 
-                    for field in group_fields[:10]:
-                        logger.info(
-                            "  - group=%d label=%s | type=%s | selector=%s",
-                            group_idx,
-                            field.get("label"),
-                            field.get("type"),
-                            field.get("selector"),
-                        )
-
-                    if len(group_fields) > 10:
-                        logger.info(
-                            "  Group %d field log truncated at 10 of %d entries",
-                            group_idx,
-                            len(group_fields),
-                        )
-
-                    query = f"""Please generate appropriate values for the following form field group.
+                    question_query = f"""Please generate appropriate actions for the following form question.
 Follow these directives strictly:
 - Treat session instructions as authoritative guidance.
-- Blend the user's personal instructions with any other context when deciding on values.
-- Provide a best-effort value for every field; only return null when the user explicitly requests a blank or when no responsible inference is possible.
-- Keep values consistent with each other and respect validation hints or dependencies.
+- Respect existing answers noted via `current_value` fields and avoid redundant work.
+- Provide the best possible answer consistent with all hints and constraints.
 
-Form Fields:
+Form Question:
 ```json
-{json.dumps(group_fields, indent=2)}
+{json.dumps(question, indent=2)}
 ```
 
 Page Visible Text:
@@ -296,14 +308,14 @@ Personal Instructions:
 
 User has uploaded {len(pdf_files)} PDF(s) and {len(images)} image(s) that may contain relevant information.
 
-When information is missing, infer realistic sample data that fits the context of the form. Return null only when explicitly instructed to leave a field empty.
-Please analyze all provided context and generate appropriate values for each field in this group while keeping answers fluent and human-sounding.
+When information is missing, infer realistic sample data that fits the context of the form. Return null only when explicitly instructed to leave the input unchanged.
+Generate concise, human-sounding answers for the required inputs.
 """
 
                     content = create_multipart_query(
-                        query=query,
+                        query=question_query,
                         pdf_files=pdf_files if pdf_files else None,
-                        images=images if images else None
+                        images=images if images else None,
                     )
 
                     result = await generator_agent.run(
@@ -315,22 +327,44 @@ Please analyze all provided context and generate appropriate values for each fie
                         retry_delay=settings.AGENT_RETRY_DELAY_SECONDS,
                     )
 
-                    logger.info(f"Completed field group {group_idx + 1}/{len(field_groups)}")
+                    logger.info(
+                        "Completed question %d/%d",
+                        question_idx + 1,
+                        len(questions),
+                    )
                     return result
 
-                except Exception as e:
-                    logger.error(f"Error processing field group {group_idx}: {e}")
-                    return {"actions": [{"action_type": "fillText", "selector": "", "value": None, "label": f"Error in group {group_idx}"}]}
+                except Exception as exc:  # noqa: BLE001
+                    logger.error(
+                        "Error processing question %d/%d: %s",
+                        question_idx + 1,
+                        len(questions),
+                        exc,
+                    )
+                    return {
+                        "actions": [
+                            {
+                                "action_type": "fillText",
+                                "selector": "",
+                                "value": None,
+                                "label": f"Error in question {question_idx}",
+                            }
+                        ]
+                    }
 
-        tasks = [process_group(idx, group) for idx, group in enumerate(field_groups)]
+        tasks = [process_question(idx, question) for idx, question in enumerate(questions)]
         results = await asyncio.gather(*tasks)
 
-        combined_actions = []
+        combined_actions: List[dict] = []
         for result in results:
             if result and "actions" in result:
                 combined_actions.extend(result["actions"])
 
-        logger.info(f"Ultra processing complete: {len(combined_actions)} total actions from {len(field_groups)} groups")
+        logger.info(
+            "Ultra processing complete: %d total actions generated from %d questions",
+            len(combined_actions),
+            len(questions),
+        )
 
         return {"actions": combined_actions}
 

@@ -8,13 +8,13 @@ import asyncio
 import base64
 import logging
 import re
-from collections import Counter, OrderedDict
-from typing import Dict, List, Optional, Set, Tuple
+from collections import Counter
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..api.schemas import form as form_schema
-from ..db.crud import files_crud, form_requests_crud, users_crud, document_chunks_crud
+from ..db.crud import files_crud, form_requests_crud, users_crud
 from ..db.database import get_async_db_context
 from .agent_service import AgentService
 from .rag_service import get_rag_service
@@ -67,32 +67,65 @@ def _clean_label_text(text: Optional[str]) -> Optional[str]:
     return _clean_text_block(text, preserve_newlines=False)
 
 
-def _normalize_parser_field(field: dict) -> dict:
-    normalized = dict(field)
+def _normalize_parser_question(question: dict) -> dict:
+    """Sanitize parser output so question metadata and inputs remain consistent."""
 
-    inline_keys = ("label", "name", "placeholder", "aria_label", "title")
+    normalized = dict(question)
+
+    inline_keys = ("title",)
     for key in inline_keys:
         value = normalized.get(key)
         if isinstance(value, str):
             normalized[key] = _clean_label_text(value)
 
-    block_keys = ("description", "surrounding_context", "help_text", "validation_message")
+    block_keys = ("description", "context")
     for key in block_keys:
         value = normalized.get(key)
         if isinstance(value, str):
             normalized[key] = _clean_text_block(value, preserve_newlines=True)
 
-    options = normalized.get("options")
-    if isinstance(options, list):
-        cleaned_options = []
-        for option in options:
-            if isinstance(option, str):
-                cleaned = _clean_label_text(option)
-                if cleaned:
-                    cleaned_options.append(cleaned)
-            else:
-                cleaned_options.append(option)
-        normalized["options"] = cleaned_options
+    hints = normalized.get("hints")
+    if isinstance(hints, list):
+        cleaned_hints = []
+        for hint in hints:
+            if isinstance(hint, str):
+                cleaned_hint = _clean_text_block(hint, preserve_newlines=False)
+                if cleaned_hint:
+                    cleaned_hints.append(cleaned_hint)
+        normalized["hints"] = cleaned_hints
+
+    inputs = normalized.get("inputs") or []
+    cleaned_inputs: List[dict] = []
+    for raw_input in inputs:
+        cleaned_input = _normalize_question_input(raw_input)
+        if cleaned_input:
+            cleaned_inputs.append(cleaned_input)
+    normalized["inputs"] = cleaned_inputs
+
+    return normalized
+
+
+def _normalize_question_input(input_data: Any) -> Optional[dict]:
+    if not isinstance(input_data, dict):
+        return None
+
+    normalized = dict(input_data)
+
+    label_like_keys = ("option_label",)
+    for key in label_like_keys:
+        value = normalized.get(key)
+        if isinstance(value, str):
+            normalized[key] = _clean_label_text(value)
+
+    block_keys = ("current_value", "constraints", "notes")
+    for key in block_keys:
+        value = normalized.get(key)
+        if isinstance(value, str):
+            normalized[key] = _clean_text_block(value, preserve_newlines=True)
+
+    value_hint = normalized.get("value_hint")
+    if isinstance(value_hint, str):
+        normalized["value_hint"] = _clean_text_block(value_hint, preserve_newlines=False)
 
     return normalized
 
@@ -236,9 +269,9 @@ async def analyze_form(
         logger.info("Parser result preview: %s", str(parser_result)[:500])
 
         # Validate parser result
-        if not parser_result or "fields" not in parser_result:
+        if not parser_result or "questions" not in parser_result:
             logger.error("Parser agent returned invalid result: %s", parser_result)
-            logger.error("Validation failed: parser_result is None or missing 'fields' key")
+            logger.error("Validation failed: parser_result is None or missing 'questions' key")
             return form_schema.FormAnalyzeResponse(
                 status="error",
                 message="Failed to parse form structure",
@@ -246,118 +279,84 @@ async def analyze_form(
                 fields_detected=0
             )
 
-        fields = parser_result["fields"]
-        logger.info("Phase 1 complete: Detected %d form fields", len(fields))
+        questions = parser_result["questions"]
+        logger.info("Phase 1 complete: Detected %d form questions", len(questions))
 
-        # Provide richer diagnostics about the detected fields to help debug parsing issues
-        normalized_fields = []
-        for field in fields:
+        normalized_questions: List[dict] = []
+        total_inputs = 0
+        for question in questions:
             normalized: Optional[dict] = None
-            if hasattr(field, "model_dump"):
-                normalized = field.model_dump()
-            elif isinstance(field, dict):
-                normalized = dict(field)
+            if hasattr(question, "model_dump"):
+                normalized = question.model_dump()
+            elif isinstance(question, dict):
+                normalized = dict(question)
             else:
-                logger.warning("Unexpected field type returned from parser: %s", type(field))
+                logger.warning("Unexpected question type returned from parser: %s", type(question))
                 continue
 
-            normalized = _normalize_parser_field(normalized)
-            normalized_fields.append(normalized)
+            normalized = _normalize_parser_question(normalized)
+            total_inputs += len(normalized.get("inputs") or [])
+            normalized_questions.append(normalized)
 
-        if normalized_fields:
+        if normalized_questions:
             summaries = [
-                nf.get("label")
-                or nf.get("name")
-                or nf.get("selector")
-                or f"field_{idx}"
-                for idx, nf in enumerate(normalized_fields[:5])
+                (
+                    nq.get("title")
+                    or nq.get("question_id")
+                    or f"question_{idx}"
+                )
+                for idx, nq in enumerate(normalized_questions[:5])
             ]
-            logger.info("Fields summary: %s", summaries)
+            logger.info("Questions summary: %s", summaries)
 
-            type_counter = Counter(f.get("type", "unknown") for f in normalized_fields)
-            logger.info("Field type distribution: %s", dict(type_counter))
+            type_counter = Counter(q.get("question_type", "unknown") for q in normalized_questions)
+            logger.info("Question type distribution: %s", dict(type_counter))
 
-            max_logged_fields = 25
-            for idx, field_data in enumerate(normalized_fields[:max_logged_fields]):
-                selector = field_data.get("selector")
-                label = field_data.get("label")
-                summary = {
-                    "selector": selector,
-                    "label": label,
-                    "type": field_data.get("type"),
-                    "required": field_data.get("required"),
-                    "has_placeholder": bool(field_data.get("placeholder")),
-                    "options_count": len(field_data.get("options", []) or []),
-                    "description_len": len(field_data.get("description") or ""),
-                    "context_len": len(field_data.get("surrounding_context") or ""),
-                }
-                logger.info("Field[%d]: %s", idx, summary)
-
-            if len(normalized_fields) > max_logged_fields:
+            max_logged_questions = 20
+            for idx, question_data in enumerate(normalized_questions[:max_logged_questions]):
                 logger.info(
-                    "Additional fields omitted from log: showing %d of %d entries",
-                    max_logged_fields,
-                    len(normalized_fields),
+                    "Question[%d]: id=%s | type=%s | title=%s | inputs=%d",
+                    idx,
+                    question_data.get("question_id"),
+                    question_data.get("question_type"),
+                    question_data.get("title"),
+                    len(question_data.get("inputs") or []),
                 )
 
-        # If no fields detected, return early
-        if len(fields) == 0:
-            logger.info("No fields detected, returning early with success status")
+                sample_inputs = question_data.get("inputs") or []
+                for input_idx, input_data in enumerate(sample_inputs[:5]):
+                    logger.info(
+                        "  - input[%d]: id=%s | type=%s | selector=%s | option_label=%s",
+                        input_idx,
+                        input_data.get("input_id"),
+                        input_data.get("input_type"),
+                        input_data.get("selector"),
+                        input_data.get("option_label"),
+                    )
+
+            if len(normalized_questions) > max_logged_questions:
+                logger.info(
+                    "Additional questions omitted from log: showing %d of %d entries",
+                    max_logged_questions,
+                    len(normalized_questions),
+                )
+
+        # If no questions detected, return early
+        if len(normalized_questions) == 0:
+            logger.info("No questions detected, returning early with success status")
             return form_schema.FormAnalyzeResponse(
                 status="success",
-                message="No form fields detected on this page",
+                message="No form questions detected on this page",
                 actions=[],
                 fields_detected=0
             )
 
-        # ===== PHASE 2: Generate Field Values =====
-        logger.info("Phase 2: Generating values for %d fields", len(fields))
-
-        field_groups = build_field_groups(normalized_fields)
-        total_group_fields = sum(len(group) for group in field_groups)
+        # ===== PHASE 2: Generate Question Actions =====
         logger.info(
-            "Prepared %d field groups containing %d total fields for value generation",
-            len(field_groups),
-            total_group_fields,
+            "Phase 2: Generating actions for %d questions (%d inputs)",
+            len(normalized_questions),
+            total_inputs,
         )
-
-        max_group_log = 15
-        for group_idx, group in enumerate(field_groups[:max_group_log]):
-            if not group:
-                continue
-
-            primary = group[0]
-            group_id = primary.get("group_id", "<none>")
-            labels = {
-                (field.get("label") or field.get("name") or field.get("selector") or f"field_{idx}")
-                for idx, field in enumerate(group)
-            }
-            types = {field.get("type", "unknown") for field in group}
-            logger.info(
-                "Field group %d (group_id=%s) -> labels=%s, types=%s, size=%d",
-                group_idx,
-                group_id,
-                sorted(labels),
-                sorted(types),
-                len(group),
-            )
-
-            for field in group:
-                logger.info(
-                    "  - selector=%s | type=%s | label=%s | required=%s | options=%d",
-                    field.get("selector"),
-                    field.get("type"),
-                    field.get("label"),
-                    field.get("required"),
-                    len(field.get("options") or []),
-                )
-
-        if len(field_groups) > max_group_log:
-            logger.info(
-                "Field groups truncated in logs: showing %d of %d entries",
-                max_group_log,
-                len(field_groups),
-            )
 
         # Get user context - use RAG or direct depending on file count/size
         logger.info("Fetching user context...")
@@ -367,8 +366,8 @@ async def analyze_form(
         if use_rag:
             logger.info("Using RAG for context retrieval")
 
-            # Build search query from field labels
-            query = build_search_query_from_fields(normalized_fields)
+            # Build search query from question titles
+            query = build_search_query_from_questions(normalized_questions)
             logger.info(f"RAG search query: {query[:100]}...")
 
             # Retrieve relevant chunks
@@ -385,7 +384,7 @@ async def analyze_form(
             logger.info("Calling Form Value Generator Agent with RAG context...")
             generator_result = await agent_service.generate_form_values(
                 user_id=user_id,
-                field_groups=field_groups,
+                questions=normalized_questions,
                 visible_text=visible_clean,
                 clipboard_text=clipboard_clean,
                 user_files=None,  # Will use text_context and image_context instead
@@ -404,9 +403,10 @@ async def analyze_form(
             # Call Form Value Generator Agent with direct files
             logger.info("Calling Form Value Generator Agent with direct context...")
             logger.info(
-                "Generator input - user_id: %s, fields count: %d, visible_text length: %d, clipboard length: %d, user_files count: %d",
+                "Generator input - user_id: %s, questions=%d, inputs=%d, visible_text length: %d, clipboard length: %d, user_files count: %d",
                 user_id,
-                total_group_fields,
+                len(normalized_questions),
+                total_inputs,
                 len(visible_clean),
                 len(clipboard_clean),
                 len(user_files),
@@ -414,7 +414,7 @@ async def analyze_form(
 
             generator_result = await agent_service.generate_form_values(
                 user_id=user_id,
-                field_groups=field_groups,
+                questions=normalized_questions,
                 visible_text=visible_clean,
                 clipboard_text=clipboard_clean,
                 user_files=user_files,
@@ -437,7 +437,7 @@ async def analyze_form(
                 status="error",
                 message="Failed to generate form values",
                 actions=[],
-                fields_detected=len(fields)
+                fields_detected=total_inputs
             )
 
         # Convert to FormAction objects
@@ -490,15 +490,16 @@ async def analyze_form(
 
         # Return success response
         logger.info(
-            "=== Form analysis complete: %d fields, %d actions ===",
-            len(fields),
+            "=== Form analysis complete: %d questions / %d inputs, %d actions ===",
+            len(normalized_questions),
+            total_inputs,
             len(optimized_actions),
         )
         return form_schema.FormAnalyzeResponse(
             status="success",
-            message=f"Successfully analyzed form with {len(fields)} fields",
+            message=f"Successfully analyzed form with {len(normalized_questions)} questions ({total_inputs} inputs)",
             actions=optimized_actions,
-            fields_detected=len(fields)
+            fields_detected=total_inputs
         )
 
     except Exception as e:
@@ -537,40 +538,6 @@ def map_action_type(agent_action_type: str) -> str:
     }
 
     return mapping.get(agent_action_type, "fillText")  # Default to fillText
-
-
-def build_field_groups(fields: List[dict]) -> List[List[dict]]:
-    """Group parsed fields by their shared group_id for downstream processing.
-
-    Ensures a stable identifier exists for every field. When the parser omits
-    `group_id`, the function synthesizes a unique value so those controls remain
-    isolated in their own groups.
-    """
-
-    groups: "OrderedDict[str, List[dict]]" = OrderedDict()
-    fallback_counter = 0
-
-    for field in fields:
-        if not isinstance(field, dict):
-            continue
-
-        field_copy = dict(field)
-        group_id = field_copy.get("group_id")
-
-        if not group_id:
-            selector = field_copy.get("selector")
-            if selector:
-                group_id = f"selector::{selector}"
-            else:
-                group_id = f"field::{fallback_counter}"
-                fallback_counter += 1
-
-            field_copy["group_id"] = group_id
-            logger.debug("Synthesized group_id '%s' for selector '%s'", group_id, selector)
-
-        groups.setdefault(group_id, []).append(field_copy)
-
-    return list(groups.values())
 
 
 def optimize_actions(actions: List[form_schema.FormAction]) -> List[form_schema.FormAction]:
@@ -717,6 +684,9 @@ async def process_form_analysis_async(
                 except Exception as e:
                     logger.warning("Failed to decode screenshot %d: %s", idx, e)
 
+        normalized_questions_async: List[dict] = []
+        async_total_inputs = 0
+
         async with get_async_db_context() as db:
             # Call HTML Form Parser Agent
             parser_result = await agent_service.parse_form_structure(
@@ -730,65 +700,57 @@ async def process_form_analysis_async(
             )
 
             # Validate parser result
-            if not parser_result or "fields" not in parser_result:
+            if not parser_result or "questions" not in parser_result:
                 logger.error("[AsyncTask %s] Parser agent returned invalid result", request_id)
                 await form_requests_crud.update_form_request_status(
                     db, request_id, "failed", error_message="Failed to parse form structure"
                 )
                 return
 
-            fields = parser_result["fields"]
+            questions = parser_result["questions"]
             logger.info(
-                "[AsyncTask %s] Phase 1 complete: Detected %d form fields",
+                "[AsyncTask %s] Phase 1 complete: Detected %d form questions",
                 request_id,
-                len(fields),
+                len(questions),
             )
 
-            # If no fields detected, mark as completed with 0 actions
-            if len(fields) == 0:
-                logger.info("[AsyncTask %s] No fields detected, marking as completed", request_id)
+            # If no questions detected, mark as completed with 0 actions
+            if len(questions) == 0:
+                logger.info("[AsyncTask %s] No questions detected, marking as completed", request_id)
                 await form_requests_crud.update_form_request_status(
                     db, request_id, "completed", fields_detected=0
                 )
                 return
 
-            normalized_fields_async = []
-            for index, field in enumerate(fields):
-                raw_field: Optional[dict] = None
-                if hasattr(field, "model_dump"):
-                    raw_field = field.model_dump()
-                elif isinstance(field, dict):
-                    raw_field = dict(field)
+            for index, question in enumerate(questions):
+                raw_question: Optional[dict] = None
+                if hasattr(question, "model_dump"):
+                    raw_question = question.model_dump()
+                elif isinstance(question, dict):
+                    raw_question = dict(question)
                 else:
                     logger.warning(
-                        "[AsyncTask %s] Unexpected field type returned from parser: %s",
+                        "[AsyncTask %s] Unexpected question type returned from parser: %s",
                         request_id,
-                        type(field),
+                        type(question),
                     )
-                if raw_field is None:
+                if raw_question is None:
                     continue
 
-                normalized_field = _normalize_parser_field(raw_field)
-                normalized_fields_async.append(normalized_field)
+                normalized_question = _normalize_parser_question(raw_question)
+                async_total_inputs += len(normalized_question.get("inputs") or [])
+                normalized_questions_async.append(normalized_question)
 
-                if index < 25:
+                if index < 20:
                     logger.info(
-                        "[AsyncTask %s] Field[%d]: selector=%s | label=%s | type=%s",
+                        "[AsyncTask %s] Question[%d]: id=%s | type=%s | title=%s | inputs=%d",
                         request_id,
                         index,
-                        normalized_field.get("selector"),
-                        normalized_field.get("label"),
-                        normalized_field.get("type"),
+                        normalized_question.get("question_id"),
+                        normalized_question.get("question_type"),
+                        normalized_question.get("title"),
+                        len(normalized_question.get("inputs") or []),
                     )
-
-            async_field_groups = build_field_groups(normalized_fields_async)
-            async_total_group_fields = sum(len(group) for group in async_field_groups)
-            logger.info(
-                "[AsyncTask %s] Prepared %d field groups containing %d total fields",
-                request_id,
-                len(async_field_groups),
-                async_total_group_fields,
-            )
 
         # ===== PHASE 2: Generate Field Values =====
         async with get_async_db_context() as db:
@@ -799,9 +761,10 @@ async def process_form_analysis_async(
             logger.info("[AsyncTask %s] Status updated to 'processing_step_2'", request_id)
 
             logger.info(
-                "[AsyncTask %s] Phase 2: Generating values for %d fields",
+                "[AsyncTask %s] Phase 2: Generating values for %d questions (%d inputs)",
                 request_id,
-                async_total_group_fields,
+                len(normalized_questions_async),
+                async_total_inputs,
             )
 
             # Get user context - use RAG or direct depending on file count/size
@@ -812,8 +775,8 @@ async def process_form_analysis_async(
             if use_rag:
                 logger.info("[AsyncTask %s] Using RAG for context retrieval", request_id)
 
-                # Build search query from field labels
-                query = build_search_query_from_fields(normalized_fields_async)
+                # Build search query from question titles
+                query = build_search_query_from_questions(normalized_questions_async)
                 logger.info("[AsyncTask %s] RAG search query: %s...", request_id, query[:100])
 
                 # Retrieve relevant chunks
@@ -834,7 +797,7 @@ async def process_form_analysis_async(
                 # Call Form Value Generator Agent with RAG context
                 generator_result = await agent_service.generate_form_values(
                     user_id=user_id,
-                    field_groups=async_field_groups,
+                    questions=normalized_questions_async,
                     visible_text=visible_clean,
                     clipboard_text=clipboard_clean,
                     user_files=None,  # Will use text_context and image_context instead
@@ -855,7 +818,7 @@ async def process_form_analysis_async(
                 # Call Form Value Generator Agent with direct files
                 generator_result = await agent_service.generate_form_values(
                     user_id=user_id,
-                    field_groups=async_field_groups,
+                    questions=normalized_questions_async,
                     visible_text=visible_clean,
                     clipboard_text=clipboard_clean,
                     user_files=user_files,
@@ -918,7 +881,7 @@ async def process_form_analysis_async(
                 db,
                 request_id,
                 "completed",
-                fields_detected=len(fields)
+                fields_detected=async_total_inputs
             )
             logger.info("[AsyncTask %s] Status updated to 'completed'", request_id)
 
@@ -943,20 +906,17 @@ async def process_form_analysis_async(
         _active_analysis_tasks.pop(request_id, None)
 
 
-def build_search_query_from_fields(fields: List[dict]) -> str:
-    """
-    Build a search query from form field labels for RAG retrieval.
+def build_search_query_from_questions(questions: List[dict]) -> str:
+    """Build a search query from question titles and descriptions for RAG retrieval."""
 
-    Args:
-        fields: List of form field dictionaries
+    phrases: List[str] = []
+    for question in questions[:15]:  # Use first 15 questions for context search
+        title = question.get("title") or ""
+        description = question.get("description") or ""
 
-    Returns:
-        Search query string
-    """
-    labels = []
-    for field in fields[:15]:  # Use first 15 fields for query
-        label = field.get("label") or field.get("name") or ""
-        if label:
-            labels.append(label)
+        if title:
+            phrases.append(title)
+        if description:
+            phrases.append(description)
 
-    return " ".join(labels) if labels else "form information"
+    return " ".join(phrases).strip() or "form information"
