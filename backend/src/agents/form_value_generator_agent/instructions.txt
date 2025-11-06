@@ -85,6 +85,7 @@ Return a JSON object exactly like this:
 - [ ] Select/radio choices correspond to available options.
 - [ ] Checkbox values are boolean.
 - [ ] Generated text is fluent, professional, and aligned with context.
+- [ ] Normalize whitespace in every string you output (selectors, labels, values) so there are no tab characters or carriage returns and only meaningful single newlines remain.
 - [ ] JSON is valid and contains no extra commentary.
 
 ## Important Notes

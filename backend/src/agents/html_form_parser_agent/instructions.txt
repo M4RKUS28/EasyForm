@@ -76,5 +76,6 @@ If screenshots are provided, use them to:
 8. Include all visible context that might help understand what data should be entered
 9. When fields use complex custom widgets that do not map cleanly to standard types, describe the interaction in the description and set the selector to the best clickable node. If no standard type fits, set the `type` to `custom` and mention that a click fallback is required.
 10. Always populate `group_id` so that all options of the same question share the same identifier. If nothing suitable exists, create a deterministic synthetic id (e.g., `group_<hash_of_selector_path>`).
+11. Normalize every string you output (labels, descriptions, options, group ids) so there are no tab characters or carriage returns—collapse repeated spaces and keep only meaningful single newlines.
 
 ! IGNORE SUBMIT-FIELDS LIKE SUBMIT-BUTTONS

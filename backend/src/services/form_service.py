@@ -48,26 +48,39 @@ def _sanitize_prompt_text(text: Optional[str], *, collapse_whitespace: bool = Tr
     return sanitized
 
 
+def _clean_text_block(text: Optional[str], *, preserve_newlines: bool) -> Optional[str]:
+    if text is None:
+        return None
+    text_str = str(text)
+    normalized = text_str.replace("\r\n", "\n").replace("\r", "\n")
+    normalized = normalized.replace("\t", " ").replace("\f", " ").replace("\u00a0", " ")
+    if preserve_newlines:
+        normalized = re.sub(r"[ \u00a0]{2,}", " ", normalized)
+        normalized = re.sub(r"[ \u00a0]*\n[ \u00a0]*", "\n", normalized)
+        normalized = re.sub(r"\n{3,}", "\n\n", normalized)
+    else:
+        normalized = re.sub(r"\s+", " ", normalized)
+    return normalized.strip()
+
+
 def _clean_label_text(text: Optional[str]) -> Optional[str]:
-    if text is None or not isinstance(text, str):
-        return None if text is None else str(text)
-    cleaned = re.sub(r"\s+", " ", text)
-    return cleaned.strip()
+    return _clean_text_block(text, preserve_newlines=False)
 
 
 def _normalize_parser_field(field: dict) -> dict:
     normalized = dict(field)
 
-    for key in ("label", "name"):
+    inline_keys = ("label", "name", "placeholder", "aria_label", "title")
+    for key in inline_keys:
         value = normalized.get(key)
         if isinstance(value, str):
             normalized[key] = _clean_label_text(value)
 
-    description = normalized.get("description")
-    if isinstance(description, str):
-        desc = description.replace("\r\n", "\n").replace("\r", "\n")
-        desc = re.sub(r"\n{3,}", "\n\n", desc)
-        normalized["description"] = desc.strip()
+    block_keys = ("description", "surrounding_context", "help_text", "validation_message")
+    for key in block_keys:
+        value = normalized.get(key)
+        if isinstance(value, str):
+            normalized[key] = _clean_text_block(value, preserve_newlines=True)
 
     options = normalized.get("options")
     if isinstance(options, list):
@@ -440,6 +453,8 @@ async def analyze_form(
                 logger.info("Action %d: Mapped type '%s' -> '%s'", idx, original_type, action_type)
 
                 value = action_data.get("value")
+                if isinstance(value, str):
+                    value = _clean_text_block(value, preserve_newlines=True)
                 requires_value = {"fillText", "setText", "selectDropdown", "selectCheckbox"}
                 if action_type in requires_value and value is None:
                     logger.info(
@@ -451,10 +466,13 @@ async def analyze_form(
                     continue
 
                 label = _clean_label_text(action_data.get("label"))
+                selector = action_data.get("selector", "")
+                if isinstance(selector, str):
+                    selector = selector.strip()
 
                 action = form_schema.FormAction(
                     action_type=action_type,
-                    selector=action_data.get("selector", ""),
+                    selector=selector,
                     value=value,
                     label=label or ""
                 )
@@ -735,16 +753,32 @@ async def process_form_analysis_async(
                 return
 
             normalized_fields_async = []
-            for field in fields:
+            for index, field in enumerate(fields):
+                raw_field: Optional[dict] = None
                 if hasattr(field, "model_dump"):
-                    normalized_fields_async.append(field.model_dump())
+                    raw_field = field.model_dump()
                 elif isinstance(field, dict):
-                    normalized_fields_async.append(dict(field))
+                    raw_field = dict(field)
                 else:
                     logger.warning(
                         "[AsyncTask %s] Unexpected field type returned from parser: %s",
                         request_id,
                         type(field),
+                    )
+                if raw_field is None:
+                    continue
+
+                normalized_field = _normalize_parser_field(raw_field)
+                normalized_fields_async.append(normalized_field)
+
+                if index < 25:
+                    logger.info(
+                        "[AsyncTask %s] Field[%d]: selector=%s | label=%s | type=%s",
+                        request_id,
+                        index,
+                        normalized_field.get("selector"),
+                        normalized_field.get("label"),
+                        normalized_field.get("type"),
                     )
 
             async_field_groups = build_field_groups(normalized_fields_async)
