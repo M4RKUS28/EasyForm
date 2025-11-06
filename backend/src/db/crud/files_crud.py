@@ -119,3 +119,31 @@ async def get_user_total_storage_size(
     )
     total_size = result.scalar()
     return total_size if total_size else 0
+
+
+async def update_file_status(
+    db: AsyncSession,
+    file_id: str,
+    status: str
+) -> bool:
+    """Update file processing status."""
+    file = await get_file_by_id(db, file_id)
+    if file:
+        file.processing_status = status
+        await db.commit()
+        return True
+    return False
+
+
+async def update_file_page_count(
+    db: AsyncSession,
+    file_id: str,
+    page_count: int
+) -> bool:
+    """Update PDF page count."""
+    file = await get_file_by_id(db, file_id)
+    if file:
+        file.page_count = page_count
+        await db.commit()
+        return True
+    return False

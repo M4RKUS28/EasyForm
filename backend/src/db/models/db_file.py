@@ -25,5 +25,9 @@ class File(Base):
     data = Column(LargeBinary(length=2**30), nullable=False)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
 
+    # RAG-related fields
+    page_count = Column(Integer, nullable=True)  # For PDFs, calculated during processing
+    processing_status = Column(String(50), nullable=True, default="pending")  # pending, processing, completed, failed
+
     # Relationship to user
     # user = relationship("User", back_populates="files")
