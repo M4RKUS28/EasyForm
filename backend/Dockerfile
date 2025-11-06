@@ -13,6 +13,14 @@ RUN pip wheel --no-cache-dir --no-deps --wheel-dir /usr/src/app/wheels -r requir
 # ========== FINAL IMAGE ==========
 FROM python:3.12-slim
 
+# Install system dependencies for RAG
+# - tesseract-ocr: OCR engine for extracting text from images
+# - tesseract-ocr-eng: English language data for Tesseract
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    tesseract-ocr \
+    tesseract-ocr-eng \
+    && rm -rf /var/lib/apt/lists/*
+
 # Security Best Practice: non-root user
 RUN addgroup --system app && adduser --system --group app --home /home/app --shell /bin/bash
 
