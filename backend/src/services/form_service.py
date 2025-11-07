@@ -752,16 +752,16 @@ async def process_form_analysis_async(
                         len(normalized_question.get("inputs") or []),
                     )
 
-        # ===== PHASE 2: Generate Field Values =====
+        # ===== PHASE 2: Generate Solutions =====
         async with get_async_db_context() as db:
-            # Update status to processing_step_2 (generating field values)
+            # Update status to processing_step_2 (generating solutions)
             await form_requests_crud.update_form_request_status(
                 db, request_id, "processing_step_2"
             )
-            logger.info("[AsyncTask %s] Status updated to 'processing_step_2'", request_id)
+            logger.info("[AsyncTask %s] Status updated to 'processing_step_2' (generating solutions)", request_id)
 
             logger.info(
-                "[AsyncTask %s] Phase 2: Generating values for %d questions (%d inputs)",
+                "[AsyncTask %s] Phase 2: Generating solutions for %d questions (%d inputs)",
                 request_id,
                 len(normalized_questions_async),
                 async_total_inputs,
@@ -794,8 +794,8 @@ async def process_form_analysis_async(
                     len(context['image_chunks'])
                 )
 
-                # Call Form Value Generator Agent with RAG context
-                generator_result = await agent_service.generate_form_values(
+                # Call Solution Generator Agent with RAG context
+                question_solutions = await agent_service.generate_solutions_per_question(
                     user_id=user_id,
                     questions=normalized_questions_async,
                     visible_text=visible_clean,
@@ -815,8 +815,8 @@ async def process_form_analysis_async(
                     len(user_files),
                 )
 
-                # Call Form Value Generator Agent with direct files
-                generator_result = await agent_service.generate_form_values(
+                # Call Solution Generator Agent with direct files
+                question_solutions = await agent_service.generate_solutions_per_question(
                     user_id=user_id,
                     questions=normalized_questions_async,
                     visible_text=visible_clean,
@@ -826,16 +826,38 @@ async def process_form_analysis_async(
                     personal_instructions=instructions_clean,
                 )
 
+            logger.info(
+                "[AsyncTask %s] Phase 2 complete: Generated %d solutions",
+                request_id,
+                len(question_solutions),
+            )
+
+        # ===== PHASE 3: Generate Actions from Solutions =====
+        async with get_async_db_context() as db:
+            logger.info(
+                "[AsyncTask %s] Phase 3: Converting %d solutions to actions",
+                request_id,
+                len(question_solutions),
+            )
+
+            # Call Action Generator Agent (with batching)
+            generator_result = await agent_service.generate_actions_from_solutions(
+                user_id=user_id,
+                question_solution_pairs=question_solutions,
+                quality=request_data.quality,
+                batch_size=10,
+            )
+
             # Validate generator result
             if not generator_result or "actions" not in generator_result:
-                logger.error("[AsyncTask %s] Generator agent returned invalid result", request_id)
+                logger.error("[AsyncTask %s] Action generator returned invalid result", request_id)
                 await form_requests_crud.update_form_request_status(
-                    db, request_id, "failed", error_message="Failed to generate form values"
+                    db, request_id, "failed", error_message="Failed to generate actions from solutions"
                 )
                 return
 
             logger.info(
-                "[AsyncTask %s] Phase 2 complete: Generated %d actions",
+                "[AsyncTask %s] Phase 3 complete: Generated %d actions",
                 request_id,
                 len(generator_result["actions"]),
             )
