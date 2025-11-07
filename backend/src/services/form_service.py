@@ -800,9 +800,11 @@ async def process_form_analysis_async(
                     questions=normalized_questions_async,
                     visible_text=visible_clean,
                     clipboard_text=clipboard_clean,
-                    user_files=None,  # Will use text_context and image_context instead
+                    user_files=None,  # Using RAG context instead
                     quality=request_data.quality,
                     personal_instructions=instructions_clean,
+                    rag_context=context,  # Pass RAG-retrieved text and image chunks
+                    screenshots=screenshot_bytes,  # Pass screenshots directly
                 )
             else:
                 logger.info("[AsyncTask %s] Using direct context (all files)", request_id)

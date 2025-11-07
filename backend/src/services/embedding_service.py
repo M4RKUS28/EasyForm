@@ -1,11 +1,13 @@
 """
 Service for generating embeddings and managing ChromaDB vector store.
 """
+import io
 import logging
 from typing import List, Dict, Optional
 import chromadb
 from chromadb.config import Settings
 import google.generativeai as genai
+from PIL import Image
 
 from ..config import settings as app_settings
 
@@ -62,26 +64,28 @@ class EmbeddingService:
 
     async def embed_image(self, image_bytes: bytes, caption: Optional[str] = None) -> List[float]:
         """
-        Generate embedding for image using Google's multimodal embedding.
+        Generate embedding for image using Google's text-embedding model with OCR caption.
 
-        For now, we'll use the OCR text caption. In the future, this can be
-        upgraded to use true multimodal embeddings.
+        We use text embeddings (768 dim) for both text and images to keep them in the
+        same embedding space, enabling unified semantic search. The OCR caption provides
+        the text representation of the image content.
 
         Args:
-            image_bytes: Image bytes
-            caption: Optional text caption (OCR text)
+            image_bytes: Image bytes (stored for later retrieval)
+            caption: Text caption from OCR (required for embedding)
 
         Returns:
             Embedding vector (768 dimensions)
         """
         try:
-            # For now, use OCR text if available
-            if caption:
+            # Use OCR text caption for embedding
+            # This keeps images in the same 768-dim space as text chunks
+            if caption and caption.strip():
                 return await self.embed_text(caption)
             else:
-                # Return zero vector or skip
-                logger.warning("Image embedding without caption not yet implemented")
-                return [0.0] * 768  # Match text embedding dimensions
+                # If no caption, create a generic image marker
+                logger.warning("Image has no OCR caption, using generic marker")
+                return await self.embed_text("[Image content]")
 
         except Exception as e:
             logger.error(f"Image embedding failed: {e}", exc_info=True)

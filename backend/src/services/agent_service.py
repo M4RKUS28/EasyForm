@@ -327,25 +327,51 @@ Generate concise, human-sounding answers for the required inputs.
         user_files: list | None = None,
         quality: str = DEFAULT_QUALITY,
         personal_instructions: Optional[str] = None,
+        rag_context: Optional[Dict[str, List]] = None,
+        screenshots: Optional[List[bytes]] = None,
     ) -> List[Dict]:
         """
         Generate solutions for each question using Solution Generator Agent.
         Returns a list of dicts with question_id and solution.
+
+        Args:
+            user_id: User ID
+            questions: List of questions from parser
+            visible_text: Visible page text
+            clipboard_text: Session instructions
+            user_files: User uploaded files (direct mode)
+            quality: Quality profile
+            personal_instructions: User personal instructions
+            rag_context: RAG retrieved context (dict with 'text_chunks' and 'image_chunks')
+            screenshots: Screenshots from browser (passed directly, not via RAG)
         """
         from ..agents.utils import create_multipart_query
 
         profile = MODEL_CONFIG.get(quality, MODEL_CONFIG[DEFAULT_QUALITY])
         solution_model = profile.solution_model
 
+        # Collect context sources
         pdf_files: List[bytes] = []
         images: List[bytes] = []
 
+        # Option 1: Direct file context (when not using RAG)
         if user_files:
             for file in user_files:
                 if file.content_type == "application/pdf":
                     pdf_files.append(file.data)
                 elif file.content_type.startswith("image/"):
                     images.append(file.data)
+
+        # Option 2: RAG retrieved images (when using RAG)
+        if rag_context:
+            rag_images = rag_context.get("image_chunks", [])
+            for img_chunk in rag_images:
+                if "image_bytes" in img_chunk and img_chunk["image_bytes"]:
+                    images.append(img_chunk["image_bytes"])
+
+        # Option 3: Screenshots (always passed directly to models, never through RAG)
+        if screenshots:
+            images.extend(screenshots)
 
         logger.info(
             "Generating solutions for %d questions using %s",
@@ -370,6 +396,29 @@ Generate concise, human-sounding answers for the required inputs.
                         question.get("title"),
                     )
 
+                    # Build context section based on RAG or direct files
+                    context_info = []
+
+                    if rag_context:
+                        # RAG mode: Include retrieved text chunks
+                        text_chunks = rag_context.get("text_chunks", [])
+                        if text_chunks:
+                            context_info.append(f"Retrieved {len(text_chunks)} relevant text sections from your documents:")
+                            for i, chunk in enumerate(text_chunks[:5], 1):  # Limit to top 5 chunks
+                                source = chunk.get("source", "Unknown")
+                                content = chunk.get("content", "")[:500]  # Truncate long chunks
+                                context_info.append(f"{i}. From {source}:\n{content}\n")
+
+                        image_count = len(rag_context.get("image_chunks", []))
+                        if image_count > 0:
+                            context_info.append(f"Retrieved {image_count} relevant image(s) from your documents (shown below).")
+                    else:
+                        # Direct mode
+                        if len(pdf_files) > 0 or len(images) > 0:
+                            context_info.append(f"User has uploaded {len(pdf_files)} PDF(s) and {len(images)} image(s) that may contain relevant information.")
+
+                    context_section = "\n".join(context_info) if context_info else "No uploaded documents available."
+
                     solution_query = f"""Analyze the following form question and provide an appropriate solution/answer.
 
 Form Question:
@@ -386,7 +435,8 @@ Session Instructions (highest priority):
 Personal Instructions:
 {instructions_text}
 
-User has uploaded {len(pdf_files)} PDF(s) and {len(images)} image(s) that may contain relevant information.
+Document Context:
+{context_section}
 
 Provide only the solution/answer as plain text. Do not include explanations unless necessary.
 """
