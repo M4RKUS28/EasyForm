@@ -1193,7 +1193,7 @@ async def _generate_form_values_batch(
     """Generate values with RAG context."""
     from ..agents.utils import create_multipart_query
 
-    generator_agent = self.generator_flash if model == "gemini-2.0-flash" else self.generator_pro
+    generator_agent = self.generator_flash if model == "gemini-2.5-flash" else self.generator_pro
 
     instructions_text = personal_instructions or "No personal instructions provided."
 
