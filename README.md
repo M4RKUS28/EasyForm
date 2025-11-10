@@ -1,6 +1,6 @@
 # EasyForm
 
-AI-powered form filling across the web. EasyForm combines a modern React frontend, a FastAPI backend with multi-agent form analysis, and a Manifest V3 browser extension that analyzes pages and fills forms automatically.
+AI-powered form filling across the web. EasyForm combines a modern React frontend, a FastAPI backend with multi-agent form analysis, and a Manifest V3 browser extension that analyzes pages and fills forms automatically from a hiuge amount of Data.
 
 Visit the API docs after running the backend at /api/docs. Health check is at /api/health.
 
