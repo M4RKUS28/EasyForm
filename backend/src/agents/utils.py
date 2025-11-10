@@ -13,7 +13,7 @@
 # limitations under the License.
 
 import os
-from typing import List
+from typing import List, Optional
 
 from google.genai import types
 import logging
@@ -44,9 +44,8 @@ def load_instruction_from_file(
 ) -> str:
     """Reads instruction text from a single file relative to this script."""
     instruction = default_instruction
+    filepath = os.path.join(os.path.dirname(__file__), filename)
     try:
-        # Construct path relative to the current script file (__file__)
-        filepath = os.path.join(os.path.dirname(__file__), filename)
         with open(filepath, "r", encoding="utf-8") as f:
             instruction = f.read()
             logger.info("Successfully loaded instruction from %s", filename)
@@ -71,8 +70,8 @@ def load_instructions_from_files(filenames: List[str], separator: str = "\n\n---
     combined_instructions = []
 
     for filename in filenames:
+        filepath = os.path.join(os.path.dirname(__file__), filename)
         try:
-            filepath = os.path.join(os.path.dirname(__file__), filename)
             with open(filepath, "r", encoding="utf-8") as f:
                 content = f.read().strip()
                 combined_instructions.append(f"# {os.path.basename(filename)}\n\n{content}")
@@ -88,9 +87,9 @@ def load_instructions_from_files(filenames: List[str], separator: str = "\n\n---
 
 def create_multipart_query(
     query: str,
-    pdf_files: List[bytes] = None,
-    images: List[bytes] = None,
-    screenshots: List[bytes] = None
+    pdf_files: Optional[List[bytes]] = None,
+    images: Optional[List[bytes]] = None,
+    screenshots: Optional[List[bytes]] = None
 ) -> types.Content:
     """
     Creates a multi-part query with text, PDFs, images, and screenshots.

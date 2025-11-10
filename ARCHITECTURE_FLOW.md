@@ -61,7 +61,7 @@ Structured list of questions, each containing:
 
 **Purpose**: Generate natural-language answers for each form question using user context
 
-**Location**: [`agent_service.py::generate_solutions_per_question`](backend/src/services/agent_service.py#L321-L497)
+**Location**: [`form_service.py::process_form_analysis_async`](backend/src/services/form_service.py#L736-L870) orchestrates retrieval, [`agent_service.py::generate_solutions_per_question`](backend/src/services/agent_service.py#L321-L520) executes LLM calls.
 
 **Model**: Gemini 2.5 Flash or Pro (based on quality profile)
 
@@ -87,7 +87,7 @@ The system decides between two modes:
 - > 50k characters, OR
 - Any PDF > 10 pages
 
-**Behavior**: Vector search retrieves relevant chunks
+**Behavior**: Vector search retrieves relevant chunks (one retrieval per question during Step 2)
 
 ---
 
@@ -95,39 +95,47 @@ The system decides between two modes:
 
 #### When RAG is Used:
 
-**1. Query Construction** ([`form_service.py::build_search_query_from_questions`](backend/src/services/form_service.py#L933-L946))
-```python
-# Builds search query from first 15 questions
-query = "Full Name Email Address Phone Number Date of Birth..."
-```
-- Concatenates question titles and descriptions
-- Used as semantic search query
+**1. Question-Specific Query Construction** ([`form_service.py::build_search_query_for_question`](backend/src/services/form_service.py#L950-L989))
 
-**2. Single RAG Retrieval Call** ([`form_service.py`](backend/src/services/form_service.py#L783-L788))
+```python
+question_query = build_search_query_for_question(question)
+```
+
+- Executed in `process_form_analysis_async` prior to invoking Agent 2.
+- Blends the question title, description, hints, option labels, and metadata into a focused semantic query.
+
+**2. Per-question RAG Retrieval Call** ([`form_service.py::process_form_analysis_async`](backend/src/services/form_service.py#L772-L824))
+
 ```python
 context = await rag_service.retrieve_relevant_context(
     db=db,
-    query=query,           # From all questions
+    query=question_query,
     user_id=user_id,
-    top_k=10              # Retrieve 10 most relevant chunks
+    top_k=10
 )
 ```
 
-**⚠️ CRITICAL**: RAG retrieval happens **ONCE per form**, not per question!
+- Each question issues its own call to `retrieve_relevant_context` before Agent 2 is scheduled.
+- Calls reuse the analysis DB session but run sequentially to avoid session contention.
+- Returned chunks are stored in a map and passed to Agent 2; nothing is reused across questions.
+
+**⚠️ CRITICAL**: RAG retrieval now happens **once per question**, aligning context granularity with each Step 2 prompt.
 
 **3. RAG Service Retrieval** ([`rag_service.py::retrieve_relevant_context`](backend/src/services/rag_service.py#L144-L213))
 
 **Process**:
+
 1. Generate query embedding (768-dim vector from Google `text-embedding-004`)
 2. Search ChromaDB collection with cosine similarity
 3. Retrieve top 10 chunks (mixed: text + images)
 4. Fetch full chunk data from PostgreSQL/MySQL
 5. Separate by type:
-   - **Text chunks**: content field contains text
-   - **Image chunks**: raw_content field contains image bytes + content field contains OCR text
+    - **Text chunks**: content field contains text
+    - **Image chunks**: raw_content field contains image bytes + content field contains OCR text
 6. Return both lists
 
 **Return format**:
+
 ```python
 {
     "text_chunks": [
@@ -160,6 +168,8 @@ context = await rag_service.retrieve_relevant_context(
 
 **Concurrency**: Semaphore of 10 (max 10 parallel agent calls)
 
+**Per-question retrieval**: Each task performs its own `retrieve_relevant_context` lookup before invoking the LLM.
+
 **Location**: [`agent_service.py`](backend/src/services/agent_service.py#L385-L494)
 
 ```python
@@ -174,8 +184,9 @@ results = await asyncio.gather(*tasks)  # Parallel execution
 ```
 
 **Each question receives**:
+
 1. Question metadata (from Agent 1)
-2. **Same RAG context** (text_chunks + image_chunks) - shared across all questions
+2. **Question-specific RAG context** (text/image chunks fetched for that prompt)
 3. Visible page text
 4. Clipboard text (session instructions)
 5. Personal instructions
@@ -207,7 +218,7 @@ results = await asyncio.gather(*tasks)  # Parallel execution
 
 #### Image Retrieval and Usage
 
-**Both text and image RAG are fetched together** in the same search call!
+**Both text and image RAG are fetched together** for each question-specific search call.
 
 **Text chunks usage**:
 - Top 5 chunks included in prompt as text
@@ -218,11 +229,12 @@ results = await asyncio.gather(*tasks)  # Parallel execution
 - OCR description included in prompt context
 - Model can "see" the actual images
 
-**Implementation** ([`agent_service.py`](backend/src/services/agent_service.py#L365-L374)):
+**Implementation** ([`agent_service.py`](backend/src/services/agent_service.py#L360-L470)):
+
 ```python
-# RAG mode
-if rag_context:
-    rag_images = rag_context.get("image_chunks", [])
+# RAG mode (question scoped)
+if question_context:
+    rag_images = question_context.get("image_chunks", [])
     for img_chunk in rag_images:
         images.append(img_chunk["image_bytes"])  # Actual image data
 
@@ -230,10 +242,10 @@ if rag_context:
 if screenshots:
     images.extend(screenshots)
 
-# All images sent to multimodal model
+# All images sent to multimodal model for this question
 content = create_multipart_query(
     query=solution_query,
-    images=images  # Includes RAG images + screenshots
+    images=images
 )
 ```
 
@@ -355,16 +367,16 @@ Flat list of browser actions:
 
 ### RAG Context Usage
 
-**Single retrieval per form**:
-- Query built from all question titles/descriptions
-- Top 10 chunks retrieved (mixed text + images)
-- **Same context shared across all questions in Agent 2**
+**Per-question retrieval**:
+- Query built from the current question’s title, description, hints, and key option labels
+- Top 10 chunks retrieved (mixed text + images) for that question alone
+- **Context kept isolated per question** so prompts stay focused
 
-**Why not retrieve per question?**
-- Cost optimization (1 API call vs. N calls)
-- Questions often overlap in context needs
-- Top-k search naturally covers multiple questions
-- Parallel question processing would cause redundant RAG calls
+**Why retrieve per question?**
+- Increases precision for multi-question forms with very different data requirements
+- Reduces prompt clutter by excluding irrelevant chunks from sibling questions
+- Plays nicely with per-question retries; failures only repeat the small lookup they need
+- Works with the existing semaphore to avoid overwhelming the vector store despite higher call counts
 
 ---
 
@@ -454,10 +466,11 @@ User uploads file → Document Processor → Chunker → Embedder → ChromaDB +
 - Semaphore prevents overwhelming API rate limits
 - Enables granular error handling
 
-### 4. Single RAG Retrieval
-**Why not retrieve per question?**
-- Cost: 1 embedding call vs. N calls
-- Questions share context (e.g., name appears in multiple fields)
+### 4. Per-Question RAG Retrieval
+**Why fetch context for every question?**
+- Guarantees that niche fields (e.g., license numbers vs. employment history) get the most relevant snippets
+- Keeps multimodal attachments (PDF pages, extracted images) aligned with the active prompt
+- Allows selective retries when a single question fails without reusing stale context for others
 - Top-k naturally covers multiple intents
 - Same context ensures consistency across form
 
@@ -529,7 +542,7 @@ Client polls status endpoint to monitor progress.
 
 **Files**:
 - Direct mode: Linear with file count/size
-- RAG mode: Constant (single retrieval)
+- RAG mode: Scales with question count (one retrieval per question)
 
 **RAG Retrieval**: O(log n) with ChromaDB HNSW index
 
@@ -546,7 +559,7 @@ Client polls status endpoint to monitor progress.
 6. **Progressive refinement**: Start with fast mode, refine with pro on user request
 
 ### Current Limitations
-1. **Single RAG query**: May miss question-specific context
+1. **Higher RAG volume**: Per-question lookups increase embedding and Chroma loads
 2. **Top-k=10 hardcoded**: Not adaptive to form complexity
 3. **No reranking**: Initial retrieval results used directly
 4. **OCR-only images**: Visual features not captured
@@ -563,4 +576,4 @@ The three-agent architecture with selective RAG retrieval provides:
 - ✅ Flexibility: Direct vs. RAG automatically selected
 - ✅ Multimodal: Text and images unified in semantic search
 
-The key insight is **RAG is per-form, not per-question**, enabling efficient context retrieval while maintaining quality across all form fields.
+The key insight is **RAG is now per-question**, aligning context with each prompt while the semaphore keeps concurrency under control.

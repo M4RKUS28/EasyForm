@@ -23,6 +23,11 @@ class QualityProfile:
     solution_model: str  # Used for solution generation (step 2)
     action_model: str    # Used for action generation (step 3, matches parser for consistency)
 
+    @property
+    def generator_model(self) -> str:
+        """Backward-compatible accessor for legacy generator agent."""
+        return self.solution_model
+
 
 DEFAULT_QUALITY = "fast"
 
@@ -324,11 +329,11 @@ Generate concise, human-sounding answers for the required inputs.
         questions: list,
         visible_text: str,
         clipboard_text: str | None = None,
-        user_files: list | None = None,
-        quality: str = DEFAULT_QUALITY,
-        personal_instructions: Optional[str] = None,
-        rag_context: Optional[Dict[str, List]] = None,
-        screenshots: Optional[List[bytes]] = None,
+    user_files: list | None = None,
+    quality: str = DEFAULT_QUALITY,
+    personal_instructions: Optional[str] = None,
+    question_contexts: Optional[Dict[str, Dict[str, List]]] = None,
+    screenshots: Optional[List[bytes]] = None,
     ) -> List[Dict]:
         """
         Generate solutions for each question using Solution Generator Agent.
@@ -342,7 +347,7 @@ Generate concise, human-sounding answers for the required inputs.
             user_files: User uploaded files (direct mode)
             quality: Quality profile
             personal_instructions: User personal instructions
-            rag_context: RAG retrieved context (dict with 'text_chunks' and 'image_chunks')
+            question_contexts: Optional mapping of question_id -> RAG context payload
             screenshots: Screenshots from browser (passed directly, not via RAG)
         """
         from ..agents.utils import create_multipart_query
@@ -352,7 +357,7 @@ Generate concise, human-sounding answers for the required inputs.
 
         # Collect context sources
         pdf_files: List[bytes] = []
-        images: List[bytes] = []
+        direct_images: List[bytes] = []
 
         # Option 1: Direct file context (when not using RAG)
         if user_files:
@@ -360,18 +365,7 @@ Generate concise, human-sounding answers for the required inputs.
                 if file.content_type == "application/pdf":
                     pdf_files.append(file.data)
                 elif file.content_type.startswith("image/"):
-                    images.append(file.data)
-
-        # Option 2: RAG retrieved images (when using RAG)
-        if rag_context:
-            rag_images = rag_context.get("image_chunks", [])
-            for img_chunk in rag_images:
-                if "image_bytes" in img_chunk and img_chunk["image_bytes"]:
-                    images.append(img_chunk["image_bytes"])
-
-        # Option 3: Screenshots (always passed directly to models, never through RAG)
-        if screenshots:
-            images.extend(screenshots)
+                    direct_images.append(file.data)
 
         logger.info(
             "Generating solutions for %d questions using %s",
@@ -397,37 +391,49 @@ Generate concise, human-sounding answers for the required inputs.
                     )
 
                     # Build context section based on RAG or direct files
-                    context_info = []
+                    context_info: List[str] = []
 
-                    if rag_context:
-                        # RAG mode: Include retrieved text chunks
-                        text_chunks = rag_context.get("text_chunks", [])
+                    # Prepare per-question assets
+                    question_id = str(question.get("question_id") or question_idx)
+                    per_question_context = (question_contexts or {}).get(question_id)
+
+                    images: List[bytes] = list(direct_images)
+                    if screenshots:
+                        images.extend(screenshots)
+
+                    if per_question_context:
+                        text_chunks = per_question_context.get("text_chunks", [])
                         if text_chunks:
-                            context_info.append(f"Retrieved {len(text_chunks)} relevant text sections from your documents:")
-                            for i, chunk in enumerate(text_chunks[:5], 1):  # Limit to top 5 chunks
+                            context_info.append(
+                                f"Retrieved {len(text_chunks)} relevant text sections from your documents:"
+                            )
+                            for i, chunk in enumerate(text_chunks[:5], 1):
                                 source = chunk.get("source", "Unknown")
-                                content = chunk.get("content", "")[:500]  # Truncate long chunks
+                                content = chunk.get("content", "")[:500]
                                 context_info.append(f"{i}. From {source}:\n{content}\n")
 
-                        image_count = len(rag_context.get("image_chunks", []))
-                        if image_count > 0:
-                            context_info.append(f"Retrieved {image_count} relevant image(s) from your documents (shown below).")
+                        image_chunks = per_question_context.get("image_chunks", [])
+                        if image_chunks:
+                            context_info.append(
+                                f"Retrieved {len(image_chunks)} relevant image(s) from your documents (shown below)."
+                            )
+                            for img_chunk in image_chunks:
+                                image_bytes = img_chunk.get("image_bytes")
+                                if image_bytes:
+                                    images.append(image_bytes)
+                        if not text_chunks and not image_chunks:
+                            context_info.append("No relevant document excerpts were retrieved for this question.")
                     else:
-                        # Direct mode
-                        if len(pdf_files) > 0 or len(images) > 0:
-                            context_info.append(f"User has uploaded {len(pdf_files)} PDF(s) and {len(images)} image(s) that may contain relevant information.")
+                        if len(pdf_files) > 0 or len(direct_images) > 0:
+                            context_info.append(
+                                f"User has uploaded {len(pdf_files)} PDF(s) and {len(direct_images)} image(s) that may contain relevant information."
+                            )
 
                     context_section = "\n".join(context_info) if context_info else "No uploaded documents available."
 
                     solution_query = f"""Analyze the following form question and provide an appropriate solution/answer.
 
-Form Question:
-```json
-{json.dumps(question, indent=2)}
-```
 
-Page Visible Text:
-{visible_text}
 
 Session Instructions (highest priority):
 {clipboard_text if clipboard_text else 'No session instructions provided'}
@@ -438,6 +444,15 @@ Personal Instructions:
 Document Context:
 {context_section}
 
+
+----------------------------------------
+
+
+Form Question:
+```json
+{json.dumps(question, indent=2)}
+```
+
 Provide only the solution/answer as plain text. Do not include explanations unless necessary.
 """
 
@@ -447,6 +462,18 @@ Provide only the solution/answer as plain text. Do not include explanations unle
                         images=images if images else None,
                     )
 
+                    logger.info(
+                        "Step 2 input payload for question_id=%s: %s",
+                        question.get("question_id"),
+                        solution_query,
+                    )
+                    logger.info(
+                        "Step 2 attachment summary for question_id=%s: pdfs=%d | images=%d",
+                        question.get("question_id"),
+                        len(pdf_files),
+                        len(images),
+                    )
+
                     result = await solution_agent.run(
                         user_id=user_id,
                         state={},
@@ -454,6 +481,12 @@ Provide only the solution/answer as plain text. Do not include explanations unle
                         debug=False,
                         max_retries=settings.AGENT_MAX_RETRIES,
                         retry_delay=settings.AGENT_RETRY_DELAY_SECONDS,
+                    )
+
+                    logger.info(
+                        "Step 2 output payload for question_id=%s: %s",
+                        question.get("question_id"),
+                        result,
                     )
 
                     logger.info(
@@ -581,6 +614,12 @@ Output a flat list of all actions across all questions.
                 from ..agents.utils import create_multipart_query
                 content = create_multipart_query(query=action_query)
 
+                logger.info(
+                    "Step 3 input payload for batch %d: %s",
+                    batch_idx + 1,
+                    action_query,
+                )
+
                 result = await action_agent.run(
                     user_id=user_id,
                     state={},
@@ -588,6 +627,12 @@ Output a flat list of all actions across all questions.
                     debug=False,
                     max_retries=settings.AGENT_MAX_RETRIES,
                     retry_delay=settings.AGENT_RETRY_DELAY_SECONDS,
+                )
+
+                logger.info(
+                    "Step 3 output payload for batch %d: %s",
+                    batch_idx + 1,
+                    result,
                 )
 
                 logger.info(

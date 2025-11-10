@@ -775,26 +775,44 @@ async def process_form_analysis_async(
             if use_rag:
                 logger.info("[AsyncTask %s] Using RAG for context retrieval", request_id)
 
-                # Build search query from question titles
-                query = build_search_query_from_questions(normalized_questions_async)
-                logger.info("[AsyncTask %s] RAG search query: %s...", request_id, query[:100])
+                question_contexts: Dict[str, Dict[str, List]] = {}
+                total_text_chunks = 0
+                total_image_chunks = 0
 
-                # Retrieve relevant chunks
-                context = await rag_service.retrieve_relevant_context(
-                    db=db,
-                    query=query,
-                    user_id=user_id,
-                    top_k=10
-                )
+                for q_idx, question in enumerate(normalized_questions_async):
+                    question_query = build_search_query_for_question(question)
+                    question_id = str(question.get("question_id") or q_idx)
+
+                    context = await rag_service.retrieve_relevant_context(
+                        db=db,
+                        query=question_query,
+                        user_id=user_id,
+                        top_k=10
+                    )
+
+                    question_contexts[question_id] = context
+                    text_count = len(context.get("text_chunks", []))
+                    image_count = len(context.get("image_chunks", []))
+                    total_text_chunks += text_count
+                    total_image_chunks += image_count
+
+                    logger.info(
+                        "[AsyncTask %s] Question %s RAG context: %d text chunks, %d image chunks",
+                        request_id,
+                        question_id,
+                        text_count,
+                        image_count,
+                    )
 
                 logger.info(
-                    "[AsyncTask %s] Retrieved %d text chunks and %d image chunks",
+                    "[AsyncTask %s] RAG retrieval complete for %d questions -> %d text chunks, %d image chunks",
                     request_id,
-                    len(context['text_chunks']),
-                    len(context['image_chunks'])
+                    len(normalized_questions_async),
+                    total_text_chunks,
+                    total_image_chunks,
                 )
 
-                # Call Solution Generator Agent with RAG context
+                # Call Solution Generator Agent with per-question RAG context
                 question_solutions = await agent_service.generate_solutions_per_question(
                     user_id=user_id,
                     questions=normalized_questions_async,
@@ -803,7 +821,7 @@ async def process_form_analysis_async(
                     user_files=None,  # Using RAG context instead
                     quality=request_data.quality,
                     personal_instructions=instructions_clean,
-                    rag_context=context,  # Pass RAG-retrieved text and image chunks
+                    question_contexts=question_contexts,
                     screenshots=screenshot_bytes,  # Pass screenshots directly
                 )
             else:
@@ -944,3 +962,44 @@ def build_search_query_from_questions(questions: List[dict]) -> str:
             phrases.append(description)
 
     return " ".join(phrases).strip() or "form information"
+
+
+def build_search_query_for_question(question: dict, max_inputs: int = 10) -> str:
+    """Assemble a semantic search query tailored to a single question."""
+
+    phrases: List[str] = []
+
+    title = question.get("title")
+    if title:
+        phrases.append(str(title).strip())
+
+    description = question.get("description")
+    if description:
+        phrases.append(str(description).strip())
+
+    hints = question.get("hints") or []
+    for hint in hints:
+        if hint:
+            phrases.append(str(hint).strip())
+
+    inputs = (question.get("inputs") or [])[:max_inputs]
+    for input_data in inputs:
+        option_label = input_data.get("option_label")
+        value_hint = input_data.get("value_hint")
+        notes = input_data.get("notes")
+        for candidate in (option_label, value_hint, notes):
+            if candidate:
+                phrases.append(str(candidate).strip())
+
+    metadata = question.get("metadata")
+    if isinstance(metadata, dict):
+        for value in metadata.values():
+            if isinstance(value, str):
+                phrases.append(value.strip())
+            elif isinstance(value, list):
+                for entry in value[:max_inputs]:
+                    if isinstance(entry, str):
+                        phrases.append(entry.strip())
+
+    sanitized = [phrase for phrase in phrases if phrase]
+    return " ".join(sanitized).strip() or "form question context"

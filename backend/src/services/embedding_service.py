@@ -133,14 +133,32 @@ class EmbeddingService:
                 embeddings.append(embedding)
                 documents.append(chunk.get("content", ""))  # Store text for retrieval
 
-                # Store metadata for filtering
+                # Store metadata for filtering (prune unsupported/null values)
+                metadata_json = chunk.get("metadata_json", {}) or {}
+
+                # Filter out values that Chroma's metadata schema can't serialize
+                filtered_metadata = {}
+                for key, value in metadata_json.items():
+                    if value is None:
+                        continue
+                    if isinstance(value, (str, int, float, bool)):
+                        filtered_metadata[key] = value
+                    elif isinstance(value, (list, tuple)):
+                        filtered_metadata[key] = [
+                            item for item in value
+                            if isinstance(item, (str, int, float, bool))
+                        ]
+                        if not filtered_metadata[key]:
+                            filtered_metadata.pop(key)
+                    else:
+                        filtered_metadata[key] = str(value)
+
                 metadatas.append({
                     "user_id": chunk["user_id"],
                     "file_id": chunk["file_id"],
                     "chunk_id": chunk["id"],
                     "chunk_type": chunk_type_str,
-                    "page": chunk.get("metadata_json", {}).get("page"),
-                    **chunk.get("metadata_json", {})
+                    **filtered_metadata
                 })
 
                 ids.append(chunk["id"])  # Use chunk ID as Chroma ID
