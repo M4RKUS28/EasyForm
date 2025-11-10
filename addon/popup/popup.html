@@ -7,29 +7,43 @@
   <style>
     :root {
       --bg-primary: #ffffff;
+      --bg-secondary: #f8f9fa;
       --text-primary: #333333;
       --text-muted: #999999;
-      --border-color: #eeeeee;
+      --text-on-purple: #ffffff;
+      --border-color: #e0e0e0;
       --accent-color: #667eea;
+      --header-gradient-start: #7c3aed;
+      --header-gradient-end: #a78bfa;
       --success-color: #4caf50;
       --error-color: #f44336;
-      --warning-color: #f5a623; /* Orange for pending status */
+      --warning-color: #f5a623;
       --error-bg: #ffeeee;
       --error-text: #cc3333;
+      --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.1);
+      --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.1);
+      --shadow-lg: 0 10px 25px rgba(0, 0, 0, 0.15);
     }
 
     @media (prefers-color-scheme: dark) {
       :root {
         --bg-primary: #1e1e1e;
+        --bg-secondary: #2a2a2a;
         --text-primary: #e0e0e0;
-        --text-muted: #666666;
-        --border-color: #333333;
+        --text-muted: #999999;
+        --text-on-purple: #ffffff;
+        --border-color: #3a3a3a;
         --accent-color: #7c8ef5;
+        --header-gradient-start: #6d28d9;
+        --header-gradient-end: #8b5cf6;
         --success-color: #66bb6a;
         --error-color: #ef5350;
-        --warning-color: #f7b731; /* Brighter orange for dark mode */
+        --warning-color: #f7b731;
         --error-bg: #3a1a1a;
         --error-text: #ff6b6b;
+        --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.3);
+        --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.4);
+        --shadow-lg: 0 10px 25px rgba(0, 0, 0, 0.5);
       }
     }
 
@@ -41,106 +55,216 @@
 
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      font-size: 11px;
+      font-size: 12px;
       color: var(--text-primary);
-      background: var(--bg-primary);
+      background: var(--bg-secondary);
       display: flex;
       flex-direction: column;
+      min-width: 420px;
+      margin: 0;
+      overflow: hidden;
+      border-radius: 12px;
     }
 
     .header {
-      padding: 10px;
-      border-bottom: 1px solid var(--border-color);
+      padding: 18px 16px;
+      background: linear-gradient(135deg, var(--header-gradient-start) 0%, var(--header-gradient-end) 100%);
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      border-radius: 12px 12px 0 0;
+      box-shadow: 0 4px 12px rgba(124, 58, 237, 0.25);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .header::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: linear-gradient(135deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0) 100%);
+      pointer-events: none;
+    }
+
+    .header > * {
+      position: relative;
+      z-index: 1;
+    }
+
+    .status-indicator {
       display: flex;
       align-items: center;
-      gap: 8px;
+      gap: 14px;
+    }
+
+    .header-title {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .app-title {
+      font-size: 20px;
+      font-weight: 800;
+      color: var(--text-on-purple);
+      letter-spacing: -0.5px;
+      margin: 0;
+      text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    }
+
+    .app-subtitle {
+      font-size: 11px;
+      font-weight: 500;
+      color: rgba(255, 255, 255, 0.8);
+      letter-spacing: 0.3px;
     }
 
     .status-dot {
-      width: 7px;
-      height: 7px;
+      width: 12px;
+      height: 12px;
       border-radius: 50%;
       background: var(--success-color);
       flex-shrink: 0;
+      box-shadow: 0 0 8px rgba(76, 175, 80, 0.6), 0 0 0 3px rgba(255, 255, 255, 0.3);
+      transition: all 0.3s ease;
     }
 
     .status-dot.error {
       background: var(--error-color);
+      box-shadow: 0 0 8px rgba(244, 67, 54, 0.6), 0 0 0 3px rgba(255, 255, 255, 0.3);
     }
 
     .status-dot.warning {
       background: var(--warning-color);
+      box-shadow: 0 0 8px rgba(245, 166, 35, 0.6), 0 0 0 3px rgba(255, 255, 255, 0.3);
+    }
+
+    .status-bar {
+      padding: 10px 16px;
+      background: var(--bg-primary);
+      border-bottom: 1px solid var(--border-color);
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      min-height: 42px;
+      justify-content: center;
+    }
+
+    .settings-section {
+      padding: 14px 16px;
+      background: var(--bg-primary);
+      border-bottom: 1px solid var(--border-color);
     }
 
     .settings {
       display: flex;
       flex-direction: row;
-      gap: 6px;
+      gap: 12px;
+    }
+
+    .setting-group {
       flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .setting-label {
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--header-gradient-start);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
     }
 
     .setting-select {
-      flex: 1;
-      padding: 4px 8px;
-      border: 1px solid var(--border-color);
-      border-radius: 3px;
+      width: 100%;
+      padding: 10px 12px;
+      border: 2px solid var(--border-color);
+      border-radius: 8px;
       background: var(--bg-primary);
       color: var(--text-primary);
       cursor: pointer;
-      font-size: 10px;
-      font-weight: 500;
-      transition: all 0.15s;
+      font-size: 12px;
+      font-weight: 600;
+      transition: all 0.3s ease;
+      box-shadow: var(--shadow-sm);
     }
 
     .setting-select:hover {
-      border-color: var(--accent-color);
+      border-color: var(--header-gradient-end);
+      transform: translateY(-1px);
+      box-shadow: var(--shadow-md);
     }
 
     .setting-select:focus {
       outline: none;
-      border-color: var(--accent-color);
+      border-color: var(--header-gradient-start);
+      box-shadow: 0 0 0 4px rgba(124, 58, 237, 0.1);
+    }
+
+    .actions-section {
+      padding: 12px 16px;
+      background: var(--bg-primary);
+      border-bottom: 1px solid var(--border-color);
+    }
+
+    .action-buttons {
+      display: flex;
+      gap: 10px;
     }
 
     .start-btn {
-      padding: 5px 10px;
-      border: 1px solid var(--accent-color);
-      border-radius: 3px;
-      background: var(--accent-color);
+      flex: 1;
+      padding: 10px 18px;
+      border: none;
+      border-radius: 8px;
+      background: linear-gradient(135deg, var(--header-gradient-start) 0%, var(--header-gradient-end) 100%);
       color: white;
       cursor: pointer;
-      font-size: 10px;
-      font-weight: 600;
-      transition: all 0.15s;
+      font-size: 13px;
+      font-weight: 700;
+      transition: all 0.3s ease;
       white-space: nowrap;
+      box-shadow: 0 4px 12px rgba(124, 58, 237, 0.3);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
     }
 
     .start-btn:hover {
-      background: var(--accent-color);
-      opacity: 0.85;
-      transform: translateY(-1px);
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(124, 58, 237, 0.4);
     }
 
     .start-btn:active {
       transform: translateY(0);
+      box-shadow: 0 4px 12px rgba(124, 58, 237, 0.3);
     }
 
     .start-btn:disabled {
       opacity: 0.5;
       cursor: not-allowed;
+      transform: none;
     }
 
     .cancel-btn {
-      padding: 5px 10px;
-      border: 1px solid var(--error-color);
-      border-radius: 3px;
+      flex: 1;
+      padding: 10px 18px;
+      border: 2px solid var(--error-color);
+      border-radius: 8px;
       background: transparent;
       color: var(--error-color);
       cursor: pointer;
-      font-size: 10px;
-      font-weight: 600;
-      transition: all 0.15s;
+      font-size: 13px;
+      font-weight: 700;
+      transition: all 0.3s ease;
       white-space: nowrap;
       display: none;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
     }
 
     .cancel-btn.show {
@@ -150,32 +274,56 @@
     .cancel-btn:hover {
       background: var(--error-color);
       color: white;
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(244, 67, 54, 0.4);
+    }
+
+    .cancel-btn:active {
+      transform: translateY(0);
     }
 
     .instructions-section {
-      padding: 10px;
+      padding: 14px 16px;
+      background: var(--bg-primary);
       border-bottom: 1px solid var(--border-color);
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .section-label {
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--header-gradient-start);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
     }
 
     .instructions-input {
       width: 100%;
-      padding: 6px 8px;
-      border: 1px solid var(--border-color);
-      border-radius: 3px;
+      padding: 12px 14px;
+      border: 2px solid var(--border-color);
+      border-radius: 10px;
       background: var(--bg-primary);
       color: var(--text-primary);
-      font-size: 10px;
+      font-size: 12px;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
       resize: vertical;
-      min-height: 20px;
+      min-height: 50px;
       max-height: 200px;
-      line-height: 1.3;
+      line-height: 1.5;
+      transition: all 0.3s ease;
+      box-shadow: var(--shadow-sm);
+    }
+
+    .instructions-input:hover {
+      border-color: var(--header-gradient-end);
     }
 
     .instructions-input:focus {
       outline: none;
-      border-color: var(--accent-color);
-      box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.1);
+      border-color: var(--header-gradient-start);
+      box-shadow: 0 0 0 4px rgba(124, 58, 237, 0.1);
     }
 
     .instructions-input::placeholder {
@@ -184,136 +332,170 @@
     }
 
     .footer {
-      padding: 8px 10px;
+      padding: 12px 16px;
       background: var(--bg-primary);
       display: flex;
       align-items: center;
-      gap: 8px;
+      justify-content: center;
+      gap: 10px;
+      border-radius: 0 0 12px 12px;
     }
 
-    .footer-side {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-    }
-
-    .footer-side--end {
-      justify-content: flex-end;
-    }
-
-    .footer-status {
-      flex: 1;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      min-height: 18px;
-    }
-
-    .status-btn {
+    .icon-btn {
       display: inline-flex;
+      flex-direction: column;
       align-items: center;
       justify-content: center;
-      width: 22px;
-      height: 22px;
-      border: 1px solid var(--border-color);
-      border-radius: 3px;
+      gap: 4px;
+      padding: 8px 10px;
+      border: 2px solid var(--border-color);
+      border-radius: 8px;
       background: var(--bg-primary);
       color: var(--text-primary);
       cursor: pointer;
-      padding: 0;
-      transition: border-color 0.15s, background-color 0.15s;
+      transition: all 0.3s ease;
+      min-width: 65px;
+      box-shadow: var(--shadow-sm);
     }
 
-    .status-btn:hover {
-      border-color: var(--accent-color);
-      background: rgba(102, 126, 234, 0.08);
+    .icon-btn:hover {
+      border-color: var(--header-gradient-end);
+      background: linear-gradient(135deg, rgba(124, 58, 237, 0.05) 0%, rgba(167, 139, 250, 0.05) 100%);
+      transform: translateY(-2px);
+      box-shadow: var(--shadow-md);
     }
 
-    .status-btn:focus {
+    .icon-btn:active {
+      transform: translateY(0);
+    }
+
+    .icon-btn:focus {
       outline: none;
-      border-color: var(--accent-color);
+      border-color: var(--header-gradient-start);
+      box-shadow: 0 0 0 4px rgba(124, 58, 237, 0.1);
     }
 
-    .status-btn svg {
+    .icon-btn svg {
       fill: currentColor;
       pointer-events: none;
+      opacity: 0.8;
+    }
+
+    .icon-btn:hover svg {
+      opacity: 1;
+    }
+
+    .icon-btn-label {
+      font-size: 10px;
+      font-weight: 600;
+      color: var(--text-muted);
+      white-space: nowrap;
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+    }
+
+    .icon-btn:hover .icon-btn-label {
+      color: var(--header-gradient-start);
     }
 
     .info-text {
-      font-size: 10px;
-      color: var(--text-muted);
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-primary);
       line-height: 1.4;
     }
 
     .error-message {
       background: var(--error-bg);
       color: var(--error-text);
-      padding: 4px 6px;
-      border-radius: 3px;
-      font-size: 9px;
-      line-height: 1.3;
+      padding: 8px 12px;
+      border-radius: 8px;
+      font-size: 11px;
+      font-weight: 500;
+      line-height: 1.4;
       display: none;
+      box-shadow: var(--shadow-sm);
     }
 
     .error-message.show {
-      display: inline-flex;
-      align-items: center;
+      display: block;
     }
   </style>
 </head>
 <body>
   <div class="header">
-    <div class="status-dot" id="statusDot"></div>
-    <div class="settings">
-      <select class="setting-select" id="executionMode">
-        <option value="automatic">Automatic</option>
-        <option value="manual">Manual</option>
-      </select>
-      <select class="setting-select" id="analysisMode">
-        <option value="basic">HTML Only</option>
-        <option value="extended">Extended</option>
-      </select>
+    <div class="status-indicator">
+      <div class="status-dot" id="statusDot"></div>
+      <div class="header-title">
+        <h1 class="app-title">EasyForm</h1>
+        <span class="app-subtitle">AI Form Filler</span>
+      </div>
     </div>
-    <button class="start-btn" id="startBtn">Start</button>
-    <button class="cancel-btn" id="cancelBtn">Cancel</button>
-    <button class="cancel-btn" id="resetBtn" style="display: none;">Reset</button>
+  </div>
+
+  <div class="status-bar">
+    <span class="info-text" id="infoText">Ready</span>
+    <span class="error-message" id="errorMessage"></span>
+  </div>
+
+  <div class="settings-section">
+    <div class="settings">
+      <div class="setting-group">
+        <label for="executionMode" class="setting-label">Mode</label>
+        <select class="setting-select" id="executionMode">
+          <option value="automatic">Automatic</option>
+          <option value="manual">Manual</option>
+        </select>
+      </div>
+      <div class="setting-group">
+        <label for="analysisMode" class="setting-label">Analysis</label>
+        <select class="setting-select" id="analysisMode">
+          <option value="basic">HTML Only</option>
+          <option value="extended">With Screenshot</option>
+        </select>
+      </div>
+    </div>
+  </div>
+
+  <div class="actions-section">
+    <div class="action-buttons">
+      <button class="start-btn" id="startBtn">Start</button>
+      <button class="cancel-btn" id="cancelBtn">Cancel</button>
+      <button class="cancel-btn" id="resetBtn" style="display: none;">Reset</button>
+    </div>
   </div>
 
   <div class="instructions-section">
-    <textarea 
-      class="instructions-input" 
-      id="sessionInstructionsInput" 
-      placeholder="Add session instructions for EasyForm (optional)..."
-      rows="1"
+    <label for="sessionInstructionsInput" class="section-label">Session Instructions (Optional)</label>
+    <textarea
+      class="instructions-input"
+      id="sessionInstructionsInput"
+      placeholder="Add custom instructions for this analysis session..."
+      rows="2"
     ></textarea>
   </div>
 
   <div class="footer">
-    <div class="footer-side">
-      <button type="button" class="status-btn" id="toggleOverlayBtn" title="Toggle content window" aria-label="Toggle content window">
-        <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true" focusable="false">
-          <rect x="1" y="1" width="10" height="2" rx="1"></rect>
-          <rect x="1" y="5" width="10" height="2" rx="1"></rect>
-          <rect x="1" y="9" width="10" height="2" rx="1"></rect>
-        </svg>
-      </button>
-    </div>
-    <div class="footer-status">
-      <span class="info-text" id="infoText">Ready</span>
-      <span class="error-message" id="errorMessage"></span>
-    </div>
-    <div class="footer-side footer-side--end">
-      <button type="button" class="status-btn" id="openSettingsBtn" title="Open settings" aria-label="Open settings">
-        <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true" focusable="false">
-          <path d="M4.8 1l.4 1.6a3.2 3.2 0 011.6 0L7.2 1h1.6l.4 1.6a3.2 3.2 0 011.2.7l1.5-.7.8 1.4-1.3.9c.1.5.1 1 0 1.5l1.3.9-.8 1.4-1.5-.7a3.2 3.2 0 01-1.2.7L8.8 11H7.2l-.4-1.6a3.2 3.2 0 01-1.6 0L4.8 11H3.2l-.4-1.6a3.2 3.2 0 01-1.2-.7l-1.5.7-.8-1.4 1.3-.9a3.2 3.2 0 010-1.5L-.7 3.3l.8-1.4 1.5.7a3.2 3.2 0 011.2-.7L3.2 1h1.6zm1.2 4a1.2 1.2 0 100 2.4 1.2 1.2 0 000-2.4z" fill-rule="evenodd"></path>
-        </svg>
-      </button>
-      <button type="button" class="status-btn" id="openBackendBtn" title="Open backend" aria-label="Open backend">
-        <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true" focusable="false">
-          <path d="M2 2h3v1H3v6h6V7h1v3a1 1 0 01-1 1H3a1 1 0 01-1-1V3a1 1 0 011-1zm6-1h3v3h-1V2.7L5.9 6.8 5.2 6.1 9.3 2H8V1z"></path>
-        </svg>
-      </button>
-    </div>
+    <button type="button" class="icon-btn" id="toggleOverlayBtn" title="Toggle content window" aria-label="Toggle content window">
+      <svg width="14" height="14" viewBox="0 0 12 12" aria-hidden="true" focusable="false">
+        <rect x="1" y="1" width="10" height="2" rx="1"></rect>
+        <rect x="1" y="5" width="10" height="2" rx="1"></rect>
+        <rect x="1" y="9" width="10" height="2" rx="1"></rect>
+      </svg>
+      <span class="icon-btn-label">Content</span>
+    </button>
+    <button type="button" class="icon-btn" id="openSettingsBtn" title="Open settings" aria-label="Open settings">
+      <svg width="14" height="14" viewBox="0 0 12 12" aria-hidden="true" focusable="false">
+        <path d="M4.8 1l.4 1.6a3.2 3.2 0 011.6 0L7.2 1h1.6l.4 1.6a3.2 3.2 0 011.2.7l1.5-.7.8 1.4-1.3.9c.1.5.1 1 0 1.5l1.3.9-.8 1.4-1.5-.7a3.2 3.2 0 01-1.2.7L8.8 11H7.2l-.4-1.6a3.2 3.2 0 01-1.6 0L4.8 11H3.2l-.4-1.6a3.2 3.2 0 01-1.2-.7l-1.5.7-.8-1.4 1.3-.9a3.2 3.2 0 010-1.5L-.7 3.3l.8-1.4 1.5.7a3.2 3.2 0 011.2-.7L3.2 1h1.6zm1.2 4a1.2 1.2 0 100 2.4 1.2 1.2 0 000-2.4z" fill-rule="evenodd"></path>
+      </svg>
+      <span class="icon-btn-label">Settings</span>
+    </button>
+    <button type="button" class="icon-btn" id="openBackendBtn" title="Open backend" aria-label="Open backend">
+      <svg width="14" height="14" viewBox="0 0 12 12" aria-hidden="true" focusable="false">
+        <path d="M2 2h3v1H3v6h6V7h1v3a1 1 0 01-1 1H3a1 1 0 01-1-1V3a1 1 0 011-1zm6-1h3v3h-1V2.7L5.9 6.8 5.2 6.1 9.3 2H8V1z"></path>
+      </svg>
+      <span class="icon-btn-label">Backend</span>
+    </button>
   </div>
 
   <script src="popup.js"></script>
