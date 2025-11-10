@@ -6,7 +6,7 @@ const steps = [
     title: 'Account erstellen',
     description:
       'Lege deinen EasyForm-Account an, um Zugriff auf Dashboard und Token-Verwaltung zu erhalten.',
-    img: '/images/setup-step1.png', // Platzhalter – Bild später in /public/images ablegen
+    img: '/register.png', // Platzhalter – Bild später in /public/images ablegen
     cta: {
       label: 'Zum Registrieren',
       href: '/register',
@@ -18,7 +18,7 @@ const steps = [
     title: 'Token erstellen',
     description:
       'Erzeuge im Dashboard ein persönliches API-Token. Bewahre es sicher auf – du brauchst es im Addon.',
-    img: '/images/setup-step2.png', // Platzhalter – Bild später in /public/images ablegen
+    img: '/token.png', // Platzhalter – Bild später in /public/images ablegen
     cta: {
       label: 'Zum Dashboard',
       href: '/dashboard',
@@ -30,7 +30,7 @@ const steps = [
     title: 'Addon installieren',
     description:
       'Installiere das EasyForm Browser-Addon aus den Releases. Folge anschließend den Browser-Hinweisen zur Installation.',
-    img: '/images/setup-step3.png', // Platzhalter – Bild später in /public/images ablegen
+    img: '/extension.png', // Platzhalter – Bild später in /public/images ablegen
     cta: {
       label: 'Zu den Releases',
       href: 'https://github.com/M4RKUS28/EasyForm/releases',
@@ -42,7 +42,7 @@ const steps = [
     title: 'Token in Addon Settings einfügen',
     description:
       'Öffne die Addon-Einstellungen und füge dein API-Token ein. Speichern – fertig! Jetzt kann EasyForm Formulare automatisch ausfüllen.',
-    img: '/images/setup-step4.png', // Platzhalter – Bild später in /public/images ablegen
+    img: '/settings.png', // Platzhalter – Bild später in /public/images ablegen
   },
 ];
 
