@@ -31,7 +31,7 @@ window.addEventListener('beforeunload', () => {
   stopStatusPolling();
 });
 
-chrome.storage.onChanged.addListener((changes, areaName) => {
+browser.storage.onChanged.addListener((changes, areaName) => {
   if (areaName === 'sync' && changes.backendUrl) {
     cachedBackendUrl = normalizeBackendUrl(changes.backendUrl.newValue) || DEFAULT_BACKEND_URL;
   }
@@ -40,7 +40,7 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
 async function checkBackendHealth() {
   try {
     console.log('[EasyForm Popup] 🏥 Checking backend health...');
-    const response = await chrome.runtime.sendMessage({ action: 'healthCheck' });
+    const response = await browser.runtime.sendMessage({ action: 'healthCheck' });
     console.log('[EasyForm Popup] Health check response:', response);
 
     if (response.healthy) {
@@ -67,7 +67,7 @@ let pollingStarted = false;
 
 async function loadConfig() {
   try {
-    const response = await chrome.runtime.sendMessage({ action: 'getConfig' });
+    const response = await browser.runtime.sendMessage({ action: 'getConfig' });
     const executionMode = response.executionMode || response.mode || 'automatic'; // Backward compat
     const analysisMode = response.analysisMode || 'basic';
 
@@ -83,7 +83,7 @@ async function loadConfig() {
 
 async function loadStatus() {
   try {
-    const response = await chrome.runtime.sendMessage({ action: 'getLastResult' });
+    const response = await browser.runtime.sendMessage({ action: 'getLastResult' });
 
     if (response.error) {
       showError(response.error);
@@ -100,7 +100,7 @@ async function loadSessionInstructions() {
   const instructionsInput = document.getElementById('sessionInstructionsInput');
 
   try {
-    const storage = await chrome.storage.local.get('sessionInstructions');
+    const storage = await browser.storage.local.get('sessionInstructions');
     const savedInstructions = storage.sessionInstructions;
     if (typeof savedInstructions === 'string' && savedInstructions.length > 0) {
       instructionsInput.value = savedInstructions;
@@ -162,7 +162,7 @@ function setupEventListeners() {
       
       // Store the updated session instructions value
       try {
-        await chrome.storage.local.set({ sessionInstructions: newValue });
+        await browser.storage.local.set({ sessionInstructions: newValue });
       } catch (error) {
         console.error('[EasyForm Popup] Error saving session instructions:', error);
       }
@@ -182,7 +182,7 @@ async function setConfig(config) {
     if (config.backendUrl !== undefined) {
       cachedBackendUrl = normalizeBackendUrl(config.backendUrl) || DEFAULT_BACKEND_URL;
     }
-    await chrome.runtime.sendMessage({
+    await browser.runtime.sendMessage({
       action: 'setConfig',
       ...config
     });
@@ -254,7 +254,7 @@ async function handleStartClick() {
 
   try {
     // Get current tab
-    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
     console.log('[EasyForm Popup] 🎯 Start clicked for tab:', tab?.id);
 
     if (!tab) {
@@ -270,7 +270,7 @@ async function handleStartClick() {
 
     console.log('[EasyForm Popup] 📤 Sending analyzePage message to background...');
     // Send message to background to START analysis (doesn't wait for completion)
-    const response = await chrome.runtime.sendMessage({
+    const response = await browser.runtime.sendMessage({
       action: 'analyzePage',
       tabId: tab.id
     });
@@ -296,7 +296,7 @@ async function handleStartClick() {
 // Check current analysis state
 async function checkAnalysisState() {
   try {
-    const response = await chrome.runtime.sendMessage({ action: 'getAnalysisState' });
+    const response = await browser.runtime.sendMessage({ action: 'getAnalysisState' });
     if (!response) return;
 
     const currentState = response.state || 'idle';
@@ -380,7 +380,7 @@ async function handleCancelClick() {
 
   try {
     // Get current tab
-    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
 
     if (!tab) {
       throw new Error('No active tab found');
@@ -394,7 +394,7 @@ async function handleCancelClick() {
     isCanceling = true;
 
     // Send cancel request to background
-    const response = await chrome.runtime.sendMessage({
+    const response = await browser.runtime.sendMessage({
       action: 'cancelRequest',
       tabId: tab.id
     });
@@ -431,10 +431,10 @@ async function handleResetClick() {
     resetBtn.disabled = true;
     resetBtn.textContent = 'Resetting...';
 
-    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
     const tabId = tab?.id;
 
-    const response = await chrome.runtime.sendMessage({ action: 'resetState', tabId });
+    const response = await browser.runtime.sendMessage({ action: 'resetState', tabId });
     if (response && response.success === false) {
       throw new Error(response.error || 'Could not reset state');
     }
@@ -456,7 +456,7 @@ async function handleResetClick() {
 
   const instructionsInput = document.getElementById('sessionInstructionsInput');
   instructionsInput.value = '';
-  await chrome.storage.local.remove('sessionInstructions');
+  await browser.storage.local.remove('sessionInstructions');
 
     await checkBackendHealth();
     await checkAnalysisState();
@@ -476,14 +476,14 @@ async function handleResetClick() {
 async function handleToggleOverlayClick() {
   const errorMessage = 'Unable to toggle content window';
   try {
-    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
 
     if (!tab?.id) {
       setTemporaryInfo('No active tab');
       return;
     }
 
-    await chrome.tabs.sendMessage(tab.id, { action: 'toggleOverlay' });
+    await browser.tabs.sendMessage(tab.id, { action: 'toggleOverlay' });
     setTemporaryInfo('Content window toggled');
     clearErrorIfMatches(errorMessage);
   } catch (error) {
@@ -509,7 +509,7 @@ function handleOpenSettingsClick() {
   };
 
   try {
-    const maybePromise = chrome.runtime.openOptionsPage();
+    const maybePromise = browser.runtime.openOptionsPage();
     if (maybePromise && typeof maybePromise.then === 'function') {
       setTemporaryInfo('Opening settings...');
       maybePromise
@@ -554,17 +554,8 @@ function normalizeBackendUrl(url) {
   return `https://${trimmed}`;
 }
 
-function createTab(url) {
-  return new Promise((resolve, reject) => {
-    chrome.tabs.create({ url }, (tab) => {
-      const error = chrome.runtime.lastError;
-      if (error) {
-        reject(new Error(error.message || 'Could not open tab'));
-      } else {
-        resolve(tab);
-      }
-    });
-  });
+async function createTab(url) {
+  return await browser.tabs.create({ url });
 }
 
 function clearErrorIfMatches(message) {

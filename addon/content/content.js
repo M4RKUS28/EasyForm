@@ -8,7 +8,7 @@
   let currentActions = [];
 
   // Listen for messages from background script
-  chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+  browser.runtime.onMessage.addListener((request, sender, sendResponse) => {
     switch (request.action) {
       case 'getPageData':
         (async () => {
@@ -25,22 +25,22 @@
       case 'getScrollInfo':
         const scrollInfo = getScrollInfo();
         sendResponse(scrollInfo);
-        break;
+        return false;
 
       case 'scrollToPosition':
         scrollToPosition(request.x, request.y);
         sendResponse({ success: true });
-        break;
+        return false;
 
       case 'scrollToTop':
         scrollToTop();
         sendResponse({ success: true });
-        break;
+        return false;
 
       case 'restoreScroll':
         restoreScroll(request.x, request.y);
         sendResponse({ success: true });
-        break;
+        return false;
 
       case 'executeActions':
         console.log('[EasyForm Content] 📨 Received executeActions message:', {
@@ -63,18 +63,19 @@
         currentActions = request.actions;
         showOverlay(request.actions);
         sendResponse({ success: true });
-        break;
+        return false;
 
       case 'toggleOverlay':
         toggleOverlay();
         sendResponse({ success: true });
-        break;
+        return false;
 
       case 'showNotification':
         showNotification(request.type, request.message);
         sendResponse({ success: true });
-        break;
+        return false;
     }
+    return false;
   });
 
   /**

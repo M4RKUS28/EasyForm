@@ -7,7 +7,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 async function loadSettings() {
   try {
-    const response = await chrome.runtime.sendMessage({ action: 'getConfig' });
+    const response = await browser.runtime.sendMessage({ action: 'getConfig' });
 
     // Set backend URL
     document.getElementById('backendUrl').value = response.backendUrl || '';
@@ -60,21 +60,22 @@ async function saveSettings() {
       return;
     }
 
-    const response = await chrome.runtime.sendMessage({
+    const response = await browser.runtime.sendMessage({
       action: 'setConfig',
       backendUrl,
       apiToken,
       quality
     });
 
-    if (response.success) {
+    if (response && response.success) {
       showSuccessMessage();
     } else {
-      alert('Failed to save settings');
+      const errorMsg = response && response.error ? response.error : 'Failed to save settings';
+      alert(errorMsg);
     }
   } catch (error) {
     console.error('Error saving settings:', error);
-    alert('Failed to save settings');
+    alert(`Failed to save settings: ${error.message}`);
   }
 }
 

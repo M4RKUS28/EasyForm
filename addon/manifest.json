@@ -15,12 +15,12 @@
     "<all_urls>"
   ],
   "background": {
-    "scripts": ["background-unified.js"]
+    "service_worker": "background-unified.js"
   },
   "content_scripts": [
     {
       "matches": ["<all_urls>"],
-      "js": ["content/actions.js", "content/content.js"],
+      "js": ["browser-polyfill.js", "content/actions.js", "content/content.js"],
       "css": ["styles/content.css"],
       "run_at": "document_idle"
     }

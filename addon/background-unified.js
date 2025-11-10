@@ -1,6 +1,9 @@
 // Unified Background Script for EasyForm
 // Combines all background modules into one file for compatibility
 
+// Load webextension-polyfill for cross-browser compatibility
+importScripts('browser-polyfill.js');
+
 // ===== CONSTANTS =====
 const CONFIG = {
   backendUrl: 'https://easyform-ai.com',
@@ -27,24 +30,24 @@ const POLL_TIMEOUT_MS = 1200000; // 20 minutes
 
 // ===== STORAGE UTILITIES =====
 async function getStoredRequestId(tabId) {
-  const data = await chrome.storage.local.get([STORAGE_KEYS.getRequestId(tabId)]);
+  const data = await browser.storage.local.get([STORAGE_KEYS.getRequestId(tabId)]);
   return data[STORAGE_KEYS.getRequestId(tabId)] || null;
 }
 
 async function storeRequestId(tabId, requestId) {
-  await chrome.storage.local.set({
+  await browser.storage.local.set({
     [STORAGE_KEYS.getRequestId(tabId)]: requestId
   });
 }
 
 async function storeStartTime(tabId, startTime) {
-  await chrome.storage.local.set({
+  await browser.storage.local.set({
     [STORAGE_KEYS.getStartTime(tabId)]: startTime
   });
 }
 
 async function cleanupRequestStorage(tabId) {
-  await chrome.storage.local.remove([
+  await browser.storage.local.remove([
     STORAGE_KEYS.getRequestId(tabId),
     STORAGE_KEYS.getStartTime(tabId)
   ]);
@@ -52,29 +55,22 @@ async function cleanupRequestStorage(tabId) {
 }
 
 async function getConfig() {
-  return new Promise((resolve) => {
-    chrome.storage.sync.get(
-      ['backendUrl', 'mode', 'executionMode', 'analysisMode', 'apiToken', 'quality'],
-      (result) => {
-        resolve({
-          backendUrl: result.backendUrl,
-          mode: result.mode,
-          executionMode: result.executionMode || result.mode,
-          analysisMode: result.analysisMode || 'basic',
-          apiToken: result.apiToken || '',
-          quality: result.quality || 'fast'
-        });
-      }
-    );
-  });
+  const result = await browser.storage.sync.get(
+    ['backendUrl', 'mode', 'executionMode', 'analysisMode', 'apiToken', 'quality']
+  );
+
+  return {
+    backendUrl: result.backendUrl,
+    mode: result.mode,
+    executionMode: result.executionMode || result.mode,
+    analysisMode: result.analysisMode || 'basic',
+    apiToken: result.apiToken || '',
+    quality: result.quality || 'fast'
+  };
 }
 
 async function setConfig(updates) {
-  return new Promise((resolve) => {
-    chrome.storage.sync.set(updates, () => {
-      resolve();
-    });
-  });
+  await browser.storage.sync.set(updates);
 }
 
 // ===== NOTIFICATIONS =====
@@ -91,16 +87,16 @@ async function captureFullPageScreenshots(tabId) {
   try {
     console.log('[EasyForm Screenshots] 📸 Starting full page capture...');
 
-    const initialScrollInfo = await chrome.tabs.sendMessage(tabId, {
+    const initialScrollInfo = await browser.tabs.sendMessage(tabId, {
       action: 'getScrollInfo'
     });
     const originalScrollX = initialScrollInfo.scrollX;
     const originalScrollY = initialScrollInfo.scrollY;
 
-    await chrome.tabs.sendMessage(tabId, { action: 'scrollToTop' });
-    await new Promise(resolve => setTimeout(resolve, 300));
+    await browser.tabs.sendMessage(tabId, { action: 'scrollToTop' });
+    await new Promise(resolve => setTimeout(resolve, 500));
 
-    const scrollInfo = await chrome.tabs.sendMessage(tabId, {
+    const scrollInfo = await browser.tabs.sendMessage(tabId, {
       action: 'getScrollInfo'
     });
 
@@ -119,7 +115,7 @@ async function captureFullPageScreenshots(tabId) {
     const maxScreenshots = 20;
 
     while (currentY < scrollHeight && screenshotCount < maxScreenshots) {
-      const screenshot = await chrome.tabs.captureVisibleTab(null, {
+      const screenshot = await browser.tabs.captureVisibleTab(null, {
         format: 'png',
         quality: 90
       });
@@ -133,16 +129,16 @@ async function captureFullPageScreenshots(tabId) {
       currentY += viewportHeight;
 
       if (currentY < scrollHeight) {
-        await chrome.tabs.sendMessage(tabId, {
+        await browser.tabs.sendMessage(tabId, {
           action: 'scrollToPosition',
           x: 0,
           y: currentY
         });
-        await new Promise(resolve => setTimeout(resolve, 200));
+        await new Promise(resolve => setTimeout(resolve, 600));
       }
     }
 
-    await chrome.tabs.sendMessage(tabId, {
+    await browser.tabs.sendMessage(tabId, {
       action: 'restoreScroll',
       x: originalScrollX,
       y: originalScrollY
@@ -188,7 +184,7 @@ async function handlePageAnalysisAsync(pageData, tabId) {
     // Load optional session instructions entered in the popup (fallback to legacy data if needed)
     let sessionInstructions = null;
     try {
-      const storage = await chrome.storage.local.get('sessionInstructions');
+      const storage = await browser.storage.local.get('sessionInstructions');
       if (typeof storage.sessionInstructions === 'string') {
         sessionInstructions = storage.sessionInstructions;
         if (sessionInstructions.length > 0) {
@@ -259,7 +255,7 @@ async function handlePageAnalysisAsync(pageData, tabId) {
 
   } catch (error) {
     console.error('[EasyForm API] ❌ Error handling page analysis:', error);
-    await chrome.storage.local.set({
+    await browser.storage.local.set({
       [STORAGE_KEYS.ANALYSIS_STATE]: ANALYSIS_STATES.ERROR,
       [STORAGE_KEYS.ANALYSIS_ERROR]: error.message
     });
@@ -311,7 +307,7 @@ function startPolling(requestId, tabId, startTime, mode) {
     } catch (error) {
       console.error('[EasyForm Polling] ❌ Polling error:', error);
       stopPolling(tabId);
-      await chrome.storage.local.set({
+      await browser.storage.local.set({
         [STORAGE_KEYS.ANALYSIS_STATE]: ANALYSIS_STATES.ERROR,
         [STORAGE_KEYS.ANALYSIS_ERROR]: error.message
       });
@@ -342,7 +338,7 @@ async function pollRequestStatus(requestId, tabId, startTime, mode) {
     await cancelRequestInternal(tabId);
     const timeoutMinutes = Math.round(POLL_TIMEOUT_MS / 60000);
     const timeoutMessage = `Analysis timeout (${timeoutMinutes} minutes)`;
-    await chrome.storage.local.set({
+    await browser.storage.local.set({
       [STORAGE_KEYS.ANALYSIS_STATE]: ANALYSIS_STATES.ERROR,
       [STORAGE_KEYS.ANALYSIS_ERROR]: timeoutMessage
     });
@@ -350,7 +346,7 @@ async function pollRequestStatus(requestId, tabId, startTime, mode) {
     return;
   }
 
-  const config = await chrome.storage.sync.get(['backendUrl', 'apiToken']);
+  const config = await browser.storage.sync.get(['backendUrl', 'apiToken']);
   const baseUrl = config.backendUrl || CONFIG.backendUrl;
   const apiToken = config.apiToken || '';
 
@@ -386,7 +382,7 @@ async function pollRequestStatus(requestId, tabId, startTime, mode) {
       return;
     }
     stopPolling(tabId);
-    await chrome.storage.local.set({
+    await browser.storage.local.set({
       [STORAGE_KEYS.ANALYSIS_STATE]: ANALYSIS_STATES.ERROR,
       [STORAGE_KEYS.ANALYSIS_ERROR]: status.error_message || 'Analysis failed'
     });
@@ -399,7 +395,7 @@ async function handleCompletedRequest(requestId, tabId, mode) {
   try {
     console.log('[EasyForm Polling] ⭐ handleCompletedRequest called for requestId:', requestId, 'tabId:', tabId, 'mode:', mode);
 
-    const config = await chrome.storage.sync.get(['backendUrl', 'apiToken']);
+    const config = await browser.storage.sync.get(['backendUrl', 'apiToken']);
     const baseUrl = config.backendUrl || CONFIG.backendUrl;
     const apiToken = config.apiToken || '';
 
@@ -419,7 +415,7 @@ async function handleCompletedRequest(requestId, tabId, mode) {
     const result = await response.json();
     console.log('[EasyForm Polling] 📋 Actions received:', result.actions.length);
 
-    await chrome.storage.local.set({
+    await browser.storage.local.set({
       [STORAGE_KEYS.ANALYSIS_STATE]: ANALYSIS_STATES.SUCCESS,
       [STORAGE_KEYS.ANALYSIS_RESULT]: result,
       [STORAGE_KEYS.ANALYSIS_ERROR]: null
@@ -429,7 +425,7 @@ async function handleCompletedRequest(requestId, tabId, mode) {
       console.log('[EasyForm Polling] 📋 Processing', result.actions.length, 'actions in mode:', mode);
       if (mode === 'automatic') {
         console.log('[EasyForm Polling] 🤖 Auto-executing', result.actions.length, 'actions for tab:', tabId);
-        const messageResponse = await chrome.tabs.sendMessage(tabId, {
+        const messageResponse = await browser.tabs.sendMessage(tabId, {
           action: 'executeActions',
           actions: result.actions,
           autoExecute: true
@@ -438,7 +434,7 @@ async function handleCompletedRequest(requestId, tabId, mode) {
         notifyInfo(tabId, `Executed ${result.actions.length} action(s)`);
       } else {
         console.log('[EasyForm Polling] 👁️ Showing overlay with', result.actions.length, 'actions');
-        await chrome.tabs.sendMessage(tabId, {
+        await browser.tabs.sendMessage(tabId, {
           action: 'showOverlay',
           actions: result.actions
         });
@@ -452,7 +448,7 @@ async function handleCompletedRequest(requestId, tabId, mode) {
 
   } catch (error) {
     console.error('[EasyForm Polling] ❌ Error handling completed request:', error);
-    await chrome.storage.local.set({
+    await browser.storage.local.set({
       [STORAGE_KEYS.ANALYSIS_STATE]: ANALYSIS_STATES.ERROR,
       [STORAGE_KEYS.ANALYSIS_ERROR]: error.message
     });
@@ -471,7 +467,7 @@ async function cancelRequestInternal(tabId) {
   console.log('[EasyForm Polling] 🚫 Canceling request:', requestId);
 
   try {
-    const config = await chrome.storage.sync.get(['backendUrl', 'apiToken']);
+    const config = await browser.storage.sync.get(['backendUrl', 'apiToken']);
     const baseUrl = config.backendUrl || CONFIG.backendUrl;
     const apiToken = config.apiToken || '';
 
@@ -492,7 +488,7 @@ async function cancelRequestInternal(tabId) {
 
     await cleanupRequestStorage(tabId);
 
-    await chrome.storage.local.set({
+    await browser.storage.local.set({
       [STORAGE_KEYS.ANALYSIS_STATE]: ANALYSIS_STATES.IDLE,
       [STORAGE_KEYS.ANALYSIS_ERROR]: null
     });
@@ -514,52 +510,50 @@ function cleanupTab(tabId) {
 }
 
 // ===== MAIN =====
-chrome.runtime.onInstalled.addListener(() => {
+browser.runtime.onInstalled.addListener(async () => {
   console.log('[EasyForm] 🚀 Extension installed');
 
-  chrome.storage.sync.get(['backendUrl', 'mode', 'executionMode', 'analysisMode', 'quality'], (result) => {
-    if (!result.backendUrl) {
-      chrome.storage.sync.set({ backendUrl: CONFIG.backendUrl });
-    }
-    if (!result.executionMode) {
-      chrome.storage.sync.set({ executionMode: result.mode || CONFIG.mode });
-    }
-    if (!result.analysisMode) {
-      chrome.storage.sync.set({ analysisMode: 'basic' });
-    }
-    if (!result.quality) {
-      chrome.storage.sync.set({ quality: 'fast' });
-    }
-  });
+  const result = await browser.storage.sync.get(['backendUrl', 'mode', 'executionMode', 'analysisMode', 'quality']);
 
-  chrome.contextMenus.create({
+  if (!result.backendUrl) {
+    await browser.storage.sync.set({ backendUrl: CONFIG.backendUrl });
+  }
+  if (!result.executionMode) {
+    await browser.storage.sync.set({ executionMode: result.mode || CONFIG.mode });
+  }
+  if (!result.analysisMode) {
+    await browser.storage.sync.set({ analysisMode: 'basic' });
+  }
+  if (!result.quality) {
+    await browser.storage.sync.set({ quality: 'fast' });
+  }
+
+  browser.contextMenus.create({
     id: 'analyze-page',
     title: 'Analyze page with EasyForm',
     contexts: ['page', 'selection']
   });
 });
 
-chrome.contextMenus.onClicked.addListener((info, tab) => {
+browser.contextMenus.onClicked.addListener((info, tab) => {
   if (info.menuItemId === 'analyze-page') {
     analyzePage(tab.id);
   }
 });
 
-chrome.commands.onCommand.addListener((command) => {
+browser.commands.onCommand.addListener(async (command) => {
   if (command === 'analyze-page') {
-    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-      if (tabs[0]) analyzePage(tabs[0].id);
-    });
+    const tabs = await browser.tabs.query({ active: true, currentWindow: true });
+    if (tabs[0]) analyzePage(tabs[0].id);
   } else if (command === 'toggle-overlay') {
-    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-      if (tabs[0]) {
-        chrome.tabs.sendMessage(tabs[0].id, { action: 'toggleOverlay' });
-      }
-    });
+    const tabs = await browser.tabs.query({ active: true, currentWindow: true });
+    if (tabs[0]) {
+      browser.tabs.sendMessage(tabs[0].id, { action: 'toggleOverlay' });
+    }
   }
 });
 
-chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+browser.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === 'analyzePage' && request.tabId) {
     analyzePage(request.tabId).catch(error => {
       console.error('[EasyForm] ❌ Analysis error:', error);
@@ -600,24 +594,30 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (request.apiToken !== undefined) updates.apiToken = request.apiToken;
     if (request.quality !== undefined) updates.quality = request.quality;
 
-    setConfig(updates).then(() => {
-      sendResponse({ success: true });
-    });
+    setConfig(updates)
+      .then(() => {
+        sendResponse({ success: true });
+      })
+      .catch((error) => {
+        console.error('[EasyForm] Error saving config:', error);
+        sendResponse({ success: false, error: error.message });
+      });
     return true;
   }
 
   if (request.action === 'getAnalysisState') {
-    chrome.storage.local.get([
-      STORAGE_KEYS.ANALYSIS_STATE,
-      STORAGE_KEYS.ANALYSIS_RESULT,
-      STORAGE_KEYS.ANALYSIS_ERROR
-    ], (data) => {
+    (async () => {
+      const data = await browser.storage.local.get([
+        STORAGE_KEYS.ANALYSIS_STATE,
+        STORAGE_KEYS.ANALYSIS_RESULT,
+        STORAGE_KEYS.ANALYSIS_ERROR
+      ]);
       sendResponse({
         state: data[STORAGE_KEYS.ANALYSIS_STATE] || ANALYSIS_STATES.IDLE,
         result: data[STORAGE_KEYS.ANALYSIS_RESULT],
         error: data[STORAGE_KEYS.ANALYSIS_ERROR]
       });
-    });
+    })();
     return true;
   }
 
@@ -653,12 +653,12 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
           }
         }
 
-        await chrome.storage.local.remove([
+        await browser.storage.local.remove([
           STORAGE_KEYS.ANALYSIS_RESULT,
           STORAGE_KEYS.ANALYSIS_ERROR
         ]);
 
-        await chrome.storage.local.set({
+        await browser.storage.local.set({
           [STORAGE_KEYS.ANALYSIS_STATE]: ANALYSIS_STATES.IDLE
         });
 
@@ -670,6 +670,8 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     })();
     return true;
   }
+
+  return false;
 });
 
 async function analyzePage(tabId) {
@@ -682,20 +684,20 @@ async function analyzePage(tabId) {
       throw new Error('Analysis already running for this tab. Please cancel it first.');
     }
 
-    await chrome.storage.local.set({
+    await browser.storage.local.set({
       [STORAGE_KEYS.ANALYSIS_STATE]: ANALYSIS_STATES.RUNNING,
       [STORAGE_KEYS.ANALYSIS_ERROR]: null
     });
 
     console.log('[EasyForm] 📨 Requesting page data from content script...');
-    const response = await chrome.tabs.sendMessage(tabId, {
+    const response = await browser.tabs.sendMessage(tabId, {
       action: 'getPageData'
     });
 
     if (response && response.data) {
   let sessionInstructionsLength = 0;
       try {
-        const storage = await chrome.storage.local.get('sessionInstructions');
+        const storage = await browser.storage.local.get('sessionInstructions');
         if (typeof storage.sessionInstructions === 'string') {
           sessionInstructionsLength = storage.sessionInstructions.length;
         }
@@ -716,14 +718,14 @@ async function analyzePage(tabId) {
     }
   } catch (error) {
     console.error('[EasyForm] ❌ Error analyzing page:', error);
-    await chrome.storage.local.set({
+    await browser.storage.local.set({
       [STORAGE_KEYS.ANALYSIS_STATE]: ANALYSIS_STATES.ERROR,
       [STORAGE_KEYS.ANALYSIS_ERROR]: error.message
     });
   }
 }
 
-chrome.tabs.onRemoved.addListener((tabId) => {
+browser.tabs.onRemoved.addListener((tabId) => {
   console.log('[EasyForm] 🗑️ Tab closed:', tabId);
   cleanupTab(tabId);
 });
