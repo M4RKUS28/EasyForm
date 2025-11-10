@@ -170,9 +170,10 @@ async def analyze_form(
     """
     Analyze a form and generate actions to fill it.
 
-    This orchestrates the two-phase analysis:
+    This orchestrates the three-phase analysis:
     1. HTML Form Parser Agent - Extracts form structure
-    2. Form Value Generator Agent - Generates values based on user context
+    2. Solution Generator Agent - Produces per-question answers
+    3. Action Generator Agent - Converts answers to concrete DOM actions
 
     Args:
         db: Database session
@@ -351,68 +352,72 @@ async def analyze_form(
                 fields_detected=0
             )
 
-        # ===== PHASE 2: Generate Question Actions =====
+        # ===== PHASE 2: Generate Solutions =====
         logger.info(
-            "Phase 2: Generating actions for %d questions (%d inputs)",
+            "Phase 2: Generating solutions for %d questions (%d inputs)",
             len(normalized_questions),
             total_inputs,
         )
 
-        # Get user context - use RAG or direct depending on file count/size
-        logger.info("Fetching user context...")
         rag_service = get_rag_service()
         use_rag = await rag_service.should_use_rag(db, user_id)
 
         if use_rag:
             logger.info("Using RAG for context retrieval")
+            question_contexts: Dict[str, Dict[str, List]] = {}
+            total_text_chunks = 0
+            total_image_chunks = 0
 
-            # Build search query from question titles
-            query = build_search_query_from_questions(normalized_questions)
-            logger.info(f"RAG search query: {query[:100]}...")
+            for q_idx, question in enumerate(normalized_questions):
+                question_query = build_search_query_for_question(question)
+                question_id = str(question.get("question_id") or q_idx)
 
-            # Retrieve relevant chunks
-            context = await rag_service.retrieve_relevant_context(
-                db=db,
-                query=query,
-                user_id=user_id,
-                top_k=10
+                context = await rag_service.retrieve_relevant_context(
+                    db=db,
+                    query=question_query,
+                    user_id=user_id,
+                    top_k=10,
+                )
+
+                question_contexts[question_id] = context
+                text_count = len(context.get("text_chunks", []))
+                image_count = len(context.get("image_chunks", []))
+                total_text_chunks += text_count
+                total_image_chunks += image_count
+
+                logger.info(
+                    "Question %s RAG context: %d text chunks, %d image chunks",
+                    question_id,
+                    text_count,
+                    image_count,
+                )
+
+            logger.info(
+                "RAG retrieval complete for %d questions -> %d text chunks, %d image chunks",
+                len(normalized_questions),
+                total_text_chunks,
+                total_image_chunks,
             )
 
-            logger.info(f"Retrieved {len(context['text_chunks'])} text chunks and {len(context['image_chunks'])} image chunks")
-
-            # Call Form Value Generator Agent with RAG context
-            logger.info("Calling Form Value Generator Agent with RAG context...")
-            generator_result = await agent_service.generate_form_values(
+            question_solutions = await agent_service.generate_solutions_per_question(
                 user_id=user_id,
                 questions=normalized_questions,
                 visible_text=visible_clean,
                 clipboard_text=clipboard_clean,
-                user_files=None,  # Will use text_context and image_context instead
+                user_files=None,
                 quality=request.quality,
                 personal_instructions=instructions_clean,
+                question_contexts=question_contexts,
+                screenshots=screenshot_bytes,
             )
         else:
             logger.info("Using direct context (all files)")
-
-            # Fetch all files (current approach)
             user_files = await files_crud.get_user_files(db, user_id)
             logger.info("Found %d user files for context", len(user_files))
             if user_files:
                 logger.info("User files: %s", [f.filename for f in user_files[:5]])
 
-            # Call Form Value Generator Agent with direct files
-            logger.info("Calling Form Value Generator Agent with direct context...")
-            logger.info(
-                "Generator input - user_id: %s, questions=%d, inputs=%d, visible_text length: %d, clipboard length: %d, user_files count: %d",
-                user_id,
-                len(normalized_questions),
-                total_inputs,
-                len(visible_clean),
-                len(clipboard_clean),
-                len(user_files),
-            )
-
-            generator_result = await agent_service.generate_form_values(
+            question_solutions = await agent_service.generate_solutions_per_question(
                 user_id=user_id,
                 questions=normalized_questions,
                 visible_text=visible_clean,
@@ -420,24 +425,34 @@ async def analyze_form(
                 user_files=user_files,
                 quality=request.quality,
                 personal_instructions=instructions_clean,
+                screenshots=screenshot_bytes,
             )
 
-        logger.info("Form Value Generator Agent returned result type: %s", type(generator_result))
         logger.info(
-            "Generator result keys: %s",
-            generator_result.keys() if isinstance(generator_result, dict) else "NOT A DICT",
+            "Phase 2 complete: Generated %d solutions",
+            len(question_solutions),
         )
-        logger.info("Generator result preview: %s", str(generator_result)[:500])
 
-        # Validate generator result
+        # ===== PHASE 3: Generate Actions from Solutions =====
+        logger.info(
+            "Phase 3: Converting %d solutions to actions",
+            len(question_solutions),
+        )
+
+        generator_result = await agent_service.generate_actions_from_solutions(
+            user_id=user_id,
+            question_solution_pairs=question_solutions,
+            quality=request.quality,
+            batch_size=10,
+        )
+
         if not generator_result or "actions" not in generator_result:
-            logger.error("Generator agent returned invalid result: %s", generator_result)
-            logger.error("Validation failed: generator_result is None or missing 'actions' key")
+            logger.error("Action generator returned invalid result: %s", generator_result)
             return form_schema.FormAnalyzeResponse(
                 status="error",
-                message="Failed to generate form values",
+                message="Failed to generate actions from solutions",
                 actions=[],
-                fields_detected=total_inputs
+                fields_detected=total_inputs,
             )
 
         # Convert to FormAction objects
