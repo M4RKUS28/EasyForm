@@ -6,6 +6,8 @@ as plain text (without structured output).
 from google.adk.agents import LlmAgent
 from google.adk.runners import Runner
 from google.genai import types
+from google.adk.tools import google_search
+
 
 from ..agent import StandardAgent
 from ..utils import load_instruction_from_file
@@ -19,7 +21,7 @@ class SolutionGeneratorAgent(StandardAgent):
         self.model = model
         self._response_config = types.GenerateContentConfig(
             temperature=0.2,
-            max_output_tokens=8192,
+            max_output_tokens=65535,
         )
 
         generator_agent = LlmAgent(
@@ -27,6 +29,7 @@ class SolutionGeneratorAgent(StandardAgent):
             model=self.model,
             description="Agent for generating appropriate solutions/answers for form questions.",
             instruction=self.full_instructions,
+            tools=[google_search],
             generate_content_config=self._response_config,
         )
 
