@@ -1,7 +1,7 @@
 // Shared constants for EasyForm extension
 
 export const CONFIG = {
-  backendUrl: 'https://easyform.m4rkus28.de',
+  backendUrl: 'https://easyform-ai.com',
   mode: 'automatic' // 'automatic' or 'manual'
 };
 

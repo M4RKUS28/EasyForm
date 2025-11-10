@@ -1,6 +1,6 @@
 // Minimal Popup Script for EasyForm
 
-const DEFAULT_BACKEND_URL = 'https://easyform.m4rkus28.de';
+const DEFAULT_BACKEND_URL = 'https://easyform-ai.com';
 
 let statusCheckInterval = null;
 let isCanceling = false;

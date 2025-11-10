@@ -1,200 +1,220 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>EasyForm Settings</title>
-  <style>
-    :root {
-      --bg-primary: #ffffff;
-      --bg-secondary: #f5f5f5;
-      --text-primary: #333333;
-      --text-secondary: #666666;
-      --border-color: #dddddd;
-      --accent-color: #667eea;
-      --accent-hover: #5568d3;
-      --input-bg: #ffffff;
-      --success-bg: #eeffee;
-      --success-text: #33cc33;
-    }
-
-    @media (prefers-color-scheme: dark) {
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>EasyForm Settings</title>
+    <style>
       :root {
-        --bg-primary: #1e1e1e;
-        --bg-secondary: #2a2a2a;
-        --text-primary: #e0e0e0;
-        --text-secondary: #999999;
-        --border-color: #444444;
-        --accent-color: #7c8ef5;
-        --accent-hover: #6b7de3;
-        --input-bg: #2a2a2a;
-        --success-bg: #1a3a1a;
-        --success-text: #6bff6b;
+        --bg-primary: #ffffff;
+        --bg-secondary: #f5f5f5;
+        --text-primary: #333333;
+        --text-secondary: #666666;
+        --border-color: #dddddd;
+        --accent-color: #667eea;
+        --accent-hover: #5568d3;
+        --input-bg: #ffffff;
+        --success-bg: #eeffee;
+        --success-text: #33cc33;
       }
-    }
 
-    * {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
-    }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg-primary: #1e1e1e;
+          --bg-secondary: #2a2a2a;
+          --text-primary: #e0e0e0;
+          --text-secondary: #999999;
+          --border-color: #444444;
+          --accent-color: #7c8ef5;
+          --accent-hover: #6b7de3;
+          --input-bg: #2a2a2a;
+          --success-bg: #1a3a1a;
+          --success-text: #6bff6b;
+        }
+      }
 
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      font-size: 14px;
-      color: var(--text-primary);
-      background: var(--bg-secondary);
-      padding: 40px 20px;
-    }
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
 
-    .container {
-      max-width: 600px;
-      margin: 0 auto;
-      background: var(--bg-primary);
-      border-radius: 8px;
-      padding: 30px;
-    }
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+          sans-serif;
+        font-size: 14px;
+        color: var(--text-primary);
+        background: var(--bg-secondary);
+        padding: 40px 20px;
+      }
 
-    h1 {
-      font-size: 24px;
-      margin-bottom: 10px;
-      color: var(--text-primary);
-    }
+      .container {
+        max-width: 600px;
+        margin: 0 auto;
+        background: var(--bg-primary);
+        border-radius: 8px;
+        padding: 30px;
+      }
 
-    .subtitle {
-      color: var(--text-secondary);
-      margin-bottom: 30px;
-      font-size: 14px;
-    }
+      h1 {
+        font-size: 24px;
+        margin-bottom: 10px;
+        color: var(--text-primary);
+      }
 
-    .section {
-      margin-bottom: 30px;
-    }
+      .subtitle {
+        color: var(--text-secondary);
+        margin-bottom: 30px;
+        font-size: 14px;
+      }
 
-    .section-title {
-      font-size: 16px;
-      font-weight: 600;
-      margin-bottom: 15px;
-      color: var(--text-primary);
-    }
+      .section {
+        margin-bottom: 30px;
+      }
 
-    .input-group {
-      margin-bottom: 20px;
-    }
+      .section-title {
+        font-size: 16px;
+        font-weight: 600;
+        margin-bottom: 15px;
+        color: var(--text-primary);
+      }
 
-    .input-group label {
-      display: block;
-      font-size: 13px;
-      font-weight: 500;
-      margin-bottom: 8px;
-      color: var(--text-secondary);
-    }
+      .input-group {
+        margin-bottom: 20px;
+      }
 
-    .input-group input[type="url"],
-    .input-group input[type="password"],
-    .input-group input[type="text"],
-    .input-group select {
-      width: 100%;
-      padding: 10px 12px;
-      border: 1px solid var(--border-color);
-      border-radius: 4px;
-      font-size: 14px;
-      background: var(--input-bg);
-      color: var(--text-primary);
-      transition: border-color 0.2s;
-    }
+      .input-group label {
+        display: block;
+        font-size: 13px;
+        font-weight: 500;
+        margin-bottom: 8px;
+        color: var(--text-secondary);
+      }
 
-    .input-group input:focus,
-    .input-group select:focus {
-      outline: none;
-      border-color: var(--accent-color);
-    }
+      .input-group input[type="url"],
+      .input-group input[type="password"],
+      .input-group input[type="text"],
+      .input-group select {
+        width: 100%;
+        padding: 10px 12px;
+        border: 1px solid var(--border-color);
+        border-radius: 4px;
+        font-size: 14px;
+        background: var(--input-bg);
+        color: var(--text-primary);
+        transition: border-color 0.2s;
+      }
 
-    .quality-select {
-      cursor: pointer;
-    }
+      .input-group input:focus,
+      .input-group select:focus {
+        outline: none;
+        border-color: var(--accent-color);
+      }
 
-    .help-text {
-      font-size: 12px;
-      color: var(--text-secondary);
-      margin-top: 5px;
-    }
+      .quality-select {
+        cursor: pointer;
+      }
 
-    .save-button {
-      padding: 12px 24px;
-      background: var(--accent-color);
-      color: white;
-      border: none;
-      border-radius: 6px;
-      font-size: 14px;
-      font-weight: 600;
-      cursor: pointer;
-      transition: background 0.2s;
-    }
+      .help-text {
+        font-size: 12px;
+        color: var(--text-secondary);
+        margin-top: 5px;
+      }
 
-    .save-button:hover {
-      background: var(--accent-hover);
-    }
+      .save-button {
+        padding: 12px 24px;
+        background: var(--accent-color);
+        color: white;
+        border: none;
+        border-radius: 6px;
+        font-size: 14px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: background 0.2s;
+      }
 
-    .save-button:active {
-      transform: scale(0.98);
-    }
+      .save-button:hover {
+        background: var(--accent-hover);
+      }
 
-    .success-message {
-      background: var(--success-bg);
-      color: var(--success-text);
-      padding: 12px;
-      border-radius: 4px;
-      font-size: 13px;
-      margin-top: 15px;
-      display: none;
-    }
+      .save-button:active {
+        transform: scale(0.98);
+      }
 
-    .success-message.show {
-      display: block;
-    }
-  </style>
-</head>
-<body>
-  <div class="container">
-    <h1>EasyForm Settings</h1>
-    <p class="subtitle">Configure your form filling assistant</p>
+      .success-message {
+        background: var(--success-bg);
+        color: var(--success-text);
+        padding: 12px;
+        border-radius: 4px;
+        font-size: 13px;
+        margin-top: 15px;
+        display: none;
+      }
 
-    <div class="section">
-      <div class="section-title">Backend Configuration</div>
+      .success-message.show {
+        display: block;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>EasyForm Settings</h1>
+      <p class="subtitle">Configure your form filling assistant</p>
 
-      <div class="input-group">
-        <label for="backendUrl">Backend URL</label>
-        <input type="url" id="backendUrl" placeholder="https://easyform.m4rkus28.de">
-        <div class="help-text">The base URL of your EasyForm backend</div>
+      <div class="section">
+        <div class="section-title">Backend Configuration</div>
+
+        <div class="input-group">
+          <label for="backendUrl">Backend URL</label>
+          <input
+            type="url"
+            id="backendUrl"
+            placeholder="https://easyform-ai.com"
+          />
+          <div class="help-text">The base URL of your EasyForm backend</div>
+        </div>
+
+        <div class="input-group">
+          <label for="apiToken">API Token (optional)</label>
+          <input
+            type="password"
+            id="apiToken"
+            placeholder="Enter your API token"
+          />
+          <div class="help-text">Authentication token for the backend API</div>
+        </div>
       </div>
 
-      <div class="input-group">
-        <label for="apiToken">API Token (optional)</label>
-        <input type="password" id="apiToken" placeholder="Enter your API token">
-        <div class="help-text">Authentication token for the backend API</div>
+      <div class="section">
+        <div class="section-title">Analysis Quality</div>
+
+        <div class="input-group">
+          <label for="quality">Quality Level</label>
+          <select id="quality" class="quality-select">
+            <option value="fast" selected>
+              Fast (Flash parser & Flash generator)
+            </option>
+            <option value="fast-pro">
+              Fast Pro (Pro parser & Flash generator)
+            </option>
+            <option value="exact">Exact (Flash parser & Pro generator)</option>
+            <option value="exact-pro">
+              Exact Pro (Pro parser & Pro generator)
+            </option>
+          </select>
+          <div class="help-text">
+            Controls AI model pairing. All modes process each question
+            individually for consistent accuracy.
+          </div>
+        </div>
+      </div>
+
+      <button class="save-button" id="saveButton">Save Settings</button>
+      <div class="success-message" id="successMessage">
+        Settings saved successfully!
       </div>
     </div>
 
-    <div class="section">
-      <div class="section-title">Analysis Quality</div>
-
-      <div class="input-group">
-        <label for="quality">Quality Level</label>
-        <select id="quality" class="quality-select">
-          <option value="fast" selected>Fast (Flash parser & Flash generator)</option>
-          <option value="fast-pro">Fast Pro (Pro parser & Flash generator)</option>
-          <option value="exact">Exact (Flash parser & Pro generator)</option>
-          <option value="exact-pro">Exact Pro (Pro parser & Pro generator)</option>
-        </select>
-        <div class="help-text">Controls AI model pairing. All modes process each question individually for consistent accuracy.</div>
-      </div>
-    </div>
-
-    <button class="save-button" id="saveButton">Save Settings</button>
-    <div class="success-message" id="successMessage">Settings saved successfully!</div>
-  </div>
-
-  <script src="options.js"></script>
-</body>
+    <script src="options.js"></script>
+  </body>
 </html>
