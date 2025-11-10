@@ -123,16 +123,31 @@ Interactive API docs are exposed at `/api/docs` once the backend is running. The
 ## Retrieval-augmented context
 
 - **Direct context vs. RAG:** Files below configurable thresholds (≤5 files, ≤50 k characters, ≤10 PDF pages) are streamed directly into prompts. Larger datasets trigger RAG retrieval instead.
-- **Vector store:** Document chunks are embedded with Google `models/gemini-embedding-001` (768-dim, truncated from 3072) and stored in a ChromaDB collection (`cosine` metric) per user.
+- **Vector stores:** Document chunks are embedded using dual embedding strategy:
+  - **Text collection:** Gemini `gemini-embedding-001` (3072-dim) for semantic text search
+  - **Image collection:** Vertex AI `multimodalembedding@001` (1408-dim) for visual similarity search
+- **Dual retrieval:** Both collections are searched per question, results merged by similarity (cosine metric)
 - **Query building:** The backend synthesizes a search query from detected question titles/descriptions, retrieving top text and image chunks which feed the solution generator.
 - **Screenshots:** Browser screenshots never enter the vector store; they are passed straight to the current analysis request.
 
 ## Document processing & OCR
 
-- **PDFs:** Parsed via PyMuPDF; per-page text is chunked with overlap, images are extracted and OCR’d.
+- **PDFs:** Parsed via PyMuPDF; per-page text is chunked with overlap, images are extracted and OCR'd.
 - **Images:** Standalone uploads run through Tesseract OCR; images are resized to 1024×1024 (max) before embedding.
 - **Chunk metadata:** Each chunk stores page numbers, indices, and original formats to keep traceability in both the DB and vector store.
 - **Fallbacks:** When OCR yields no text, a neutral placeholder still keeps the image discoverable in the shared embedding space.
+
+### Dual Embedding Strategy
+
+| Source | Chunk Type | OCR | Text Embedding (Gemini) | Visual Embedding (Vertex AI) |
+|--------|------------|-----|-------------------------|------------------------------|
+| **PDF text** | TEXT | ❌ No | ✅ Text content | ❌ Skipped |
+| **PDF images** | IMAGE | ✅ Tesseract | ✅ OCR text | ✅ Image pixels |
+| **Standalone images** | IMAGE | ✅ Tesseract | ✅ OCR text | ✅ Image pixels |
+
+- **Text collection** (`easyform_text_new`): Gemini `gemini-embedding-001` embeddings for semantic text search
+- **Image collection** (`easyform_images_new`): Vertex AI `multimodalembedding@001` for visual similarity search
+- **Dual retrieval**: Both collections are searched during RAG queries, results merged by similarity score
 
 ## Browser extension specifics
 

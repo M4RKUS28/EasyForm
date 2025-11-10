@@ -88,11 +88,21 @@ PERSONAL_INSTRUCTIONS_MAX_LENGTH = int(os.getenv("PERSONAL_INSTRUCTIONS_MAX_LENG
 CHROMA_HOST = os.getenv("CHROMA_HOST", "localhost")
 CHROMA_PORT = int(os.getenv("CHROMA_PORT", "8000"))
 CHROMA_AUTH_TOKEN = os.getenv("CHROMA_AUTH_TOKEN", "")
-CHROMA_COLLECTION_NAME = os.getenv("CHROMA_COLLECTION_NAME", "easyform_documents_new")
+CHROMA_TEXT_COLLECTION_NAME = os.getenv("CHROMA_TEXT_COLLECTION_NAME", "easyform_text_new")
+CHROMA_IMAGE_COLLECTION_NAME = os.getenv("CHROMA_IMAGE_COLLECTION_NAME", "easyform_images_new")
 
 # Embedding Model Configuration
-EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "models/gemini-embedding-001")
-EMBEDDING_DIMENSIONS = int(os.getenv("EMBEDDING_DIMENSIONS", "3072"))
+# Text embeddings (for text chunks and OCR text from images)
+TEXT_EMBEDDING_MODEL = os.getenv("TEXT_EMBEDDING_MODEL", "models/gemini-embedding-001")
+TEXT_EMBEDDING_DIMENSIONS = int(os.getenv("TEXT_EMBEDDING_DIMENSIONS", "3072"))
+
+# Multimodal embeddings (for actual image visual content)
+IMAGE_EMBEDDING_MODEL = os.getenv("IMAGE_EMBEDDING_MODEL", "multimodalembedding@001")
+IMAGE_EMBEDDING_DIMENSIONS = int(os.getenv("IMAGE_EMBEDDING_DIMENSIONS", "1408"))
+
+# Vertex AI Configuration (required for multimodalembedding@001)
+VERTEX_AI_PROJECT = os.getenv("VERTEX_AI_PROJECT", "")
+VERTEX_AI_LOCATION = os.getenv("VERTEX_AI_LOCATION", "us-central1")
 
 # RAG Processing Configuration
 RAG_CHUNK_SIZE = int(os.getenv("RAG_CHUNK_SIZE", "1000"))  # tokens per chunk

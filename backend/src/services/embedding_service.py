@@ -1,13 +1,12 @@
 """
-Service for generating embeddings and managing ChromaDB vector store.
+Service for generating text embeddings and managing ChromaDB text vector store.
+Uses Gemini embedding model for text chunks and OCR text from images.
 """
-import io
 import logging
 from typing import List, Dict, Optional
 import chromadb
 from chromadb.config import Settings
 import google.generativeai as genai
-from PIL import Image
 
 from ..config import settings as app_settings
 
@@ -15,11 +14,11 @@ logger = logging.getLogger(__name__)
 
 
 class EmbeddingService:
-    """Manage embeddings and ChromaDB vector store."""
+    """Manage text embeddings and ChromaDB vector store for text and OCR."""
 
     def __init__(self):
-        """Initialize ChromaDB client and embedding functions."""
-        logger.info("Initializing EmbeddingService with ChromaDB")
+        """Initialize ChromaDB client and text embedding functions."""
+        logger.info("Initializing EmbeddingService for text embeddings")
 
         # Initialize ChromaDB client
         self.chroma_client = chromadb.HttpClient(
@@ -32,21 +31,23 @@ class EmbeddingService:
             ssl=True
         )
 
-        # Get or create collection
-        # Note: Using cosine similarity for embeddings
-        self.collection = self.chroma_client.get_or_create_collection(
-            name=app_settings.CHROMA_COLLECTION_NAME,
-            metadata={"hnsw:space": "cosine"},  # Cosine similarity
+        # Get or create TEXT collection (for text chunks and OCR)
+        self.text_collection = self.chroma_client.get_or_create_collection(
+            name=app_settings.CHROMA_TEXT_COLLECTION_NAME,
+            metadata={"hnsw:space": "cosine"},
         )
 
         logger.info(
-            f"ChromaDB collection '{app_settings.CHROMA_COLLECTION_NAME}' initialized with "
-            f"{self.collection.count()} existing documents"
+            f"ChromaDB text collection '{app_settings.CHROMA_TEXT_COLLECTION_NAME}' initialized with "
+            f"{self.text_collection.count()} existing documents"
         )
         logger.info(
-            f"Using embedding model: {app_settings.EMBEDDING_MODEL} "
-            f"with {app_settings.EMBEDDING_DIMENSIONS} dimensions"
+            f"Using text embedding model: {app_settings.TEXT_EMBEDDING_MODEL} "
+            f"with {app_settings.TEXT_EMBEDDING_DIMENSIONS} dimensions"
         )
+
+        # Keep legacy reference for backward compatibility
+        self.collection = self.text_collection
 
     async def embed_text(self, text: str) -> List[float]:
         """
@@ -56,14 +57,14 @@ class EmbeddingService:
             text: Text to embed
 
         Returns:
-            Embedding vector (configured dimensions, default 768)
+            Embedding vector (configured dimensions, default 3072)
         """
         try:
             result = genai.embed_content(
-                model=app_settings.EMBEDDING_MODEL,
+                model=app_settings.TEXT_EMBEDDING_MODEL,
                 content=text,
                 task_type="retrieval_document",
-                output_dimensionality=app_settings.EMBEDDING_DIMENSIONS
+                output_dimensionality=app_settings.TEXT_EMBEDDING_DIMENSIONS
             )
             return result['embedding']
 
@@ -71,24 +72,21 @@ class EmbeddingService:
             logger.error(f"Text embedding failed: {e}", exc_info=True)
             raise
 
-    async def embed_image(self, image_bytes: bytes, caption: Optional[str] = None) -> List[float]:
+    async def embed_ocr_text(self, caption: Optional[str] = None) -> List[float]:
         """
-        Generate embedding for image using Google's embedding model with OCR caption.
+        Generate text embedding for OCR caption from image.
 
-        We use text embeddings for both text and images to keep them in the
-        same embedding space, enabling unified semantic search. The OCR caption provides
-        the text representation of the image content.
+        This embeds the OCR text (not the visual image) in the text collection
+        for text-based search of image content.
 
         Args:
-            image_bytes: Image bytes (stored for later retrieval)
-            caption: Text caption from OCR (required for embedding)
+            caption: Text caption from OCR
 
         Returns:
-            Embedding vector (configured dimensions, default 768)
+            Embedding vector (configured dimensions, default 3072)
         """
         try:
             # Use OCR text caption for embedding
-            # This keeps images in the same embedding space as text chunks
             if caption and caption.strip():
                 return await self.embed_text(caption)
             else:
@@ -97,12 +95,12 @@ class EmbeddingService:
                 return await self.embed_text("[Image content]")
 
         except Exception as e:
-            logger.error(f"Image embedding failed: {e}", exc_info=True)
+            logger.error(f"OCR text embedding failed: {e}", exc_info=True)
             raise
 
     async def add_chunks(self, chunks: List[Dict]) -> int:
         """
-        Add document chunks to ChromaDB.
+        Add document chunks to ChromaDB text collection.
 
         Args:
             chunks: List of chunk dicts with keys: id, content, chunk_type, metadata_json, user_id
@@ -130,10 +128,8 @@ class EmbeddingService:
                 if chunk_type_str == "text":
                     embedding = await self.embed_text(chunk["content"])
                 elif chunk_type_str == "image":
-                    embedding = await self.embed_image(
-                        chunk["raw_content"],
-                        caption=chunk.get("content")
-                    )
+                    # Embed OCR text in text collection
+                    embedding = await self.embed_ocr_text(caption=chunk.get("content"))
                 else:
                     logger.warning(f"Unknown chunk type: {chunk_type}")
                     continue
@@ -171,15 +167,15 @@ class EmbeddingService:
 
                 ids.append(chunk["id"])  # Use chunk ID as Chroma ID
 
-            # Batch add to ChromaDB
-            self.collection.add(
+            # Batch add to ChromaDB text collection
+            self.text_collection.add(
                 embeddings=embeddings,
                 documents=documents,
                 metadatas=metadatas,
                 ids=ids
             )
 
-            logger.info(f"Added {len(chunks)} chunks to ChromaDB")
+            logger.info(f"Added {len(chunks)} chunks to ChromaDB text collection")
             return len(chunks)
 
         except Exception as e:
@@ -194,7 +190,7 @@ class EmbeddingService:
         file_ids: Optional[List[str]] = None
     ) -> List[Dict]:
         """
-        Search for relevant chunks using semantic similarity.
+        Search for relevant chunks using semantic similarity in text collection.
 
         Args:
             query_text: Search query
@@ -214,8 +210,8 @@ class EmbeddingService:
             if file_ids:
                 where_filter["file_id"] = {"$in": file_ids}
 
-            # Query ChromaDB
-            results = self.collection.query(
+            # Query ChromaDB text collection
+            results = self.text_collection.query(
                 query_embeddings=[query_embedding],
                 n_results=top_k,
                 where=where_filter,
@@ -233,7 +229,7 @@ class EmbeddingService:
                         "similarity": 1 - results["distances"][0][i],  # Convert distance to similarity
                     })
 
-            logger.info(f"Search for '{query_text[:50]}...' returned {len(chunks)} results")
+            logger.info(f"Text search for '{query_text[:50]}...' returned {len(chunks)} results")
             return chunks
 
         except Exception as e:
@@ -242,7 +238,7 @@ class EmbeddingService:
 
     async def delete_file_chunks(self, file_id: str) -> bool:
         """
-        Delete all chunks for a file from ChromaDB.
+        Delete all chunks for a file from ChromaDB text collection.
 
         Args:
             file_id: File ID
@@ -252,10 +248,10 @@ class EmbeddingService:
         """
         try:
             # Delete by file_id metadata
-            self.collection.delete(
+            self.text_collection.delete(
                 where={"file_id": file_id}
             )
-            logger.info(f"Deleted chunks for file {file_id} from ChromaDB")
+            logger.info(f"Deleted text chunks for file {file_id} from ChromaDB")
             return True
 
         except Exception as e:
