@@ -35,27 +35,35 @@ class EmbeddingService:
         # Get or create collection
         # Note: Using cosine similarity for embeddings
         self.collection = self.chroma_client.get_or_create_collection(
-            name="easyform_documents",
+            name=app_settings.CHROMA_COLLECTION_NAME,
             metadata={"hnsw:space": "cosine"},  # Cosine similarity
         )
 
-        logger.info(f"ChromaDB collection 'easyform_documents' initialized with {self.collection.count()} existing documents")
+        logger.info(
+            f"ChromaDB collection '{app_settings.CHROMA_COLLECTION_NAME}' initialized with "
+            f"{self.collection.count()} existing documents"
+        )
+        logger.info(
+            f"Using embedding model: {app_settings.EMBEDDING_MODEL} "
+            f"with {app_settings.EMBEDDING_DIMENSIONS} dimensions"
+        )
 
     async def embed_text(self, text: str) -> List[float]:
         """
-        Generate embedding for text using Google's text-embedding-004.
+        Generate embedding for text using Google's gemini-embedding-001.
 
         Args:
             text: Text to embed
 
         Returns:
-            Embedding vector (768 dimensions)
+            Embedding vector (configured dimensions, default 768)
         """
         try:
             result = genai.embed_content(
-                model="models/text-embedding-004",
+                model=app_settings.EMBEDDING_MODEL,
                 content=text,
-                task_type="retrieval_document"
+                task_type="retrieval_document",
+                output_dimensionality=app_settings.EMBEDDING_DIMENSIONS
             )
             return result['embedding']
 
@@ -65,9 +73,9 @@ class EmbeddingService:
 
     async def embed_image(self, image_bytes: bytes, caption: Optional[str] = None) -> List[float]:
         """
-        Generate embedding for image using Google's text-embedding model with OCR caption.
+        Generate embedding for image using Google's embedding model with OCR caption.
 
-        We use text embeddings (768 dim) for both text and images to keep them in the
+        We use text embeddings for both text and images to keep them in the
         same embedding space, enabling unified semantic search. The OCR caption provides
         the text representation of the image content.
 
@@ -76,11 +84,11 @@ class EmbeddingService:
             caption: Text caption from OCR (required for embedding)
 
         Returns:
-            Embedding vector (768 dimensions)
+            Embedding vector (configured dimensions, default 768)
         """
         try:
             # Use OCR text caption for embedding
-            # This keeps images in the same 768-dim space as text chunks
+            # This keeps images in the same embedding space as text chunks
             if caption and caption.strip():
                 return await self.embed_text(caption)
             else:

@@ -125,7 +125,7 @@ context = await rag_service.retrieve_relevant_context(
 
 **Process**:
 
-1. Generate query embedding (768-dim vector from Google `text-embedding-004`)
+1. Generate query embedding (768-dim vector from Google `gemini-embedding-001`, truncated from 3072)
 2. Search ChromaDB collection with cosine similarity
 3. Retrieve top 10 chunks (mixed: text + images)
 4. Fetch full chunk data from PostgreSQL/MySQL
@@ -475,11 +475,14 @@ User uploads file → Document Processor → Chunker → Embedder → ChromaDB +
 - Same context ensures consistency across form
 
 ### 5. Image Embedding via OCR
+
 **Why not pixel embeddings?**
-- Unified embedding space (768-dim for both text and images)
+
+- Unified embedding space (768-dim for both text and images, truncated from gemini-embedding-001's 3072-dim)
 - Semantic search works across modalities
 - Cheaper (text embedding vs. image embedding models)
 - Sufficient for document images (forms, IDs, resumes)
+- Using latest Google embedding model (gemini-embedding-001, released July 2025)
 
 ### 6. Screenshot Exclusion from RAG
 **Why not index screenshots?**

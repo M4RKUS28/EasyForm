@@ -123,7 +123,7 @@ Interactive API docs are exposed at `/api/docs` once the backend is running. The
 ## Retrieval-augmented context
 
 - **Direct context vs. RAG:** Files below configurable thresholds (≤5 files, ≤50 k characters, ≤10 PDF pages) are streamed directly into prompts. Larger datasets trigger RAG retrieval instead.
-- **Vector store:** Document chunks are embedded with Google `models/text-embedding-004` (768-dim) and stored in a ChromaDB collection (`cosine` metric) per user.
+- **Vector store:** Document chunks are embedded with Google `models/gemini-embedding-001` (768-dim, truncated from 3072) and stored in a ChromaDB collection (`cosine` metric) per user.
 - **Query building:** The backend synthesizes a search query from detected question titles/descriptions, retrieving top text and image chunks which feed the solution generator.
 - **Screenshots:** Browser screenshots never enter the vector store; they are passed straight to the current analysis request.
 

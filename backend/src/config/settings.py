@@ -88,6 +88,11 @@ PERSONAL_INSTRUCTIONS_MAX_LENGTH = int(os.getenv("PERSONAL_INSTRUCTIONS_MAX_LENG
 CHROMA_HOST = os.getenv("CHROMA_HOST", "localhost")
 CHROMA_PORT = int(os.getenv("CHROMA_PORT", "8000"))
 CHROMA_AUTH_TOKEN = os.getenv("CHROMA_AUTH_TOKEN", "")
+CHROMA_COLLECTION_NAME = os.getenv("CHROMA_COLLECTION_NAME", "easyform_documents_new")
+
+# Embedding Model Configuration
+EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "models/gemini-embedding-001")
+EMBEDDING_DIMENSIONS = int(os.getenv("EMBEDDING_DIMENSIONS", "3072"))
 
 # RAG Processing Configuration
 RAG_CHUNK_SIZE = int(os.getenv("RAG_CHUNK_SIZE", "1000"))  # tokens per chunk
