@@ -1,6 +1,12 @@
 // Unified Background Script for EasyForm
 // Combines all background modules into one file for compatibility
-// Note: browser-polyfill.js is loaded via manifest.json
+
+/* global importScripts */
+try {
+  importScripts('browser-polyfill.js');
+} catch (err) {
+  console.error('[EasyForm] Failed to load browser polyfill inside service worker:', err);
+}
 
 // ===== CONSTANTS =====
 const CONFIG = {
