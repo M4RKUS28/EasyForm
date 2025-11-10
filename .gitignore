@@ -275,3 +275,6 @@ mobile/.metro-health-check*
 
 
 .claude/
+addon.crx
+addon.pem
+.gitignore
