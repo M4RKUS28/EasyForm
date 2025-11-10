@@ -28,7 +28,8 @@ class EmbeddingService:
             settings=Settings(
                 anonymized_telemetry=False,
                 allow_reset=False  # Safety: Don't allow reset in production
-            )
+            ),
+            ssl=True
         )
 
         # Get or create collection
