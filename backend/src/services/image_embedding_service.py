@@ -261,10 +261,15 @@ class ImageEmbeddingService:
             )
             query_embedding = embeddings.text_embedding
 
-            # Build where filter
-            where_filter = {"user_id": user_id, "chunk_type": "image"}
+            # Build where filter with $and operator for multiple conditions
+            where_conditions = [
+                {"user_id": user_id},
+                {"chunk_type": "image"}
+            ]
             if file_ids:
-                where_filter["file_id"] = {"$in": file_ids}
+                where_conditions.append({"file_id": {"$in": file_ids}})
+
+            where_filter = {"$and": where_conditions}
 
             # Query ChromaDB
             results = self.image_collection.query(

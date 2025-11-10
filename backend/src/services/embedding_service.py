@@ -206,9 +206,17 @@ class EmbeddingService:
             query_embedding = await self.embed_text(query_text)
 
             # Build where filter for user isolation
-            where_filter = {"user_id": user_id}
             if file_ids:
-                where_filter["file_id"] = {"$in": file_ids}
+                # Multiple conditions require $and operator
+                where_filter = {
+                    "$and": [
+                        {"user_id": user_id},
+                        {"file_id": {"$in": file_ids}}
+                    ]
+                }
+            else:
+                # Single condition can be used directly
+                where_filter = {"user_id": user_id}
 
             # Query ChromaDB text collection
             results = self.text_collection.query(
