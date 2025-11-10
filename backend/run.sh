@@ -62,12 +62,14 @@ if [ "${MACHINE}" = "Windows" ]; then
         echo "Failed to activate virtual environment on Windows."
         exit 1
     fi
+    echo "Activated virtual environment on Windows."
 else
     # Linux and Mac
     if ! source venv/bin/activate 2>/dev/null; then
         echo "Failed to activate virtual environment on ${MACHINE}."
         exit 1
     fi
+    echo "Activated virtual environment on ${MACHINE}."
 fi
 
 echo "Virtual environment activated."
