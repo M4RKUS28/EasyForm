@@ -24,6 +24,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Security Best Practice: non-root user
 RUN addgroup --system app && adduser --system --group app --home /home/app --shell /bin/bash
 
+# Create runtime dirs (important for Cloud SQL connector mounting later)
+RUN mkdir -p /cloudsql && chmod 777 /cloudsql
 
 WORKDIR /home/app/web
 
@@ -42,6 +44,12 @@ RUN mkdir -p /home/app/.npm /home/app/.config \
 
 USER app
 
+# FastAPI config
+ENV WORKERS=1 \
+    PORT=8080
+
 EXPOSE 8080
 
-CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port 8080 --workers ${WORKERS}"]
+HEALTHCHECK CMD curl --fail http://localhost:8080/health || exit 1
+
+CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT} --workers ${WORKERS}"]

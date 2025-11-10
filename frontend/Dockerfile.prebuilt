@@ -1,0 +1,13 @@
+# ----- Production Stage -----
+# Verwendet die bereits gebauten Assets aus dem CI/CD-Prozess
+# Kein Build-Step mehr nötig - nur noch Nginx mit pre-built Assets
+FROM nginx:1.29-alpine
+
+# Kopiere die bereits gebauten Dateien (werden vom CI/CD bereitgestellt)
+COPY dist /usr/share/nginx/html
+
+# Kopiere die Nginx-Konfiguration
+COPY nginx.conf /etc/nginx/conf.d/default.conf
+
+EXPOSE 8080
+CMD ["nginx", "-g", "daemon off;"]
