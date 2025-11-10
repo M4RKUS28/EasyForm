@@ -66,5 +66,5 @@ jobs:
             --vpc-connector=svpc-uscentral1 \
             --vpc-egress=private-ranges-only \
             --set-env-vars=DB_HOST=10.73.16.3,DB_PORT=3306,DB_USER=backend,DB_NAME=easyform,CHROMA_HOST=chromadb.m4rkus28.de,CHROMA_PORT=443,RAG_CHUNK_SIZE=1000,RAG_CHUNK_OVERLAP=200,RAG_TOP_K_RESULTS=10 \
-            --set-secrets=DB_PASSWORD=DB_PASSWORD:latest,SECRET_KEY=SECRET_KEY:latest,GOOGLE_API_KEY=GOOGLE_API_KEY:latest \
+            --set-secrets=DB_PASSWORD=DB_PASSWORD:latest,SECRET_KEY=SECRET_KEY:latest,SESSION_SECRET_KEY=SESSION_SECRET_KEY:latest,GOOGLE_API_KEY=GOOGLE_API_KEY:latest,GOOGLE_CLIENT_ID=GOOGLE_CLIENT_ID:latest,GOOGLE_CLIENT_SECRET=GOOGLE_CLIENT_SECRET:latest \
             --cpu=1 --memory=512Mi --min-instances=0 --max-instances=3
