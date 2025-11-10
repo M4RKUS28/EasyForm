@@ -3,7 +3,7 @@ RAG Service - Orchestrates document processing, embedding, and retrieval.
 Handles both text embeddings (Gemini) and visual image embeddings (Vertex AI).
 """
 import logging
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Any
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..db.crud import files_crud
@@ -210,9 +210,21 @@ class RAGService:
             text_chunks = []
             image_chunks = []
 
+            file_cache: Dict[str, Optional[Any]] = {}
+
             for chunk in chunks:
-                # Get file info for source attribution
-                file = await files_crud.get_file_by_id(db, chunk.file_id)
+                # Normalize file_id to a string key for caching
+                raw_file_id = getattr(chunk, "file_id", None)
+                file_id = str(raw_file_id) if raw_file_id is not None else ""
+                if not file_id:
+                    filename = "unknown file"
+                    file = None
+                else:
+                    if file_id not in file_cache:
+                        file_cache[file_id] = await files_crud.get_file_by_id(db, file_id)
+
+                    file = file_cache[file_id]
+                    filename = file.filename if file and getattr(file, "filename", None) else f"file:{file_id}"
 
                 chunk_type_str = chunk.chunk_type.value if hasattr(chunk.chunk_type, 'value') else str(chunk.chunk_type)
 
@@ -224,16 +236,16 @@ class RAGService:
                 if chunk_type_str == "text":
                     text_chunks.append({
                         "content": chunk.content,
-                        "source": f"{file.filename} (page {chunk.metadata_json.get('page', '?')})",
-                        "file_id": chunk.file_id,
+                        "source": f"{filename} (page {chunk.metadata_json.get('page', '?')})",
+                        "file_id": file_id,
                         "similarity": combined_similarity
                     })
                 elif chunk_type_str == "image":
                     image_chunks.append({
                         "image_bytes": chunk.raw_content,
                         "description": chunk.content,  # OCR text
-                        "source": f"{file.filename} (page {chunk.metadata_json.get('page', '?')})",
-                        "file_id": chunk.file_id,
+                        "source": f"{filename} (page {chunk.metadata_json.get('page', '?')})",
+                        "file_id": file_id,
                         "similarity": combined_similarity,
                         "visual_match": img_sim > 0,  # Flag if found by visual search
                     })
