@@ -204,7 +204,7 @@ results = await asyncio.gather(*tasks)  # Parallel execution
 **Why?**
 - Keeps text and images in the **same 768-dim embedding space**
 - Enables unified semantic search across modalities
-- Model: Google `text-embedding-004` (same as text)
+  - Model: Google `gemini-embedding-001` (same as text)
 
 **Process**:
 1. Extract text from image via Tesseract OCR

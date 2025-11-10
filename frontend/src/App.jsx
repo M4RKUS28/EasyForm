@@ -7,6 +7,7 @@ import Login from './pages/Login';
 import Register from './pages/Register';
 import Dashboard from './pages/Dashboard';
 import TestForm from './pages/TestForm';
+import Setup from './pages/Setup';
 
 function App() {
   return (
@@ -18,6 +19,7 @@ function App() {
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
             <Route path="/test-form" element={<TestForm />} />
+            <Route path="/setup" element={<Setup />} />
             <Route
               path="/dashboard"
               element={

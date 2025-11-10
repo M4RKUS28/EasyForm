@@ -134,6 +134,12 @@ const Header = () => {
                 {currentMode.label}
               </span>
             </button>
+            <Link
+              to="/setup"
+              className="px-4 py-2 text-blue-600 hover:text-blue-800 dark:text-blue-300 dark:hover:text-blue-200 font-medium transition-colors"
+            >
+              Setup
+            </Link>
             {isAuthenticated ? (
               <>
                 <span className="text-gray-700 dark:text-gray-200 transition-colors">

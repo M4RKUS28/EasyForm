@@ -85,7 +85,7 @@ Interactive API docs are exposed at `/api/docs` once the backend is running. The
   - Authlib (OAuth), python-jose (JWT), passlib[bcrypt]
   - PyMuPDF, Pillow, pytesseract for document parsing, OCR, and image preprocessing
   - google-adk session service with Gemini 2.5 Flash/Pro models for agents
-  - ChromaDB HTTP server + Google `models/text-embedding-004` for vector search
+  - ChromaDB HTTP server + Google `models/gemini-embedding-001` for vector search
 
 - Addon (browser extension)
   - Manifest V3, content scripts, background worker, options and popup UI

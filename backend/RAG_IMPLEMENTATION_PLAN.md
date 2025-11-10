@@ -25,7 +25,7 @@ Form Analysis → Build query from fields → Retrieve top-K relevant chunks →
 3. **Processing Strategy:** Asynchronous background processing after upload
 4. **Retrieval Strategy:** Smart - Use RAG if >5 files OR >50K chars OR any file >10 pages
 5. **Embedding Models:**
-   - Text: `text-embedding-004` (768 dimensions)
+  - Text: `gemini-embedding-001` (768 dimensions)
    - Images: `multimodalembedding@001` (1408 dimensions)
 
 ---
@@ -495,7 +495,7 @@ class EmbeddingService:
 
     async def embed_text(self, text: str) -> List[float]:
         """
-        Generate embedding for text using Google's text-embedding-004.
+       Generate embedding for text using Google's gemini-embedding-001.
 
         Args:
             text: Text to embed
@@ -505,7 +505,7 @@ class EmbeddingService:
         """
         try:
             result = genai.embed_content(
-                model="models/text-embedding-004",
+                model="models/gemini-embedding-001",
                 content=text,
                 task_type="retrieval_document"
             )

@@ -109,7 +109,7 @@ Check logs for:
    - Extract text and images from PDF using PyMuPDF
    - Run OCR on images using Tesseract
    - Chunk text into 1000-token pieces with 200-token overlap
-   - Generate embeddings using Google's `text-embedding-004`
+   - Generate embeddings using Google's `gemini-embedding-001`
    - Store chunks in `document_chunks` table
    - Index embeddings in ChromaDB
 
