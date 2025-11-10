@@ -1,8 +1,6 @@
 // Unified Background Script for EasyForm
 // Combines all background modules into one file for compatibility
-
-// Load webextension-polyfill for cross-browser compatibility
-importScripts('browser-polyfill.js');
+// Note: browser-polyfill.js is loaded via manifest.json
 
 // ===== CONSTANTS =====
 const CONFIG = {
