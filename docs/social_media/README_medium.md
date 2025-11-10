@@ -22,7 +22,7 @@ Everyone knows the pain of onboarding portals, government PDFs, and vendor quest
   3. Action Generator Agent turns answers into executable “fill/select/click” steps.
 - **React Dashboard** lets me upload files, manage API tokens, and monitor form runs. All assets live in Cloud Storage and are indexed for retrieval.
 
-Running everything on Cloud Run means each asynchronous form workflow can scale independently while sharing the same codebase. The extension simply polls for status updates (`processing_step_1/2/3`) until actions are ready, then replays them inside the page.
+
 
 ## What Works Today
 
@@ -33,9 +33,8 @@ Running everything on Cloud Run means each asynchronous form workflow can scale 
 
 ## Roadmap
 
-- Batch processing for HR/fintech onboarding portals.
-- Deeper document understanding (table extraction, handwritten OCR).
-- Shared workspaces so teams can pool instructions and documents.
+- **Instantaneous Performance:** I want to optimize the entire AI pipeline, from analysis to execution, to make the process feel immediate. 
+- **Near-Perfect Accuracy:** I plan to continue refining the RAG system and experiment with different prompting strategies to make the AI's answers even more reliable across a wider variety of forms.
 
 If you want to try the project or contribute, the repo is on GitHub and the landing page lives at [https://easyform-ai.com](https://easyform-ai.com).
 
