@@ -346,6 +346,35 @@ async def process_form_analysis_async(
     3. Saves actions to database
     4. Updates status to 'completed' or 'failed'
     """
+    async def record_progress_event(
+        stage: str,
+        message: str,
+        progress: Optional[int] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+        db_session: Optional[AsyncSession] = None,
+    ) -> None:
+        """Persist a granular progress update for the request."""
+        if db_session is None:
+            async with get_async_db_context() as progress_db:
+                progress_session = cast(AsyncSession, progress_db)
+                await form_requests_crud.log_progress_event(
+                    progress_session,
+                    request_id,
+                    stage,
+                    message,
+                    progress=progress,
+                    metadata=metadata,
+                )
+        else:
+            await form_requests_crud.log_progress_event(
+                db_session,
+                request_id,
+                stage,
+                message,
+                progress=progress,
+                metadata=metadata,
+            )
+
     try:
         logger.info("[AsyncTask %s] Starting background analysis for user %s", request_id, user_id)
         html_clean, visible_clean, clipboard_clean = _extract_sanitized_inputs(request_data)
@@ -358,6 +387,16 @@ async def process_form_analysis_async(
             len(visible_clean),
             len(request_data.clipboard_text or ""),
             len(clipboard_clean),
+        )
+        await record_progress_event(
+            "inputs_sanitized",
+            "Inputs sanitized and queued for analysis",
+            progress=5,
+            metadata={
+                "html_chars": len(html_clean),
+                "visible_chars": len(visible_clean),
+                "clipboard_chars": len(clipboard_clean),
+            },
         )
 
         # Initialize FileLogger if enabled
@@ -374,6 +413,12 @@ async def process_form_analysis_async(
                 db_session, request_id, "processing_step_1"
             )
             logger.info("[AsyncTask %s] Status updated to 'processing_step_1'", request_id)
+            await record_progress_event(
+                "parser_started",
+                "Parsing form structure (Phase 1)",
+                progress=10,
+                db_session=db_session,
+            )
 
         instructions_clean = _sanitize_prompt_text(personal_instructions, collapse_whitespace=False)
         if instructions_clean:
@@ -435,6 +480,13 @@ async def process_form_analysis_async(
             # Validate parser result
             if not parser_result or "questions" not in parser_result:
                 logger.error("[AsyncTask %s] Parser agent returned invalid result", request_id)
+                await record_progress_event(
+                    "parser_failed",
+                    "Parser agent returned an invalid response",
+                    progress=25,
+                    metadata={"reason": "missing_questions_key"},
+                    db_session=db_session,
+                )
                 await form_requests_crud.update_form_request_status(
                     db_session, request_id, "failed", error_message="Failed to parse form structure"
                 )
@@ -446,10 +498,24 @@ async def process_form_analysis_async(
                 request_id,
                 len(questions),
             )
+            await record_progress_event(
+                "parser_completed",
+                f"Detected {len(questions)} form questions",
+                progress=40,
+                metadata={"questions": len(questions)},
+                db_session=db_session,
+            )
 
             # If no questions detected, mark as completed with 0 actions
             if len(questions) == 0:
                 logger.info("[AsyncTask %s] No questions detected, marking as completed", request_id)
+                await record_progress_event(
+                    "no_questions",
+                    "No questions detected; analysis completed",
+                    progress=100,
+                    metadata={"questions": 0},
+                    db_session=db_session,
+                )
                 await form_requests_crud.update_form_request_status(
                     db_session, request_id, "completed", fields_detected=0
                 )
@@ -485,6 +551,8 @@ async def process_form_analysis_async(
                         len(normalized_question.get("inputs") or []),
                     )
 
+        total_questions = len(normalized_questions_async)
+
         # ===== PHASE 2: Generate Solutions =====
         async with get_async_db_context() as db:
             db_session = db
@@ -493,6 +561,13 @@ async def process_form_analysis_async(
                 db_session, request_id, "processing_step_2"
             )
             logger.info("[AsyncTask %s] Status updated to 'processing_step_2' (generating solutions)", request_id)
+            await record_progress_event(
+                "solutions_started",
+                f"Generating solutions for {len(normalized_questions_async)} questions",
+                progress=50,
+                metadata={"questions": len(normalized_questions_async)},
+                db_session=db_session,
+            )
 
             logger.info(
                 "[AsyncTask %s] Phase 2: Generating solutions for %d questions (%d inputs)",
@@ -505,24 +580,49 @@ async def process_form_analysis_async(
             rag_service = get_rag_service()
             logger.info("[AsyncTask %s] Using RAG for context retrieval", request_id)
 
+            async def solutions_progress_callback(completed_idx: int, total: int, payload: Dict[str, Any]):
+                effective_total = total or total_questions or 1
+                percent = 50 + int((completed_idx / effective_total) * 25)
+                message = f"Generated solution {completed_idx}/{effective_total}"
+                if payload.get("question_id"):
+                    message += f" (id={payload['question_id']})"
+                await record_progress_event(
+                    "solutions_progress",
+                    message,
+                    progress=min(percent, 75),
+                    metadata=payload,
+                )
+
             question_solutions = await agent_service.generate_solutions_per_question(
                 user_id=user_id,
                 questions=normalized_questions_async,
-                visible_text=visible_clean,
+                #visible_text=visible_clean,
                 clipboard_text=clipboard_clean,
-                user_files=None,
                 quality=request_data.quality,
                 personal_instructions=instructions_clean,
                 rag_service=rag_service,
                 rag_top_k=10,
                 file_logger=file_logger,
-                screenshots=screenshot_bytes,
+                #screenshots=screenshot_bytes,
+                progress_callback=solutions_progress_callback,
             )
 
             logger.info(
                 "[AsyncTask %s] Phase 2 complete: Generated %d solutions",
                 request_id,
                 len(question_solutions),
+            )
+            success_count = sum(
+                1
+                for item in question_solutions
+                if isinstance(item.get("solution"), str) and not str(item.get("solution")).startswith("Error")
+            )
+            await record_progress_event(
+                "solutions_completed",
+                f"Generated solutions for {success_count}/{len(question_solutions)} questions",
+                progress=80,
+                metadata={"total": len(question_solutions), "success": success_count},
+                db_session=db_session,
             )
 
         # ===== PHASE 3: Generate Actions from Solutions =====
@@ -532,6 +632,13 @@ async def process_form_analysis_async(
                 "[AsyncTask %s] Phase 3: Converting %d solutions to actions",
                 request_id,
                 len(question_solutions),
+            )
+            await record_progress_event(
+                "actions_started",
+                f"Generating actions for {len(question_solutions)} solutions",
+                progress=85,
+                metadata={"solutions": len(question_solutions)},
+                db_session=db_session,
             )
 
             # Log Agent 3 input
@@ -558,6 +665,13 @@ async def process_form_analysis_async(
             # Validate generator result
             if not generator_result or "actions" not in generator_result:
                 logger.error("[AsyncTask %s] Action generator returned invalid result", request_id)
+                await record_progress_event(
+                    "actions_failed",
+                    "Action generator returned an invalid result",
+                    progress=90,
+                    metadata={"reason": "invalid_response"},
+                    db_session=db_session,
+                )
                 await form_requests_crud.update_form_request_status(
                     db_session, request_id, "failed", error_message="Failed to generate actions from solutions"
                 )
@@ -567,6 +681,13 @@ async def process_form_analysis_async(
                 "[AsyncTask %s] Phase 3 complete: Generated %d actions",
                 request_id,
                 len(generator_result["actions"]),
+            )
+            await record_progress_event(
+                "actions_generated",
+                f"Generated {len(generator_result['actions'])} actions",
+                progress=90,
+                metadata={"actions": len(generator_result["actions"])},
+                db_session=db_session,
             )
 
         # Save results to database
@@ -605,6 +726,13 @@ async def process_form_analysis_async(
                 request_id,
                 len(actions_dict),
             )
+            await record_progress_event(
+                "actions_saved",
+                f"Persisted {len(actions_dict)} actions",
+                progress=95,
+                metadata={"actions": len(actions_dict)},
+                db_session=db_session,
+            )
 
             # Update status to completed
             await form_requests_crud.update_form_request_status(
@@ -614,8 +742,20 @@ async def process_form_analysis_async(
                 fields_detected=async_total_inputs
             )
             logger.info("[AsyncTask %s] Status updated to 'completed'", request_id)
+            await record_progress_event(
+                "completed",
+                "Analysis finished successfully",
+                progress=100,
+                metadata={"actions": len(actions_dict), "fields_detected": async_total_inputs},
+                db_session=db_session,
+            )
 
     except asyncio.CancelledError:
+        await record_progress_event(
+            "cancelled",
+            "Analysis was cancelled before completion",
+            progress=None,
+        )
         logger.info("[AsyncTask %s] Cancelled before completion", request_id)
         raise
     except Exception as e:
@@ -630,6 +770,13 @@ async def process_form_analysis_async(
                     request_id,
                     "failed",
                     error_message=str(e)
+                )
+                await record_progress_event(
+                    "failed",
+                    "Analysis failed",
+                    progress=None,
+                    metadata={"error": str(e)},
+                    db_session=db_session,
                 )
         except Exception as db_error:
             logger.error("[AsyncTask %s] Failed to update error status: %s", request_id, db_error)

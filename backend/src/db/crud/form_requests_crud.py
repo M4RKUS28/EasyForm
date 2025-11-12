@@ -10,6 +10,7 @@ from sqlalchemy.orm import selectinload
 
 from ..models.db_form_request import FormRequest
 from ..models.db_form_action import FormAction
+from ..models.db_form_request_progress import FormRequestProgress
 
 
 async def create_form_request(
@@ -39,6 +40,14 @@ async def create_form_request(
     )
 
     db.add(request)
+    db.add(
+        FormRequestProgress(
+            request_id=request_id,
+            stage="queued",
+            message="Request received and queued for processing",
+            progress=0,
+        )
+    )
     await db.commit()
     await db.refresh(request)
 
@@ -126,7 +135,7 @@ async def update_form_request_status(
 
     request.status = status
 
-    if status == "processing" and not request.started_at:
+    if status.startswith("processing") and not request.started_at:
         request.started_at = datetime.now(timezone.utc)
 
     if status in ["completed", "failed"]:
@@ -234,6 +243,46 @@ async def delete_form_request(
     await db.commit()
 
     return True
+
+
+async def log_progress_event(
+    db: AsyncSession,
+    request_id: str,
+    stage: str,
+    message: str,
+    progress: Optional[int] = None,
+    metadata: Optional[dict] = None,
+) -> FormRequestProgress:
+    """
+    Persist a granular progress update for a form request.
+    """
+    event = FormRequestProgress(
+        request_id=request_id,
+        stage=stage,
+        message=message,
+        progress=progress,
+        payload=metadata,
+    )
+    db.add(event)
+    await db.commit()
+    await db.refresh(event)
+    return event
+
+
+async def list_progress_events(
+    db: AsyncSession,
+    request_id: str,
+) -> List[FormRequestProgress]:
+    """
+    Retrieve all progress events for a request ordered by time.
+    """
+    query = (
+        select(FormRequestProgress)
+        .where(FormRequestProgress.request_id == request_id)
+        .order_by(FormRequestProgress.created_at.asc())
+    )
+    result = await db.execute(query)
+    return list(result.scalars().all())
 
 
 async def get_active_request_for_user(

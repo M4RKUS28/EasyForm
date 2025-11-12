@@ -113,9 +113,22 @@ async def get_request_status(
             detail=f"Form request {request_id} not found"
         )
 
+    progress_events = await form_requests_crud.list_progress_events(db, request_id)
+    progress_payload = [
+        form_schema.FormRequestProgressEntry(
+            stage=event.stage,
+            message=event.message,
+            progress=event.progress,
+            metadata=event.payload,
+            created_at=event.created_at,
+        )
+        for event in progress_events
+    ]
+
     return form_schema.FormRequestStatusResponse(
         request_id=form_request.id,
         status=form_request.status,
+        progress=progress_payload,
         fields_detected=form_request.fields_detected,
         error_message=form_request.error_message,
         created_at=form_request.created_at,

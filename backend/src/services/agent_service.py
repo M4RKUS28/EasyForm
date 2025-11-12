@@ -4,7 +4,7 @@ import asyncio
 import json
 from dataclasses import dataclass
 from logging import getLogger
-from typing import Any, Dict, List, Optional, cast
+from typing import Any, Awaitable, Callable, Dict, List, Optional, cast
 
 from google.adk.sessions import InMemorySessionService
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -16,6 +16,8 @@ from ..config import settings
 from ..db.database import get_async_db_context
 from .question_filter import extract_question_data_for_agent_2, filter_question_solution_pairs_for_agent_3
 from .rag_service import RAGService
+from ..agents.utils import create_multipart_query
+
 
 logger = getLogger(__name__)
 
@@ -55,41 +57,28 @@ MODEL_CONFIG: Dict[str, QualityProfile] = {
 
 
 def _build_search_query_for_question(question: dict, max_inputs: int = 10) -> str:
-    """Compose a semantic RAG search query from question metadata."""
+    """Compose a semantic RAG search query from structured Agent 1 output."""
 
     phrases: List[str] = []
 
-    title = question.get("title")
-    if title:
-        phrases.append(str(title).strip())
+    def add_text(value: Optional[str]) -> None:
+        if isinstance(value, str):
+            trimmed = value.strip()
+            if trimmed:
+                phrases.append(trimmed)
 
-    description = question.get("description")
-    if description:
-        phrases.append(str(description).strip())
+    def add_iterable(values: Optional[List[Any]]) -> None:
+        if isinstance(values, list):
+            for entry in values[:max_inputs]:
+                if isinstance(entry, str):
+                    add_text(entry)
 
-    hints = question.get("hints") or []
-    for hint in hints:
-        if hint:
-            phrases.append(str(hint).strip())
-
-    inputs = (question.get("inputs") or [])[:max_inputs]
-    for input_data in inputs:
-        option_label = input_data.get("option_label")
-        value_hint = input_data.get("value_hint")
-        notes = input_data.get("notes")
-        for candidate in (option_label, value_hint, notes):
-            if candidate:
-                phrases.append(str(candidate).strip())
-
-    metadata = question.get("metadata")
-    if isinstance(metadata, dict):
-        for value in metadata.values():
-            if isinstance(value, str):
-                phrases.append(value.strip())
-            elif isinstance(value, list):
-                for entry in value[:max_inputs]:
-                    if isinstance(entry, str):
-                        phrases.append(entry.strip())
+    # New schema (preferred)
+    question_data = question.get("question_data")
+    if isinstance(question_data, dict):
+        add_text(question_data.get("prompt"))
+        add_iterable(question_data.get("available_options"))
+  
 
     sanitized = [phrase for phrase in phrases if phrase]
     return " ".join(sanitized).strip() or "form question context"
@@ -192,15 +181,15 @@ Visible Text Content:
         self,
         user_id: str,
         questions: list,
-        visible_text: str,
+        #visible_text: str,
         clipboard_text: str | None = None,
-        user_files: list | None = None,
         quality: str = DEFAULT_QUALITY,
         personal_instructions: Optional[str] = None,
         rag_service: Optional[RAGService] = None,
         rag_top_k: int = 10,
         file_logger: Optional[Any] = None,
-        screenshots: Optional[List[bytes]] = None,
+        progress_callback: Optional[Callable[[int, int, Dict[str, Any]], Awaitable[None]]] = None,
+        #screenshots: Optional[List[bytes]] = None,
     ) -> List[Dict]:
         """
         Generate solutions for each question using Solution Generator Agent.
@@ -218,8 +207,8 @@ Visible Text Content:
             rag_top_k: Number of RAG chunks to retrieve per question
             file_logger: Optional file logger for per-question logging
             screenshots: Screenshots from browser (passed directly, not via RAG)
+            progress_callback: Optional coroutine fired when each question completes
         """
-        from ..agents.utils import create_multipart_query
 
         profile = MODEL_CONFIG.get(quality, MODEL_CONFIG[DEFAULT_QUALITY])
         solution_model = profile.solution_model
@@ -227,14 +216,6 @@ Visible Text Content:
         # Collect context sources
         pdf_files: List[bytes] = []
         direct_images: List[bytes] = []
-
-        # Option 1: Direct file context (when not using RAG)
-        if user_files:
-            for file in user_files:
-                if file.content_type == "application/pdf":
-                    pdf_files.append(file.data)
-                elif file.content_type.startswith("image/"):
-                    direct_images.append(file.data)
 
         logger.info(
             "Generating solutions for %d questions using %s",
@@ -251,7 +232,14 @@ Visible Text Content:
         rag_totals_lock = asyncio.Lock() if rag_enabled else None
 
         async def process_question(question_idx: int, question: dict):
+            callback_payload: Dict[str, Any] = {
+                "question_id": question.get("question_id"),
+                "title": question.get("title"),
+            }
             async with semaphore:
+                success = False
+                solution_text: str = "Error: Could not generate solution"
+                agent_output: Dict[str, Any] = {}
                 try:
                     logger.info(
                         "Generating solution for question %d/%d -> id=%s | type=%s | title=%s",
@@ -412,6 +400,7 @@ Provide only the solution/answer as plain text. Do not include explanations unle
                         max_retries=settings.AGENT_MAX_RETRIES,
                         retry_delay=settings.AGENT_RETRY_DELAY_SECONDS,
                     )
+                    agent_output = result
 
                     logger.info(
                         "Step 2 output payload for question_id=%s: %s",
@@ -428,11 +417,12 @@ Provide only the solution/answer as plain text. Do not include explanations unle
                     # Extract solution from result
                     solution = None
                     if result.get("status") == "success":
-                        solution = result.get("output", "")
+                        solution_text = result.get("output", "")
                     elif "output" in result:
-                        solution = result["output"]
+                        solution_text = result["output"]
                     else:
-                        solution = "Error: Could not generate solution"
+                        solution_text = "Error: Could not generate solution"
+                    success = True
 
                     if file_logger:
                         file_logger.log_agent_response(
@@ -440,17 +430,11 @@ Provide only the solution/answer as plain text. Do not include explanations unle
                             {
                                 "question_id": question.get("question_id"),
                                 "question": question,
-                                "solution": solution,
+                                "solution": solution_text,
                                 "agent_output": result,
                             },
                             subdir=subdir,
                         )
-
-                    return {
-                        "question_id": question.get("question_id"),
-                        "question": question,
-                        "solution": solution,
-                    }
 
                 except Exception as exc:  # noqa: BLE001
                     logger.error(
@@ -459,11 +443,33 @@ Provide only the solution/answer as plain text. Do not include explanations unle
                         len(questions),
                         exc,
                     )
-                    return {
-                        "question_id": question.get("question_id"),
-                        "question": question,
-                        "solution": "Error: Failed to generate solution",
-                    }
+                    solution_text = "Error: Failed to generate solution"
+                    agent_output = {"status": "error", "detail": str(exc)}
+                finally:
+                    if progress_callback:
+                        progress_payload = {
+                            **callback_payload,
+                            "success": success,
+                            "question_number": question_idx + 1,
+                            "total_questions": len(questions),
+                        }
+                        if not success:
+                            progress_payload["error"] = agent_output.get("detail")
+                        try:
+                            await progress_callback(question_idx + 1, len(questions), progress_payload)
+                        except Exception as progress_exc:  # noqa: BLE001
+                            logger.warning(
+                                "Progress callback failed for question %s: %s",
+                                question.get("question_id"),
+                                progress_exc,
+                            )
+
+                return {
+                    "question_id": question.get("question_id"),
+                    "question": question,
+                    "solution": solution_text,
+                    "agent_output": agent_output,
+                }
 
         tasks = [process_question(idx, question) for idx, question in enumerate(questions)]
         results = await asyncio.gather(*tasks)

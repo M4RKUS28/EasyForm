@@ -1,5 +1,5 @@
 """Pydantic schemas for form analysis."""
-from typing import Optional, List, Any, Literal
+from typing import Optional, List, Any, Literal, Dict
 from datetime import datetime
 
 from pydantic import BaseModel, Field
@@ -80,12 +80,32 @@ class FormAnalyzeAsyncResponse(BaseModel):
     )
 
 
+class FormRequestProgressEntry(BaseModel):
+    """Structured progress log entry for frontend consumption."""
+
+    stage: str = Field(..., description="Machine-friendly stage identifier")
+    message: str = Field(..., description="Human-readable progress description")
+    progress: Optional[int] = Field(
+        None,
+        description="Optional percentage indicator (0-100)"
+    )
+    metadata: Optional[Dict[str, Any]] = Field(
+        None,
+        description="Optional structured metadata for the frontend"
+    )
+    created_at: datetime = Field(..., description="Timestamp when the update was recorded")
+
+
 class FormRequestStatusResponse(BaseModel):
     """Schema for form request status check response."""
     request_id: str = Field(..., description="Request ID")
     status: Literal["pending", "processing", "processing_step_1", "processing_step_2", "completed", "failed"] = Field(
         ...,
         description="Current status of the request"
+    )
+    progress: List[FormRequestProgressEntry] = Field(
+        default_factory=list,
+        description="Chronological list of fine-grained progress updates"
     )
     fields_detected: Optional[int] = Field(
         None,
