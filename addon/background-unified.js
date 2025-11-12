@@ -17,9 +17,9 @@ const CONFIG = {
 const STORAGE_KEYS = {
   getRequestId: (tabId) => `request_${tabId}`,
   getStartTime: (tabId) => `startTime_${tabId}`,
-  ANALYSIS_STATE: 'analysisState',
-  ANALYSIS_RESULT: 'analysisResult',
-  ANALYSIS_ERROR: 'analysisError'
+  getAnalysisState: (tabId) => `analysisState_${tabId}`,
+  getAnalysisResult: (tabId) => `analysisResult_${tabId}`,
+  getAnalysisError: (tabId) => `analysisError_${tabId}`
 };
 
 const ANALYSIS_STATES = {
@@ -260,8 +260,8 @@ async function handlePageAnalysisAsync(pageData, tabId) {
   } catch (error) {
     console.error('[EasyForm API] ❌ Error handling page analysis:', error);
     await browser.storage.local.set({
-      [STORAGE_KEYS.ANALYSIS_STATE]: ANALYSIS_STATES.ERROR,
-      [STORAGE_KEYS.ANALYSIS_ERROR]: error.message
+      [STORAGE_KEYS.getAnalysisState(tabId)]: ANALYSIS_STATES.ERROR,
+      [STORAGE_KEYS.getAnalysisError(tabId)]: error.message
     });
     notifyError(tabId, error.message);
     throw error;
@@ -312,8 +312,8 @@ function startPolling(requestId, tabId, startTime, mode) {
       console.error('[EasyForm Polling] ❌ Polling error:', error);
       stopPolling(tabId);
       await browser.storage.local.set({
-        [STORAGE_KEYS.ANALYSIS_STATE]: ANALYSIS_STATES.ERROR,
-        [STORAGE_KEYS.ANALYSIS_ERROR]: error.message
+        [STORAGE_KEYS.getAnalysisState(tabId)]: ANALYSIS_STATES.ERROR,
+        [STORAGE_KEYS.getAnalysisError(tabId)]: error.message
       });
     }
   }, POLL_INTERVAL_MS);
@@ -343,8 +343,8 @@ async function pollRequestStatus(requestId, tabId, startTime, mode) {
     const timeoutMinutes = Math.round(POLL_TIMEOUT_MS / 60000);
     const timeoutMessage = `Analysis timeout (${timeoutMinutes} minutes)`;
     await browser.storage.local.set({
-      [STORAGE_KEYS.ANALYSIS_STATE]: ANALYSIS_STATES.ERROR,
-      [STORAGE_KEYS.ANALYSIS_ERROR]: timeoutMessage
+      [STORAGE_KEYS.getAnalysisState(tabId)]: ANALYSIS_STATES.ERROR,
+      [STORAGE_KEYS.getAnalysisError(tabId)]: timeoutMessage
     });
     notifyError(tabId, timeoutMessage);
     return;
@@ -387,8 +387,8 @@ async function pollRequestStatus(requestId, tabId, startTime, mode) {
     }
     stopPolling(tabId);
     await browser.storage.local.set({
-      [STORAGE_KEYS.ANALYSIS_STATE]: ANALYSIS_STATES.ERROR,
-      [STORAGE_KEYS.ANALYSIS_ERROR]: status.error_message || 'Analysis failed'
+      [STORAGE_KEYS.getAnalysisState(tabId)]: ANALYSIS_STATES.ERROR,
+      [STORAGE_KEYS.getAnalysisError(tabId)]: status.error_message || 'Analysis failed'
     });
     notifyError(tabId, status.error_message || 'Analysis failed');
     await cleanupRequestStorage(tabId);
@@ -420,9 +420,9 @@ async function handleCompletedRequest(requestId, tabId, mode) {
     console.log('[EasyForm Polling] 📋 Actions received:', result.actions.length);
 
     await browser.storage.local.set({
-      [STORAGE_KEYS.ANALYSIS_STATE]: ANALYSIS_STATES.SUCCESS,
-      [STORAGE_KEYS.ANALYSIS_RESULT]: result,
-      [STORAGE_KEYS.ANALYSIS_ERROR]: null
+      [STORAGE_KEYS.getAnalysisState(tabId)]: ANALYSIS_STATES.SUCCESS,
+      [STORAGE_KEYS.getAnalysisResult(tabId)]: result,
+      [STORAGE_KEYS.getAnalysisError(tabId)]: null
     });
 
     if (result.actions && result.actions.length > 0) {
@@ -453,8 +453,8 @@ async function handleCompletedRequest(requestId, tabId, mode) {
   } catch (error) {
     console.error('[EasyForm Polling] ❌ Error handling completed request:', error);
     await browser.storage.local.set({
-      [STORAGE_KEYS.ANALYSIS_STATE]: ANALYSIS_STATES.ERROR,
-      [STORAGE_KEYS.ANALYSIS_ERROR]: error.message
+      [STORAGE_KEYS.getAnalysisState(tabId)]: ANALYSIS_STATES.ERROR,
+      [STORAGE_KEYS.getAnalysisError(tabId)]: error.message
     });
     notifyError(tabId, error.message);
   }
@@ -493,8 +493,8 @@ async function cancelRequestInternal(tabId) {
     await cleanupRequestStorage(tabId);
 
     await browser.storage.local.set({
-      [STORAGE_KEYS.ANALYSIS_STATE]: ANALYSIS_STATES.IDLE,
-      [STORAGE_KEYS.ANALYSIS_ERROR]: null
+      [STORAGE_KEYS.getAnalysisState(tabId)]: ANALYSIS_STATES.IDLE,
+      [STORAGE_KEYS.getAnalysisError(tabId)]: null
     });
 
   } catch (error) {
@@ -508,9 +508,18 @@ async function cancelRequest(tabId) {
   await cancelRequestInternal(tabId);
 }
 
-function cleanupTab(tabId) {
+async function cleanupTab(tabId) {
   stopPolling(tabId);
-  cleanupRequestStorage(tabId);
+  await cleanupRequestStorage(tabId);
+
+  // Clean up analysis state for this tab
+  await browser.storage.local.remove([
+    STORAGE_KEYS.getAnalysisState(tabId),
+    STORAGE_KEYS.getAnalysisResult(tabId),
+    STORAGE_KEYS.getAnalysisError(tabId)
+  ]);
+
+  console.log('[EasyForm Storage] 🧹 Cleaned up analysis state for tab:', tabId);
 }
 
 // ===== MAIN =====
@@ -611,15 +620,24 @@ browser.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
   if (request.action === 'getAnalysisState') {
     (async () => {
+      const tabId = request.tabId;
+      if (!tabId) {
+        sendResponse({
+          state: ANALYSIS_STATES.IDLE,
+          result: null,
+          error: 'No tab ID provided'
+        });
+        return;
+      }
       const data = await browser.storage.local.get([
-        STORAGE_KEYS.ANALYSIS_STATE,
-        STORAGE_KEYS.ANALYSIS_RESULT,
-        STORAGE_KEYS.ANALYSIS_ERROR
+        STORAGE_KEYS.getAnalysisState(tabId),
+        STORAGE_KEYS.getAnalysisResult(tabId),
+        STORAGE_KEYS.getAnalysisError(tabId)
       ]);
       sendResponse({
-        state: data[STORAGE_KEYS.ANALYSIS_STATE] || ANALYSIS_STATES.IDLE,
-        result: data[STORAGE_KEYS.ANALYSIS_RESULT],
-        error: data[STORAGE_KEYS.ANALYSIS_ERROR]
+        state: data[STORAGE_KEYS.getAnalysisState(tabId)] || ANALYSIS_STATES.IDLE,
+        result: data[STORAGE_KEYS.getAnalysisResult(tabId)],
+        error: data[STORAGE_KEYS.getAnalysisError(tabId)]
       });
     })();
     return true;
@@ -649,22 +667,33 @@ browser.runtime.onMessage.addListener((request, sender, sendResponse) => {
         if (tabId) {
           stopPolling(tabId);
           await cleanupRequestStorage(tabId);
+
+          // Remove tab-specific analysis state
+          await browser.storage.local.remove([
+            STORAGE_KEYS.getAnalysisResult(tabId),
+            STORAGE_KEYS.getAnalysisError(tabId)
+          ]);
+
+          await browser.storage.local.set({
+            [STORAGE_KEYS.getAnalysisState(tabId)]: ANALYSIS_STATES.IDLE
+          });
         } else {
           // Fallback: stop all polls if no tab specified
           for (const activeTabId of Array.from(activePolls.keys())) {
             stopPolling(activeTabId);
             await cleanupRequestStorage(activeTabId);
+
+            // Remove tab-specific analysis state
+            await browser.storage.local.remove([
+              STORAGE_KEYS.getAnalysisResult(activeTabId),
+              STORAGE_KEYS.getAnalysisError(activeTabId)
+            ]);
+
+            await browser.storage.local.set({
+              [STORAGE_KEYS.getAnalysisState(activeTabId)]: ANALYSIS_STATES.IDLE
+            });
           }
         }
-
-        await browser.storage.local.remove([
-          STORAGE_KEYS.ANALYSIS_RESULT,
-          STORAGE_KEYS.ANALYSIS_ERROR
-        ]);
-
-        await browser.storage.local.set({
-          [STORAGE_KEYS.ANALYSIS_STATE]: ANALYSIS_STATES.IDLE
-        });
 
         sendResponse({ success: true });
       } catch (error) {
@@ -689,8 +718,8 @@ async function analyzePage(tabId) {
     }
 
     await browser.storage.local.set({
-      [STORAGE_KEYS.ANALYSIS_STATE]: ANALYSIS_STATES.RUNNING,
-      [STORAGE_KEYS.ANALYSIS_ERROR]: null
+      [STORAGE_KEYS.getAnalysisState(tabId)]: ANALYSIS_STATES.RUNNING,
+      [STORAGE_KEYS.getAnalysisError(tabId)]: null
     });
 
     console.log('[EasyForm] 📨 Requesting page data from content script...');
@@ -723,8 +752,8 @@ async function analyzePage(tabId) {
   } catch (error) {
     console.error('[EasyForm] ❌ Error analyzing page:', error);
     await browser.storage.local.set({
-      [STORAGE_KEYS.ANALYSIS_STATE]: ANALYSIS_STATES.ERROR,
-      [STORAGE_KEYS.ANALYSIS_ERROR]: error.message
+      [STORAGE_KEYS.getAnalysisState(tabId)]: ANALYSIS_STATES.ERROR,
+      [STORAGE_KEYS.getAnalysisError(tabId)]: error.message
     });
   }
 }

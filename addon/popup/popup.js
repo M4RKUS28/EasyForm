@@ -296,7 +296,17 @@ async function handleStartClick() {
 // Check current analysis state
 async function checkAnalysisState() {
   try {
-    const response = await browser.runtime.sendMessage({ action: 'getAnalysisState' });
+    // Get current tab ID
+    const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
+    if (!tab || !tab.id) {
+      console.warn('[EasyForm Popup] ⚠️ No active tab found for state check');
+      return;
+    }
+
+    const response = await browser.runtime.sendMessage({
+      action: 'getAnalysisState',
+      tabId: tab.id
+    });
     if (!response) return;
 
     const currentState = response.state || 'idle';
