@@ -501,134 +501,89 @@ async def process_form_analysis_async(
             # Get user context - use RAG or direct depending on file count/size
             logger.info("[AsyncTask %s] Fetching user context...", request_id)
             rag_service = get_rag_service()
-            use_rag = await rag_service.should_use_rag(db, user_id)
 
             if use_rag:
-                logger.info("[AsyncTask %s] Using RAG for context retrieval", request_id)
+            logger.info("[AsyncTask %s] Using RAG for context retrieval", request_id)
 
-                question_contexts: Dict[str, Dict[str, List]] = {}
-                total_text_chunks = 0
-                total_image_chunks = 0
+            question_contexts: Dict[str, Dict[str, List]] = {}
+            total_text_chunks = 0
+            total_image_chunks = 0
 
-                # Log per-question inputs before agent call
-                if file_logger:
-                    for q_idx, question in enumerate(normalized_questions_async):
-                        subdir = f"question_{q_idx}"
-                        # Log only question_data (semantic data) - Agent 2 doesn't receive interaction_data or screenshots
-                        filtered_question = extract_question_data_for_agent_2(question)
-                        question_json = json.dumps(filtered_question, indent=2, ensure_ascii=False)
-                        file_logger.log_agent_query(2, question_json, subdir=subdir)
-                        file_logger.log_agent_output(2, f"Generating solution for question {q_idx} with RAG context", subdir=subdir)
-                        # Note: Agent 2 does NOT receive screenshots - those are only for Agent 1
-
+            # Log per-question inputs before agent call
+            if file_logger:
                 for q_idx, question in enumerate(normalized_questions_async):
-                    question_query = build_search_query_for_question(question)
-                    question_id = str(question.get("question_id") or q_idx)
                     subdir = f"question_{q_idx}"
+                    # Log only question_data (semantic data) - Agent 2 doesn't receive interaction_data or screenshots
+                    filtered_question = extract_question_data_for_agent_2(question)
+                    question_json = json.dumps(filtered_question, indent=2, ensure_ascii=False)
+                    file_logger.log_agent_query(2, question_json, subdir=subdir)
+                    file_logger.log_agent_output(2, f"Generating solution for question {q_idx} with RAG context", subdir=subdir)
+                    # Note: Agent 2 does NOT receive screenshots - those are only for Agent 1
 
-                    # Log RAG query
-                    if file_logger:
-                        file_logger.log_rag_query(f"Question {question_id}: {question_query}", subdir=subdir)
+            for q_idx, question in enumerate(normalized_questions_async):
+                question_query = build_search_query_for_question(question)
+                question_id = str(question.get("question_id") or q_idx)
+                subdir = f"question_{q_idx}"
 
-                    context = await rag_service.retrieve_relevant_context(
-                        db=db,
-                        query=question_query,
-                        user_id=user_id,
-                        top_k=10,
-                        file_logger=file_logger,
-                        question_subdir=subdir
-                    )
+                # Log RAG query
+                if file_logger:
+                    file_logger.log_rag_query(f"Question {question_id}: {question_query}", subdir=subdir)
 
-                    # Log RAG response
-                    if file_logger:
-                        file_logger.log_rag_response(context, subdir=subdir)
+                context = await rag_service.retrieve_relevant_context(
+                    db=db,
+                    query=question_query,
+                    user_id=user_id,
+                    top_k=10,
+                    file_logger=file_logger,
+                    question_subdir=subdir
+                )
 
-                    question_contexts[question_id] = context
-                    text_count = len(context.get("text_chunks", []))
-                    image_count = len(context.get("image_chunks", []))
-                    total_text_chunks += text_count
-                    total_image_chunks += image_count
+                # Log RAG response
+                if file_logger:
+                    file_logger.log_rag_response(context, subdir=subdir)
 
-                    logger.info(
-                        "[AsyncTask %s] Question %s RAG context: %d text chunks, %d image chunks",
-                        request_id,
-                        question_id,
-                        text_count,
-                        image_count,
-                    )
+                question_contexts[question_id] = context
+                text_count = len(context.get("text_chunks", []))
+                image_count = len(context.get("image_chunks", []))
+                total_text_chunks += text_count
+                total_image_chunks += image_count
 
                 logger.info(
-                    "[AsyncTask %s] RAG retrieval complete for %d questions -> %d text chunks, %d image chunks",
+                    "[AsyncTask %s] Question %s RAG context: %d text chunks, %d image chunks",
                     request_id,
-                    len(normalized_questions_async),
-                    total_text_chunks,
-                    total_image_chunks,
+                    question_id,
+                    text_count,
+                    image_count,
                 )
-
-                # Call Solution Generator Agent with per-question RAG context
-                question_solutions = await agent_service.generate_solutions_per_question(
-                    user_id=user_id,
-                    questions=normalized_questions_async,
-                    visible_text=visible_clean,
-                    clipboard_text=clipboard_clean,
-                    user_files=None,  # Using RAG context instead
-                    quality=request_data.quality,
-                    personal_instructions=instructions_clean,
-                    question_contexts=question_contexts,
-                    screenshots=screenshot_bytes,  # Pass screenshots directly
-                )
-
-                # Log per-question responses after agent call
-                if file_logger:
-                    for q_idx, solution in enumerate(question_solutions):
-                        subdir = f"question_{q_idx}"
-                        solution_json = json.dumps(solution, indent=2, ensure_ascii=False)
-                        file_logger.log_agent_response(2, solution_json, subdir=subdir)
-            else:
-                logger.info("[AsyncTask %s] Using direct context (all files)", request_id)
-
-                # Get user's uploaded files
-                user_files = await files_crud.get_user_files(db, user_id)
-                logger.info(
-                    "[AsyncTask %s] Found %d user files for context",
-                    request_id,
-                    len(user_files),
-                )
-
-                # Log per-question inputs before agent call (no RAG)
-                if file_logger:
-                    for q_idx, question in enumerate(normalized_questions_async):
-                        subdir = f"question_{q_idx}"
-                        # Log only question_data (semantic data) - Agent 2 doesn't receive interaction_data or screenshots
-                        filtered_question = extract_question_data_for_agent_2(question)
-                        question_json = json.dumps(filtered_question, indent=2, ensure_ascii=False)
-                        file_logger.log_agent_query(2, question_json, subdir=subdir)
-                        file_logger.log_agent_output(2, f"Generating solution for question {q_idx} with direct context ({len(user_files)} files)", subdir=subdir)
-                        # Note: Agent 2 does NOT receive screenshots - those are only for Agent 1
-
-                # Call Solution Generator Agent with direct files
-                question_solutions = await agent_service.generate_solutions_per_question(
-                    user_id=user_id,
-                    questions=normalized_questions_async,
-                    visible_text=visible_clean,
-                    clipboard_text=clipboard_clean,
-                    user_files=user_files,
-                    quality=request_data.quality,
-                    personal_instructions=instructions_clean,
-                )
-
-                # Log per-question responses after agent call (no RAG)
-                if file_logger:
-                    for q_idx, solution in enumerate(question_solutions):
-                        subdir = f"question_{q_idx}"
-                        solution_json = json.dumps(solution, indent=2, ensure_ascii=False)
-                        file_logger.log_agent_response(2, solution_json, subdir=subdir)
 
             logger.info(
-                "[AsyncTask %s] Phase 2 complete: Generated %d solutions",
+                "[AsyncTask %s] RAG retrieval complete for %d questions -> %d text chunks, %d image chunks",
                 request_id,
-                len(question_solutions),
+                len(normalized_questions_async),
+                total_text_chunks,
+                total_image_chunks,
             )
+
+            # Call Solution Generator Agent with per-question RAG context
+            question_solutions = await agent_service.generate_solutions_per_question(
+                user_id=user_id,
+                questions=normalized_questions_async,
+                visible_text=visible_clean,
+                clipboard_text=clipboard_clean,
+                user_files=None,  # Using RAG context instead
+                quality=request_data.quality,
+                personal_instructions=instructions_clean,
+                question_contexts=question_contexts,
+                screenshots=screenshot_bytes,  # Pass screenshots directly
+            )
+
+            # Log per-question responses after agent call
+            if file_logger:
+                for q_idx, solution in enumerate(question_solutions):
+                    subdir = f"question_{q_idx}"
+                    solution_json = json.dumps(solution, indent=2, ensure_ascii=False)
+                    file_logger.log_agent_response(2, solution_json, subdir=subdir)
+            
 
         # ===== PHASE 3: Generate Actions from Solutions =====
         async with get_async_db_context() as db:
