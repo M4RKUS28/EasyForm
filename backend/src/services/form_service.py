@@ -10,7 +10,7 @@ import json
 import logging
 import re
 from collections import Counter
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple, cast
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -206,8 +206,9 @@ async def shutdown_active_tasks(timeout: int = 30) -> None:
                 # Mark as failed in database
                 try:
                     async with get_async_db_context() as db:
+                        db_session = cast(AsyncSession, db)
                         await form_requests_crud.update_form_request_status(
-                            db, request_id, "failed",
+                            db_session, request_id, "failed",
                             error_message="Server shutdown before completion"
                         )
                         logger.info(f"Marked request {request_id} as failed due to shutdown")
@@ -366,10 +367,11 @@ async def process_form_analysis_async(
 
         personal_instructions = None
         async with get_async_db_context() as db:
-            personal_instructions = await users_crud.get_user_personal_instructions(db, user_id)
+            db_session = cast(AsyncSession, db)
+            personal_instructions = await users_crud.get_user_personal_instructions(db_session, user_id)
             # Update status to processing_step_1 (parsing HTML form structure)
             await form_requests_crud.update_form_request_status(
-                db, request_id, "processing_step_1"
+                db_session, request_id, "processing_step_1"
             )
             logger.info("[AsyncTask %s] Status updated to 'processing_step_1'", request_id)
 
@@ -434,7 +436,7 @@ async def process_form_analysis_async(
             if not parser_result or "questions" not in parser_result:
                 logger.error("[AsyncTask %s] Parser agent returned invalid result", request_id)
                 await form_requests_crud.update_form_request_status(
-                    db, request_id, "failed", error_message="Failed to parse form structure"
+                    db_session, request_id, "failed", error_message="Failed to parse form structure"
                 )
                 return
 
@@ -449,7 +451,7 @@ async def process_form_analysis_async(
             if len(questions) == 0:
                 logger.info("[AsyncTask %s] No questions detected, marking as completed", request_id)
                 await form_requests_crud.update_form_request_status(
-                    db, request_id, "completed", fields_detected=0
+                    db_session, request_id, "completed", fields_detected=0
                 )
                 return
 
@@ -485,9 +487,10 @@ async def process_form_analysis_async(
 
         # ===== PHASE 2: Generate Solutions =====
         async with get_async_db_context() as db:
+            db_session = cast(AsyncSession, db)
             # Update status to processing_step_2 (generating solutions)
             await form_requests_crud.update_form_request_status(
-                db, request_id, "processing_step_2"
+                db_session, request_id, "processing_step_2"
             )
             logger.info("[AsyncTask %s] Status updated to 'processing_step_2' (generating solutions)", request_id)
 
@@ -498,83 +501,58 @@ async def process_form_analysis_async(
                 async_total_inputs,
             )
 
-            # Get user context - use RAG or direct depending on file count/size
-            logger.info("[AsyncTask %s] Fetching user context...", request_id)
+            # Decide whether to use RAG or direct context
             rag_service = get_rag_service()
+            use_rag = await rag_service.should_use_rag(db_session, user_id)
 
             if use_rag:
-            logger.info("[AsyncTask %s] Using RAG for context retrieval", request_id)
+                logger.info("[AsyncTask %s] Using RAG for context retrieval", request_id)
+            else:
+                logger.info("[AsyncTask %s] Using direct context (all files)", request_id)
 
-            question_contexts: Dict[str, Dict[str, List]] = {}
-            total_text_chunks = 0
-            total_image_chunks = 0
+            user_files: Optional[List] = None
+            if not use_rag:
+                user_files = await files_crud.get_user_files(db_session, user_id)
+                logger.info(
+                    "[AsyncTask %s] Found %d user files for context",
+                    request_id,
+                    len(user_files),
+                )
 
-            # Log per-question inputs before agent call
             if file_logger:
                 for q_idx, question in enumerate(normalized_questions_async):
                     subdir = f"question_{q_idx}"
-                    # Log only question_data (semantic data) - Agent 2 doesn't receive interaction_data or screenshots
                     filtered_question = extract_question_data_for_agent_2(question)
                     question_json = json.dumps(filtered_question, indent=2, ensure_ascii=False)
                     file_logger.log_agent_query(2, question_json, subdir=subdir)
-                    file_logger.log_agent_output(2, f"Generating solution for question {q_idx} with RAG context", subdir=subdir)
-                    # Note: Agent 2 does NOT receive screenshots - those are only for Agent 1
 
-            for q_idx, question in enumerate(normalized_questions_async):
-                question_query = build_search_query_for_question(question)
-                question_id = str(question.get("question_id") or q_idx)
-                subdir = f"question_{q_idx}"
+                    if use_rag:
+                        status_msg = f"Generating solution for question {q_idx} with RAG context"
+                    else:
+                        file_count = len(user_files) if user_files else 0
+                        status_msg = (
+                            f"Generating solution for question {q_idx} with direct context ({file_count} files)"
+                        )
+                    file_logger.log_agent_output(2, status_msg, subdir=subdir)
 
-                # Log RAG query
-                if file_logger:
-                    file_logger.log_rag_query(f"Question {question_id}: {question_query}", subdir=subdir)
-
-                context = await rag_service.retrieve_relevant_context(
-                    db=db,
-                    query=question_query,
-                    user_id=user_id,
-                    top_k=10,
-                    file_logger=file_logger,
-                    question_subdir=subdir
-                )
-
-                # Log RAG response
-                if file_logger:
-                    file_logger.log_rag_response(context, subdir=subdir)
-
-                question_contexts[question_id] = context
-                text_count = len(context.get("text_chunks", []))
-                image_count = len(context.get("image_chunks", []))
-                total_text_chunks += text_count
-                total_image_chunks += image_count
-
-                logger.info(
-                    "[AsyncTask %s] Question %s RAG context: %d text chunks, %d image chunks",
-                    request_id,
-                    question_id,
-                    text_count,
-                    image_count,
-                )
-
-            logger.info(
-                "[AsyncTask %s] RAG retrieval complete for %d questions -> %d text chunks, %d image chunks",
-                request_id,
-                len(normalized_questions_async),
-                total_text_chunks,
-                total_image_chunks,
-            )
-
-            # Call Solution Generator Agent with per-question RAG context
             question_solutions = await agent_service.generate_solutions_per_question(
                 user_id=user_id,
                 questions=normalized_questions_async,
                 visible_text=visible_clean,
                 clipboard_text=clipboard_clean,
-                user_files=None,  # Using RAG context instead
+                user_files=None if use_rag else user_files,
                 quality=request_data.quality,
                 personal_instructions=instructions_clean,
-                question_contexts=question_contexts,
-                screenshots=screenshot_bytes,  # Pass screenshots directly
+                rag_service=rag_service if use_rag else None,
+                rag_top_k=10,
+                file_logger=file_logger,
+                screenshots=screenshot_bytes,
+            )
+
+            logger.info(
+                "[AsyncTask %s] Phase 2 complete: Generated %d solutions",
+                request_id,
+                len(question_solutions),
             )
 
             # Log per-question responses after agent call
@@ -587,6 +565,7 @@ async def process_form_analysis_async(
 
         # ===== PHASE 3: Generate Actions from Solutions =====
         async with get_async_db_context() as db:
+            db_session = cast(AsyncSession, db)
             logger.info(
                 "[AsyncTask %s] Phase 3: Converting %d solutions to actions",
                 request_id,
@@ -618,7 +597,7 @@ async def process_form_analysis_async(
             if not generator_result or "actions" not in generator_result:
                 logger.error("[AsyncTask %s] Action generator returned invalid result", request_id)
                 await form_requests_crud.update_form_request_status(
-                    db, request_id, "failed", error_message="Failed to generate actions from solutions"
+                    db_session, request_id, "failed", error_message="Failed to generate actions from solutions"
                 )
                 return
 
@@ -630,6 +609,7 @@ async def process_form_analysis_async(
 
         # Save results to database
         async with get_async_db_context() as db:
+            db_session = cast(AsyncSession, db)
             # Convert actions to dict format and filter out incomplete values only when required
             actions_dict = []
             required_value_actions = {"fillText", "selectDropdown", "selectCheckbox", "setText"}
@@ -656,7 +636,7 @@ async def process_form_analysis_async(
 
             # Save actions to database
             await form_requests_crud.create_form_actions(
-                db, request_id, actions_dict
+                db_session, request_id, actions_dict
             )
             logger.info(
                 "[AsyncTask %s] Saved %d actions to database",
@@ -666,7 +646,7 @@ async def process_form_analysis_async(
 
             # Update status to completed
             await form_requests_crud.update_form_request_status(
-                db,
+                db_session,
                 request_id,
                 "completed",
                 fields_detected=async_total_inputs
@@ -682,8 +662,9 @@ async def process_form_analysis_async(
         # Update status to failed
         try:
             async with get_async_db_context() as db:
+                db_session = cast(AsyncSession, db)
                 await form_requests_crud.update_form_request_status(
-                    db,
+                    db_session,
                     request_id,
                     "failed",
                     error_message=str(e)

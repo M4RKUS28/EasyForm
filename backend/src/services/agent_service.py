@@ -4,15 +4,18 @@ import asyncio
 import json
 from dataclasses import dataclass
 from logging import getLogger
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional, cast
 
 from google.adk.sessions import InMemorySessionService
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..agents.action_generator_agent import ActionGeneratorAgent
 from ..agents.html_form_parser_agent import HtmlFormParserAgent
 from ..agents.solution_generator_agent import SolutionGeneratorAgent
 from ..config import settings
+from ..db.database import get_async_db_context
 from .question_filter import extract_question_data_for_agent_2, filter_question_solution_pairs_for_agent_3
+from .rag_service import RAGService
 
 logger = getLogger(__name__)
 
@@ -49,6 +52,47 @@ MODEL_CONFIG: Dict[str, QualityProfile] = {
         action_model="gemini-2.5-pro",
     ),
 }
+
+
+def _build_search_query_for_question(question: dict, max_inputs: int = 10) -> str:
+    """Compose a semantic RAG search query from question metadata."""
+
+    phrases: List[str] = []
+
+    title = question.get("title")
+    if title:
+        phrases.append(str(title).strip())
+
+    description = question.get("description")
+    if description:
+        phrases.append(str(description).strip())
+
+    hints = question.get("hints") or []
+    for hint in hints:
+        if hint:
+            phrases.append(str(hint).strip())
+
+    inputs = (question.get("inputs") or [])[:max_inputs]
+    for input_data in inputs:
+        option_label = input_data.get("option_label")
+        value_hint = input_data.get("value_hint")
+        notes = input_data.get("notes")
+        for candidate in (option_label, value_hint, notes):
+            if candidate:
+                phrases.append(str(candidate).strip())
+
+    metadata = question.get("metadata")
+    if isinstance(metadata, dict):
+        for value in metadata.values():
+            if isinstance(value, str):
+                phrases.append(value.strip())
+            elif isinstance(value, list):
+                for entry in value[:max_inputs]:
+                    if isinstance(entry, str):
+                        phrases.append(entry.strip())
+
+    sanitized = [phrase for phrase in phrases if phrase]
+    return " ".join(sanitized).strip() or "form question context"
 
 
 class AgentService:
@@ -150,11 +194,13 @@ Visible Text Content:
         questions: list,
         visible_text: str,
         clipboard_text: str | None = None,
-    user_files: list | None = None,
-    quality: str = DEFAULT_QUALITY,
-    personal_instructions: Optional[str] = None,
-    question_contexts: Optional[Dict[str, Dict[str, List]]] = None,
-    screenshots: Optional[List[bytes]] = None,
+        user_files: list | None = None,
+        quality: str = DEFAULT_QUALITY,
+        personal_instructions: Optional[str] = None,
+        rag_service: Optional[RAGService] = None,
+        rag_top_k: int = 10,
+        file_logger: Optional[Any] = None,
+        screenshots: Optional[List[bytes]] = None,
     ) -> List[Dict]:
         """
         Generate solutions for each question using Solution Generator Agent.
@@ -168,7 +214,9 @@ Visible Text Content:
             user_files: User uploaded files (direct mode)
             quality: Quality profile
             personal_instructions: User personal instructions
-            question_contexts: Optional mapping of question_id -> RAG context payload
+            rag_service: Optional RAG service for per-question retrieval
+            rag_top_k: Number of RAG chunks to retrieve per question
+            file_logger: Optional file logger for per-question logging
             screenshots: Screenshots from browser (passed directly, not via RAG)
         """
         from ..agents.utils import create_multipart_query
@@ -198,6 +246,9 @@ Visible Text Content:
         instructions_text = personal_instructions or "No personal instructions provided."
 
         semaphore = asyncio.Semaphore(10)
+        rag_enabled = rag_service is not None
+        rag_totals: Dict[str, int] = {"text": 0, "image": 0} if rag_enabled else {}
+        rag_totals_lock = asyncio.Lock() if rag_enabled else None
 
         async def process_question(question_idx: int, question: dict):
             async with semaphore:
@@ -213,17 +264,51 @@ Visible Text Content:
 
                     # Build context section based on RAG or direct files
                     context_info: List[str] = []
-
-                    # Prepare per-question assets
-                    question_id = str(question.get("question_id") or question.get("id") or question_idx)
-                    per_question_context = (question_contexts or {}).get(question_id)
+                    subdir = f"question_{question_idx}"
 
                     # Agent 2 (Solution Generator) only gets context images, NOT screenshots
                     # Screenshots are only for Agent 1 (Parser)
                     images: List[bytes] = list(direct_images)
 
-                    if per_question_context:
-                        text_chunks = per_question_context.get("text_chunks", [])
+                    if rag_enabled and rag_service:
+                        question_query = _build_search_query_for_question(question)
+                        question_id = str(question.get("question_id") or question.get("id") or question_idx)
+
+                        if file_logger:
+                            file_logger.log_rag_query(
+                                f"Question {question_id}: {question_query}",
+                                subdir=subdir,
+                            )
+
+                        async with get_async_db_context() as rag_db:
+                            db_session = cast(AsyncSession, rag_db)
+                            context = await rag_service.retrieve_relevant_context(
+                                db=db_session,
+                                query=question_query,
+                                user_id=user_id,
+                                top_k=rag_top_k,
+                                file_logger=file_logger,
+                                question_subdir=subdir,
+                            )
+
+                        if file_logger:
+                            file_logger.log_rag_response(context, subdir=subdir)
+
+                        text_chunks = context.get("text_chunks", [])
+                        image_chunks = context.get("image_chunks", [])
+
+                        if rag_totals_lock:
+                            async with rag_totals_lock:
+                                rag_totals["text"] += len(text_chunks)
+                                rag_totals["image"] += len(image_chunks)
+
+                        logger.info(
+                            "Question %s RAG context: %d text chunks, %d image chunks",
+                            question_id,
+                            len(text_chunks),
+                            len(image_chunks),
+                        )
+
                         if text_chunks:
                             context_info.append(
                                 f"Retrieved {len(text_chunks)} relevant text sections from your documents:"
@@ -233,7 +318,6 @@ Visible Text Content:
                                 content = chunk.get("content", "")[:500]
                                 context_info.append(f"{i}. From {source}:\n{content}\n")
 
-                        image_chunks = per_question_context.get("image_chunks", [])
                         if image_chunks:
                             context_info.append(
                                 f"Retrieved {len(image_chunks)} relevant image(s) from your documents (shown below)."
@@ -242,6 +326,7 @@ Visible Text Content:
                                 image_bytes = img_chunk.get("image_bytes")
                                 if image_bytes:
                                     images.append(image_bytes)
+
                         if not text_chunks and not image_chunks:
                             context_info.append("No relevant document excerpts were retrieved for this question.")
                     else:
@@ -349,6 +434,13 @@ Provide only the solution/answer as plain text. Do not include explanations unle
 
         tasks = [process_question(idx, question) for idx, question in enumerate(questions)]
         results = await asyncio.gather(*tasks)
+
+        if rag_enabled and rag_totals:
+            logger.info(
+                "RAG retrieval summary: %d text chunks, %d image chunks",
+                rag_totals.get("text", 0),
+                rag_totals.get("image", 0),
+            )
 
         logger.info("Solution generation complete for %d questions", len(results))
         return results
