@@ -5,7 +5,7 @@ import asyncio
 import json
 import logging
 from abc import ABC, abstractmethod
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 from pydantic import ValidationError
 
@@ -69,6 +69,11 @@ class StandardAgent(ABC):
         self.app_name = app_name
         self.session_service = session_service
         self.model = "gemini-2.5-flash"
+        self._last_raw_response: Optional[str] = None
+
+    @property
+    def last_raw_response(self) -> Optional[str]:
+        return self._last_raw_response
 
     async def run(
         self,
@@ -85,6 +90,7 @@ class StandardAgent(ABC):
         """
         total_attempts = max(0, max_retries) + 1
         last_error = None
+        self._last_raw_response = None
 
         for attempt in range(total_attempts):
             should_retry = False
@@ -125,6 +131,7 @@ class StandardAgent(ABC):
                                 if hasattr(part, "text") and part.text
                             ]
                             merged_text = "".join(text_segments)
+                            self._last_raw_response = merged_text
                             return {
                                 "status": "success",
                                 "output": merged_text,
@@ -179,6 +186,11 @@ class StructuredAgent(ABC):
         self.app_name = app_name
         self.session_service = session_service
         self.model = "gemini-2.5-flash"
+        self._last_raw_response: Optional[str] = None
+
+    @property
+    def last_raw_response(self) -> Optional[str]:
+        return self._last_raw_response
     async def run(
         self,
         user_id: str,
@@ -212,6 +224,7 @@ class StructuredAgent(ABC):
 
         total_attempts = max(0, max_retries) + 1
         last_error = None
+        self._last_raw_response = None
 
         for attempt in range(total_attempts):
             logger.info(f"Attempt {attempt + 1}/{total_attempts}")
@@ -286,7 +299,7 @@ class StructuredAgent(ABC):
                                 sanitized_text = _escape_unescaped_control_chars(cleaned_text)
                                 if sanitized_text != cleaned_text:
                                     logger.info("Control characters sanitized before validation")
-                                    cleaned_text = sanitized_text
+                                cleaned_text = sanitized_text
 
                                 candidate_texts = [(cleaned_text, "cleaned")]
                                 if repair_json is not None:
@@ -356,6 +369,7 @@ class StructuredAgent(ABC):
                                 if isinstance(parsed_response, dict):
                                     logger.info(f"JSON result keys: {parsed_response.keys()}")
                                 logger.warning("Agent structured output: %s", parsed_response)
+                                self._last_raw_response = cleaned_text
                                 return parsed_response
                             except json.JSONDecodeError as e:
                                 error_msg = f"Error parsing JSON response: {e}"

@@ -128,6 +128,10 @@ class FileLogger:
             agent_dir.mkdir(parents=True, exist_ok=True)
         return agent_dir
 
+    @staticmethod
+    def _sanitize_filename(name: str) -> str:
+        return "".join(c if c.isalnum() or c in "._- " else "_" for c in name)
+
     def log_agent_query(self, agent_num: int, query: str, subdir: Optional[str] = None):
         """
         Log agent query/prompt to query.txt.
@@ -198,14 +202,8 @@ class FileLogger:
             subdir: Optional subdirectory name (e.g., "question_0", "batch_1")
         """
         try:
-            media_dir = self._get_agent_dir(agent_num, subdir) / "media"
-            media_dir.mkdir(parents=True, exist_ok=True)
             filename = f"screenshot_{index}.png"
-            filepath = media_dir / filename
-
-            with open(filepath, "wb") as f:
-                f.write(screenshot_bytes)
-            logger.debug(f"Saved screenshot to {filepath} ({len(screenshot_bytes)} bytes)")
+            self.save_agent_media(agent_num, filename, screenshot_bytes, subdir=subdir)
         except Exception as e:
             logger.error(f"Failed to save screenshot for agent {agent_num}: {e}", exc_info=True)
 
@@ -222,6 +220,30 @@ class FileLogger:
             self.save_screenshot(agent_num, screenshot_bytes, idx, subdir)
         subdir_info = f" in {subdir}" if subdir else ""
         logger.info(f"Saved {len(screenshots)} screenshots for {self.AGENT_NAMES[agent_num]}{subdir_info}")
+
+    def save_agent_media(self, agent_num: int, filename: str, data: bytes, subdir: Optional[str] = None):
+        """
+        Persist arbitrary binary attachments (pdf/image/etc.) to the agent's media folder.
+
+        Args:
+            agent_num: Agent number (1, 2, or 3)
+            filename: Suggested filename (will be sanitized)
+            data: Attachment byte content
+            subdir: Optional subdirectory name (e.g., "question_0", "batch_1")
+        """
+        try:
+            media_dir = self._get_agent_dir(agent_num, subdir) / "media"
+            media_dir.mkdir(parents=True, exist_ok=True)
+            safe_name = self._sanitize_filename(filename).strip() or "attachment.bin"
+            filepath = media_dir / safe_name
+            with open(filepath, "wb") as f:
+                f.write(data)
+            subdir_info = f" in {subdir}" if subdir else ""
+            logger.debug(
+                f"Saved media file for {self.AGENT_NAMES[agent_num]}{subdir_info}: {safe_name} ({len(data)} bytes)"
+            )
+        except Exception as e:
+            logger.error(f"Failed to save media file {filename}: {e}", exc_info=True)
 
     # ===== RAG Logging (Agent 2 only) =====
 

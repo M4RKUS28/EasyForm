@@ -2,9 +2,10 @@
 
 import asyncio
 import json
+import mimetypes
 from dataclasses import dataclass
 from logging import getLogger
-from typing import Any, Awaitable, Callable, Dict, List, Optional, cast
+from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple, cast
 
 from google.adk.sessions import InMemorySessionService
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -14,7 +15,7 @@ from ..agents.html_form_parser_agent import HtmlFormParserAgent
 from ..agents.solution_generator_agent import SolutionGeneratorAgent
 from ..config import settings
 from ..db.database import get_async_db_context
-from .question_filter import extract_question_data_for_agent_2, filter_question_solution_pairs_for_agent_3
+from .question_filter import extract_question_data_for_agent_2
 from .rag_service import RAGService
 from ..agents.utils import create_multipart_query
 
@@ -137,6 +138,7 @@ class AgentService:
         screenshots: Optional[List[bytes]] = None,
         quality: str = DEFAULT_QUALITY,
         personal_instructions: Optional[str] = None,
+        file_logger: Optional[Any] = None,
     ) -> dict:
         """Parse HTML to extract structured form questions for downstream processing."""
 
@@ -161,6 +163,18 @@ Visible Text Content:
 
 """
 
+        if file_logger:
+            file_logger.log_agent_output(
+                1,
+                f"Building parser prompt (HTML chars={len(html)}, visible text chars={len(dom_text)})",
+            )
+            file_logger.log_agent_query(1, query)
+            if screenshots:
+                file_logger.log_agent_output(1, f"Attaching {len(screenshots)} screenshot(s) to parser prompt")
+                for idx, screenshot in enumerate(screenshots):
+                    file_logger.save_agent_media(1, f"screenshot_{idx}.png", screenshot)
+            file_logger.log_agent_output(1, f"Executing Agent 1 (HtmlFormParserAgent) using model={profile.parser_model}")
+
         content = create_multipart_query(
             query=query,
             screenshots=screenshots if screenshots else None,
@@ -174,12 +188,27 @@ Visible Text Content:
             max_retries=settings.AGENT_MAX_RETRIES,
             retry_delay=settings.AGENT_RETRY_DELAY_SECONDS,
         )
+
+        if file_logger:
+            raw_parser_output = getattr(parser_agent, "last_raw_response", None)
+            file_logger.log_agent_output(1, "Parser agent execution finished; capturing raw response")
+            if raw_parser_output:
+                file_logger.log_agent_response(1, raw_parser_output)
+            else:
+                file_logger.log_agent_response(1, json.dumps(result, indent=2, ensure_ascii=False))
+            question_count = len(result.get("questions", [])) if isinstance(result, dict) else 0
+            file_logger.log_agent_output(
+                1,
+                f"Parser output parsed into {question_count} question(s)",
+            )
+
         return result
 
     async def generate_solutions_per_question(
         self,
         user_id: str,
         questions: list,
+        user_files: Optional[List] = None,
         #visible_text: str,
         clipboard_text: str | None = None,
         quality: str = DEFAULT_QUALITY,
@@ -213,8 +242,19 @@ Visible Text Content:
         solution_model = profile.solution_model
 
         # Collect context sources
-        pdf_files: List[bytes] = []
-        direct_images: List[bytes] = []
+        base_pdf_attachments: List[Tuple[str, bytes]] = []
+        base_image_attachments: List[Tuple[str, bytes]] = []
+        if user_files:
+            for file in user_files:
+                filename = getattr(file, "filename", None) or f"user_file_{len(base_pdf_attachments) + len(base_image_attachments) + 1}"
+                content_type = getattr(file, "content_type", "") or ""
+                if content_type == "application/pdf":
+                    pdf_name = filename if filename.lower().endswith(".pdf") else f"{filename}.pdf"
+                    base_pdf_attachments.append((pdf_name, file.data))
+                elif content_type.startswith("image/"):
+                    ext = mimetypes.guess_extension(content_type) or ".png"
+                    img_name = filename if filename.lower().endswith(ext) else f"{filename}{ext}"
+                    base_image_attachments.append((img_name, file.data))
 
         logger.info(
             "Generating solutions for %d questions using %s",
@@ -231,6 +271,7 @@ Visible Text Content:
         rag_totals: Dict[str, int] = {"text": 0, "image": 0}
         rag_totals_lock = asyncio.Lock()
 
+
         async def process_question(question_idx: int, question: dict):
             callback_payload: Dict[str, Any] = {
                 "question_id": question.get("question_id"),
@@ -240,6 +281,12 @@ Visible Text Content:
                 success = False
                 solution_text: str = "Error: Could not generate solution"
                 agent_output: Dict[str, Any] = {}
+                question_id = str(question.get("question_id") or question.get("id") or question_idx)
+                question_image_attachments: List[Tuple[str, bytes]] = list(base_image_attachments)
+                images_payload: List[bytes] = [data for _, data in question_image_attachments]
+                pdf_payloads: List[bytes] = [data for _, data in base_pdf_attachments]
+                rag_image_attachments: List[Tuple[str, bytes]] = []
+                subdir = f"question_{question_idx}"
                 try:
                     logger.info(
                         "Generating solution for question %d/%d -> id=%s | type=%s | title=%s",
@@ -250,21 +297,15 @@ Visible Text Content:
                         question.get("title"),
                     )
 
-                    # Build context section based on RAG or direct files
                     context_info: List[str] = []
-                    subdir = f"question_{question_idx}"
 
-                    # Agent 2 (Solution Generator) only gets context images, NOT screenshots
-                    # Screenshots are only for Agent 1 (Parser)
-                    images: List[bytes] = list(direct_images)
-
-                    # RAG retrieval per question
                     question_query = _build_search_query_for_question(question)
-                    question_id = str(question.get("question_id") or question.get("id") or question_idx)
 
                     if file_logger:
-                        file_logger.log_rag_query(
-                            f"Question {question_id}: {question_query}",
+                        file_logger.log_rag_query(f"Question {question_id}: {question_query}", subdir=subdir)
+                        file_logger.log_agent_output(
+                            2,
+                            f"Preparing RAG context for question {question_idx + 1}/{len(questions)} (id={question_id})",
                             subdir=subdir,
                         )
 
@@ -285,10 +326,9 @@ Visible Text Content:
                     text_chunks = context.get("text_chunks", [])
                     image_chunks = context.get("image_chunks", [])
 
-                    if rag_totals_lock:
-                        async with rag_totals_lock:
-                            rag_totals["text"] += len(text_chunks)
-                            rag_totals["image"] += len(image_chunks)
+                    async with rag_totals_lock:
+                        rag_totals["text"] += len(text_chunks)
+                        rag_totals["image"] += len(image_chunks)
 
                     if file_logger:
                         file_logger.log_rag_chunk_counts(
@@ -297,13 +337,11 @@ Visible Text Content:
                             scope=f"question_{question_id}",
                             subdir=subdir,
                         )
-
-                    logger.info(
-                        "Question %s RAG context: %d text chunks, %d image chunks",
-                        question_id,
-                        len(text_chunks),
-                        len(image_chunks),
-                    )
+                        file_logger.log_agent_output(
+                            2,
+                            f"Context retrieved: {len(text_chunks)} text chunk(s), {len(image_chunks)} image chunk(s)",
+                            subdir=subdir,
+                        )
 
                     if text_chunks:
                         context_info.append(
@@ -318,28 +356,34 @@ Visible Text Content:
                         context_info.append(
                             f"Retrieved {len(image_chunks)} relevant image(s) from your documents (shown below)."
                         )
-                        for img_chunk in image_chunks:
+                        for chunk_idx, img_chunk in enumerate(image_chunks, 1):
                             image_bytes = img_chunk.get("image_bytes")
                             if image_bytes:
-                                images.append(image_bytes)
+                                attachment_name = (
+                                    img_chunk.get("source")
+                                    or f"rag_image_q{question_idx + 1}_{len(question_image_attachments) + 1}.png"
+                                )
+                                question_image_attachments.append((attachment_name, image_bytes))
+                                images_payload.append(image_bytes)
+                                rag_image_attachments.append((attachment_name, image_bytes))
 
-                    if not text_chunks and not image_chunks:
-                        context_info.append("No relevant document excerpts were retrieved for this question.")
+                    if (
+                        not text_chunks
+                        and not image_chunks
+                        and (base_pdf_attachments or base_image_attachments)
+                    ):
+                        context_info.append(
+                            f"User uploaded {len(base_pdf_attachments)} PDF(s) and {len(base_image_attachments)} image(s) that may contain relevant information."
+                        )
 
                     context_section = "\n".join(context_info) if context_info else "No uploaded documents available."
 
-                    # Filter question to only include question_data for Agent 2
                     filtered_question = extract_question_data_for_agent_2(question)
 
                     if file_logger:
-                        question_json = json.dumps(filtered_question, indent=2, ensure_ascii=False)
-                        file_logger.log_agent_query(2, question_json, subdir=subdir)
                         file_logger.log_agent_output(
                             2,
-                            (
-                                f"Generating solution for question {question_idx} "
-                                f"(id={question.get('question_id')})"
-                            ),
+                            f"Assembling prompt for question {question_idx + 1}/{len(questions)} (id={question_id})",
                             subdir=subdir,
                         )
 
@@ -347,18 +391,20 @@ Visible Text Content:
 
 
 
+Session Instructions (highest priority):
+{clipboard_text if clipboard_text else 'No session instructions provided'}
 
-{("Session Instructions (highest priority): " + clipboard_text) if clipboard_text else ''}
+Personal Instructions:
+{instructions_text}
 
-{("Personal Instructions: " + instructions_text) if instructions_text else ''}
-
-{("Document Context:\n") if context_section else ''}
-
+Document Context:
 {context_section}
+
 
 ----------------------------------------
 
-Solve and answer following Form Question:
+
+Form Question:
 ```json
 {json.dumps(filtered_question, indent=2)}
 ```
@@ -366,23 +412,41 @@ Solve and answer following Form Question:
 Provide only the solution/answer as plain text. Do not include explanations unless necessary.
 """
 
+                    pdf_argument = pdf_payloads if pdf_payloads else None
+                    images_argument = images_payload if images_payload else None
                     content = create_multipart_query(
                         query=solution_query,
-                        pdf_files=pdf_files if pdf_files else None,
-                        images=images if images else None,
+                        pdf_files=pdf_argument,
+                        images=images_argument,
                     )
 
-                    logger.info(
-                        "Step 2 input payload for question_id=%s: %s",
-                        question.get("question_id"),
-                        solution_query,
-                    )
-                    logger.info(
-                        "Step 2 attachment summary for question_id=%s: pdfs=%d | images=%d",
-                        question.get("question_id"),
-                        len(pdf_files),
-                        len(images),
-                    )
+                    if file_logger:
+                        file_logger.log_agent_query(2, solution_query, subdir=subdir)
+                        if base_pdf_attachments:
+                            file_logger.log_agent_output(
+                                2,
+                                f"Saving {len(base_pdf_attachments)} static PDF attachment(s)",
+                                subdir=subdir,
+                            )
+                            for filename, data in base_pdf_attachments:
+                                file_logger.save_agent_media(2, filename, data, subdir=subdir)
+                        if base_image_attachments:
+                            file_logger.log_agent_output(
+                                2,
+                                f"Saving {len(base_image_attachments)} static image attachment(s)",
+                                subdir=subdir,
+                            )
+                            for filename, data in base_image_attachments:
+                                file_logger.save_agent_media(2, filename, data, subdir=subdir)
+                        if rag_image_attachments:
+                            file_logger.log_agent_output(
+                                2,
+                                f"Saving {len(rag_image_attachments)} RAG-specific image attachment(s)",
+                                subdir=subdir,
+                            )
+                            for filename, data in rag_image_attachments:
+                                file_logger.save_agent_media(2, filename, data, subdir=subdir)
+                        file_logger.log_agent_output(2, "Executing Solution Generator agent", subdir=subdir)
 
                     result = await solution_agent.run(
                         user_id=user_id,
@@ -392,13 +456,6 @@ Provide only the solution/answer as plain text. Do not include explanations unle
                         max_retries=settings.AGENT_MAX_RETRIES,
                         retry_delay=settings.AGENT_RETRY_DELAY_SECONDS,
                     )
-                    agent_output = result
-
-                    logger.info(
-                        "Step 2 output payload for question_id=%s: %s",
-                        question.get("question_id"),
-                        result,
-                    )
 
                     logger.info(
                         "Solution generated for question %d/%d",
@@ -406,27 +463,33 @@ Provide only the solution/answer as plain text. Do not include explanations unle
                         len(questions),
                     )
 
-                    # Extract solution from result
-                    solution = None
                     if result.get("status") == "success":
                         solution_text = result.get("output", "")
                     elif "output" in result:
                         solution_text = result["output"]
                     else:
                         solution_text = "Error: Could not generate solution"
-                    success = True
+
+                    raw_solution = getattr(solution_agent, "last_raw_response", None) or result.get("output", "")
 
                     if file_logger:
-                        file_logger.log_agent_response(
+                        file_logger.log_agent_output(
                             2,
-                            {
-                                "question_id": question.get("question_id"),
-                                "question": question,
-                                "solution": solution_text,
-                                "agent_output": result,
-                            },
+                            f"LLM execution completed with status={result.get('status')}",
                             subdir=subdir,
                         )
+                        file_logger.log_agent_response(2, raw_solution or "", subdir=subdir)
+                        file_logger.log_agent_output(2, "Normalizing solution text for downstream use", subdir=subdir)
+
+                    success = True
+                    agent_output = result
+
+                    return {
+                        "question_id": question.get("question_id"),
+                        "question": question,
+                        "solution": solution_text,
+                        "agent_output": agent_output,
+                    }
 
                 except Exception as exc:  # noqa: BLE001
                     logger.error(
@@ -435,6 +498,9 @@ Provide only the solution/answer as plain text. Do not include explanations unle
                         len(questions),
                         exc,
                     )
+                    if file_logger:
+                        file_logger.log_agent_output(2, f"Error during solution generation: {exc}", subdir=subdir)
+                        file_logger.log_agent_response(2, f"ERROR: {exc}", subdir=subdir)
                     solution_text = "Error: Failed to generate solution"
                     agent_output = {"status": "error", "detail": str(exc)}
                 finally:
@@ -462,11 +528,25 @@ Provide only the solution/answer as plain text. Do not include explanations unle
                     "solution": solution_text,
                     "agent_output": agent_output,
                 }
-
         tasks = [process_question(idx, question) for idx, question in enumerate(questions)]
         results = await asyncio.gather(*tasks)
 
         logger.info("Solution generation complete for %d questions", len(results))
+        logger.info(
+            "RAG retrieval summary: %d text chunks, %d image chunks",
+            rag_totals.get("text", 0),
+            rag_totals.get("image", 0),
+        )
+        if file_logger:
+            file_logger.log_agent_output(
+                2,
+                f"RAG retrieval summary: {rag_totals.get('text', 0)} text chunk(s), {rag_totals.get('image', 0)} image chunk(s)",
+            )
+            file_logger.log_rag_chunk_counts(
+                text_chunks=rag_totals.get("text", 0),
+                image_chunks=rag_totals.get("image", 0),
+                scope="total",
+            )
         return results
 
     async def generate_actions_from_solutions(
@@ -475,6 +555,7 @@ Provide only the solution/answer as plain text. Do not include explanations unle
         question_solution_pairs: List[Dict],
         quality: str = DEFAULT_QUALITY,
         batch_size: int = 10,
+        file_logger: Optional[Any] = None,
     ) -> dict:
         """
         Generate actions from question-solution pairs using Action Generator Agent.
@@ -510,6 +591,7 @@ Provide only the solution/answer as plain text. Do not include explanations unle
         logger.info("Processing %d batches", len(batches))
 
         async def process_batch(batch_idx: int, batch: List[Dict]):
+            batch_subdir = f"batch_{batch_idx}" if file_logger else None
             try:
                 logger.info(
                     "Processing batch %d/%d with %d questions",
@@ -517,6 +599,12 @@ Provide only the solution/answer as plain text. Do not include explanations unle
                     len(batches),
                     len(batch),
                 )
+                if file_logger:
+                    file_logger.log_agent_output(
+                        3,
+                        f"Preparing action prompt for batch {batch_idx + 1}/{len(batches)} ({len(batch)} question(s))",
+                        subdir=batch_subdir,
+                    )
 
                 # Build the query with filtered questions and solutions
                 # Agent 3 only needs interaction_data (selectors/targets), not semantic data
@@ -564,11 +652,26 @@ Output a flat list of all actions across all questions.
                 from ..agents.utils import create_multipart_query
                 content = create_multipart_query(query=action_query)
 
+                if file_logger:
+                    file_logger.log_agent_output(
+                        3,
+                        f"Action prompt built for batch {batch_idx + 1} (payload size={len(action_query)} chars)",
+                        subdir=batch_subdir,
+                    )
+                    file_logger.log_agent_query(3, action_query, subdir=batch_subdir)
+
                 logger.info(
                     "Step 3 input payload for batch %d: %s",
                     batch_idx + 1,
                     action_query,
                 )
+
+                if file_logger:
+                    file_logger.log_agent_output(
+                        3,
+                        f"Executing Agent 3 (ActionGeneratorAgent) for batch {batch_idx + 1}",
+                        subdir=batch_subdir,
+                    )
 
                 result = await action_agent.run(
                     user_id=user_id,
@@ -585,6 +688,34 @@ Output a flat list of all actions across all questions.
                     result,
                 )
 
+                raw_action_output = getattr(action_agent, "last_raw_response", None)
+
+                if file_logger:
+                    file_logger.log_agent_output(
+                        3,
+                        f"Agent 3 execution completed for batch {batch_idx + 1}",
+                        subdir=batch_subdir,
+                    )
+                    fallback_response = (
+                        raw_action_output
+                        if raw_action_output
+                        else (
+                            result if isinstance(result, str) else json.dumps(result, indent=2, ensure_ascii=False)
+                        )
+                    )
+                    file_logger.log_agent_response(3, fallback_response, subdir=batch_subdir)
+                    action_count = len(result.get("actions", [])) if isinstance(result, dict) else "unknown"
+                    file_logger.log_agent_output(
+                        3,
+                        f"Agent 3 result for batch {batch_idx + 1}: {action_count} action(s)",
+                        subdir=batch_subdir,
+                    )
+                    file_logger.log_agent_output(
+                        3,
+                        "Normalizing action list JSON for downstream storage",
+                        subdir=batch_subdir,
+                    )
+
                 logger.info(
                     "Batch %d/%d completed",
                     batch_idx + 1,
@@ -600,6 +731,12 @@ Output a flat list of all actions across all questions.
                     len(batches),
                     exc,
                 )
+                if file_logger:
+                    file_logger.log_agent_output(
+                        3,
+                        f"Agent 3 exception for batch {batch_idx + 1}: {exc}",
+                        subdir=batch_subdir,
+                    )
                 return {"actions": []}
 
         tasks = [process_batch(idx, batch) for idx, batch in enumerate(batches)]
@@ -616,6 +753,11 @@ Output a flat list of all actions across all questions.
             len(combined_actions),
             len(question_solution_pairs),
         )
+        if file_logger:
+            file_logger.log_agent_output(
+                3,
+                f"Combined {len(combined_actions)} action(s) across {len(batches)} batch(es)",
+            )
 
         return {"actions": combined_actions}
 
