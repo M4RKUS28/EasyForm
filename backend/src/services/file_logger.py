@@ -288,6 +288,50 @@ class FileLogger:
         except Exception as e:
             logger.error(f"Failed to log RAG response: {e}", exc_info=True)
 
+    def log_rag_chunk_counts(
+        self,
+        text_chunks: int,
+        image_chunks: int,
+        scope: str,
+        subdir: Optional[str] = None,
+    ):
+        """
+        Append RAG chunk count metadata to rag/chunk_counts.jsonl.
+
+        Args:
+            text_chunks: Number of retrieved text chunks
+            image_chunks: Number of retrieved image chunks
+            scope: Human-readable scope identifier (e.g., "question_1", "total")
+            subdir: Optional subdirectory name (e.g., "question_0")
+        """
+        try:
+            if subdir:
+                rag_dir = self._get_agent_dir(2, subdir) / "rag"
+            else:
+                rag_dir = self._get_agent_dir(2) / "rag"
+
+            rag_dir.mkdir(parents=True, exist_ok=True)
+            chunk_file = rag_dir / "chunk_counts.jsonl"
+            entry = {
+                "timestamp": datetime.utcnow().isoformat(),
+                "scope": scope,
+                "text_chunks": text_chunks,
+                "image_chunks": image_chunks,
+            }
+            with open(chunk_file, "a", encoding="utf-8") as f:
+                f.write(json.dumps(entry, ensure_ascii=False))
+                f.write("\n")
+            subdir_info = f" in {subdir}" if subdir else ""
+            logger.debug(
+                "Logged RAG chunk counts%s: scope=%s text=%d image=%d",
+                subdir_info,
+                scope,
+                text_chunks,
+                image_chunks,
+            )
+        except Exception as e:
+            logger.error(f"Failed to log RAG chunk counts: {e}", exc_info=True)
+
     def save_rag_image(self, image_bytes: bytes, source_name: str, index: int, subdir: Optional[str] = None):
         """
         Save RAG-retrieved image to rag/ folder (Agent 2 only).

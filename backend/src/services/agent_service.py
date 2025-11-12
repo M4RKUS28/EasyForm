@@ -302,6 +302,14 @@ Visible Text Content:
                                 rag_totals["text"] += len(text_chunks)
                                 rag_totals["image"] += len(image_chunks)
 
+                        if file_logger:
+                            file_logger.log_rag_chunk_counts(
+                                text_chunks=len(text_chunks),
+                                image_chunks=len(image_chunks),
+                                scope=f"question_{question_id}",
+                                subdir=subdir,
+                            )
+
                         logger.info(
                             "Question %s RAG context: %d text chunks, %d image chunks",
                             question_id,
@@ -441,6 +449,12 @@ Provide only the solution/answer as plain text. Do not include explanations unle
                 rag_totals.get("text", 0),
                 rag_totals.get("image", 0),
             )
+            if file_logger:
+                file_logger.log_rag_chunk_counts(
+                    text_chunks=rag_totals.get("text", 0),
+                    image_chunks=rag_totals.get("image", 0),
+                    scope="total",
+                )
 
         logger.info("Solution generation complete for %d questions", len(results))
         return results
