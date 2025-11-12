@@ -1,6 +1,6 @@
 import asyncio
 import logging
-from typing import AsyncGenerator, Optional, Callable
+from typing import Any, AsyncGenerator, Optional, Callable
 from contextlib import asynccontextmanager
 from urllib.parse import quote_plus
 
@@ -83,6 +83,7 @@ async def get_engine():
 # ✅ Session factory
 # ✅ FastAPI dependency
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
+    """Async generator yielding a database session. Note: does not auto-commit/rollback."""
     await get_engine()
     if state.session_factory is None:
         raise RuntimeError("Async session factory not initialized")
@@ -96,7 +97,8 @@ Base = declarative_base()
 
 # ✅ Optional: Async context manager
 @asynccontextmanager
-async def get_async_db_context():
+async def get_async_db_context() -> AsyncGenerator[AsyncSession, None]:
+    """Async context manager for database session WITH commit/rollback."""
     await get_engine()
     if state.session_factory is None:
         raise RuntimeError("Async session factory not initialized")
