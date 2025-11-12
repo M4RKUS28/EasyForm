@@ -5,7 +5,6 @@ Contains business logic and integration services.
 from .agent_service import AgentService
 from .file_service import upload_file, get_user_files, get_file, delete_file
 from .form_service import (
-    analyze_form,
     schedule_form_analysis_task,
     cancel_form_analysis_task,
     process_form_analysis_async
@@ -40,7 +39,6 @@ __all__ = [
     "get_file",
     "delete_file",
     # Form service
-    "analyze_form",
     "schedule_form_analysis_task",
     "cancel_form_analysis_task",
     "process_form_analysis_async",
