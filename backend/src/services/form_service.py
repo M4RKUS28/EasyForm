@@ -166,6 +166,68 @@ async def cancel_form_analysis_task(request_id: str) -> bool:
     return True
 
 
+async def shutdown_active_tasks(timeout: int = 30) -> None:
+    """
+    Gracefully shutdown all active analysis tasks.
+
+    Called during application shutdown to ensure tasks complete or are properly cancelled.
+
+    Args:
+        timeout: Maximum seconds to wait for tasks to complete (default: 30)
+    """
+    if not _active_analysis_tasks:
+        logger.info("No active analysis tasks to shutdown")
+        return
+
+    task_count = len(_active_analysis_tasks)
+    request_ids = list(_active_analysis_tasks.keys())
+    logger.info(f"Shutting down {task_count} active analysis tasks: {request_ids}")
+
+    tasks = list(_active_analysis_tasks.values())
+
+    try:
+        # Wait for tasks to complete with timeout
+        await asyncio.wait_for(
+            asyncio.gather(*tasks, return_exceptions=True),
+            timeout=timeout
+        )
+        logger.info(f"All {task_count} tasks completed gracefully")
+    except asyncio.TimeoutError:
+        logger.warning(
+            f"Shutdown timeout ({timeout}s) reached, forcefully cancelling {len(tasks)} remaining tasks"
+        )
+
+        # Cancel remaining tasks
+        for request_id, task in list(_active_analysis_tasks.items()):
+            if not task.done():
+                logger.warning(f"Cancelling incomplete task: {request_id}")
+                task.cancel()
+
+                # Mark as failed in database
+                try:
+                    async with get_async_db_context() as db:
+                        await form_requests_crud.update_form_request_status(
+                            db, request_id, "failed",
+                            error_message="Server shutdown before completion"
+                        )
+                        logger.info(f"Marked request {request_id} as failed due to shutdown")
+                except Exception as e:
+                    logger.error(f"Failed to update status for {request_id}: {e}")
+
+        # Wait briefly for cancellations to process
+        try:
+            await asyncio.wait_for(
+                asyncio.gather(*tasks, return_exceptions=True),
+                timeout=5
+            )
+        except asyncio.TimeoutError:
+            logger.error("Some tasks did not respond to cancellation")
+
+    # Clear the task dictionary
+    _active_analysis_tasks.clear()
+    logger.info("Task shutdown complete")
+
+
 async def analyze_form(
     db: AsyncSession,
     user_id: str,

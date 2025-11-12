@@ -7,6 +7,7 @@ from fastapi import FastAPI
 from ..db.database import get_engine, Base, get_async_db_context
 from ..db.crud import form_requests_crud
 from ..config import settings
+from ..services import form_service
 
 
 scheduler = AsyncIOScheduler()
@@ -63,7 +64,16 @@ async def lifespan(_app: FastAPI):
         raise
     finally:
         logger.info("Shutting down application...")
+
+        # Gracefully shutdown active form analysis tasks
+        try:
+            await form_service.shutdown_active_tasks(timeout=settings.SHUTDOWN_TIMEOUT_SECONDS)
+        except Exception as e:
+            logger.error(f"Error during task shutdown: {e}", exc_info=True)
+
+        # Stop the scheduler
         if scheduler.running:
             scheduler.shutdown()
             logger.info("Scheduler stopped.")
+
         logger.info("Application shutdown complete.")

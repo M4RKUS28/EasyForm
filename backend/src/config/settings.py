@@ -69,6 +69,9 @@ AGENT_RETRY_DELAY_SECONDS = float(os.getenv("AGENT_RETRY_DELAY_SECONDS", "2.0"))
 # File Logging for Agent System (Debug/Development)
 LOG_FILE = os.getenv("LOG_FILE", "false").lower() == "true"
 
+# Graceful Shutdown Configuration
+SHUTDOWN_TIMEOUT_SECONDS = int(os.getenv("SHUTDOWN_TIMEOUT_SECONDS", "30"))
+
 # -------------------------
 DB_HOST = os.getenv("DB_HOST")  # 10.73.16.3
 DB_PORT = os.getenv("DB_PORT", "3306")
