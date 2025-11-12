@@ -226,9 +226,10 @@ Visible Text Content:
         instructions_text = personal_instructions or "No personal instructions provided."
 
         semaphore = asyncio.Semaphore(10)
-        rag_enabled = rag_service is not None
-        rag_totals: Dict[str, int] = {"text": 0, "image": 0} if rag_enabled else {}
-        rag_totals_lock = asyncio.Lock() if rag_enabled else None
+        if not rag_service:
+            raise ValueError("RAG service must be provided for solution generation.")
+        rag_totals: Dict[str, int] = {"text": 0, "image": 0}
+        rag_totals_lock = asyncio.Lock()
 
         async def process_question(question_idx: int, question: dict):
             callback_payload: Dict[str, Any] = {
@@ -257,78 +258,73 @@ Visible Text Content:
                     # Screenshots are only for Agent 1 (Parser)
                     images: List[bytes] = list(direct_images)
 
-                    if rag_enabled and rag_service:
-                        question_query = _build_search_query_for_question(question)
-                        question_id = str(question.get("question_id") or question.get("id") or question_idx)
+                    # RAG retrieval per question
+                    question_query = _build_search_query_for_question(question)
+                    question_id = str(question.get("question_id") or question.get("id") or question_idx)
 
-                        if file_logger:
-                            file_logger.log_rag_query(
-                                f"Question {question_id}: {question_query}",
-                                subdir=subdir,
-                            )
-
-                        async with get_async_db_context() as rag_db:
-                            db_session = cast(AsyncSession, rag_db)
-                            context = await rag_service.retrieve_relevant_context(
-                                db=db_session,
-                                query=question_query,
-                                user_id=user_id,
-                                top_k=rag_top_k,
-                                file_logger=file_logger,
-                                question_subdir=subdir,
-                            )
-
-                        if file_logger:
-                            file_logger.log_rag_response(context, subdir=subdir)
-
-                        text_chunks = context.get("text_chunks", [])
-                        image_chunks = context.get("image_chunks", [])
-
-                        if rag_totals_lock:
-                            async with rag_totals_lock:
-                                rag_totals["text"] += len(text_chunks)
-                                rag_totals["image"] += len(image_chunks)
-
-                        if file_logger:
-                            file_logger.log_rag_chunk_counts(
-                                text_chunks=len(text_chunks),
-                                image_chunks=len(image_chunks),
-                                scope=f"question_{question_id}",
-                                subdir=subdir,
-                            )
-
-                        logger.info(
-                            "Question %s RAG context: %d text chunks, %d image chunks",
-                            question_id,
-                            len(text_chunks),
-                            len(image_chunks),
+                    if file_logger:
+                        file_logger.log_rag_query(
+                            f"Question {question_id}: {question_query}",
+                            subdir=subdir,
                         )
 
-                        if text_chunks:
-                            context_info.append(
-                                f"Retrieved {len(text_chunks)} relevant text sections from your documents:"
-                            )
-                            for i, chunk in enumerate(text_chunks[:5], 1):
-                                source = chunk.get("source", "Unknown")
-                                content = chunk.get("content", "")[:500]
-                                context_info.append(f"{i}. From {source}:\n{content}\n")
+                    async with get_async_db_context() as rag_db:
+                        db_session = cast(AsyncSession, rag_db)
+                        context = await rag_service.retrieve_relevant_context(
+                            db=db_session,
+                            query=question_query,
+                            user_id=user_id,
+                            top_k=rag_top_k,
+                            file_logger=file_logger,
+                            question_subdir=subdir,
+                        )
 
-                        if image_chunks:
-                            context_info.append(
-                                f"Retrieved {len(image_chunks)} relevant image(s) from your documents (shown below)."
-                            )
-                            for img_chunk in image_chunks:
-                                image_bytes = img_chunk.get("image_bytes")
-                                if image_bytes:
-                                    images.append(image_bytes)
+                    if file_logger:
+                        file_logger.log_rag_response(context, subdir=subdir)
 
-                        if not text_chunks and not image_chunks:
-                            context_info.append("No relevant document excerpts were retrieved for this question.")
-                    else:
-                        if len(pdf_files) > 0 or len(direct_images) > 0:
-                            context_info.append(
-                                f"User has uploaded {len(pdf_files)} PDF(s) and {len(direct_images)} image(s) that may contain relevant information."
-                            )
+                    text_chunks = context.get("text_chunks", [])
+                    image_chunks = context.get("image_chunks", [])
+
+                    if rag_totals_lock:
+                        async with rag_totals_lock:
+                            rag_totals["text"] += len(text_chunks)
+                            rag_totals["image"] += len(image_chunks)
+
+                    if file_logger:
+                        file_logger.log_rag_chunk_counts(
+                            text_chunks=len(text_chunks),
+                            image_chunks=len(image_chunks),
+                            scope=f"question_{question_id}",
+                            subdir=subdir,
+                        )
+
+                    logger.info(
+                        "Question %s RAG context: %d text chunks, %d image chunks",
+                        question_id,
+                        len(text_chunks),
+                        len(image_chunks),
+                    )
+
+                    if text_chunks:
+                        context_info.append(
+                            f"Retrieved {len(text_chunks)} relevant text sections from your documents:"
+                        )
+                        for i, chunk in enumerate(text_chunks[:5], 1):
+                            source = chunk.get("source", "Unknown")
+                            content = chunk.get("content", "")[:500]
+                            context_info.append(f"{i}. From {source}:\n{content}\n")
+
+                    if image_chunks:
+                        context_info.append(
+                            f"Retrieved {len(image_chunks)} relevant image(s) from your documents (shown below)."
+                        )
+                        for img_chunk in image_chunks:
+                            image_bytes = img_chunk.get("image_bytes")
+                            if image_bytes:
+                                images.append(image_bytes)
+
+                    if not text_chunks and not image_chunks:
+                        context_info.append("No relevant document excerpts were retrieved for this question.")
 
                     context_section = "\n".join(context_info) if context_info else "No uploaded documents available."
 
@@ -338,12 +334,11 @@ Visible Text Content:
                     if file_logger:
                         question_json = json.dumps(filtered_question, indent=2, ensure_ascii=False)
                         file_logger.log_agent_query(2, question_json, subdir=subdir)
-                        context_label = "RAG context" if rag_enabled and rag_service else "direct context"
                         file_logger.log_agent_output(
                             2,
                             (
                                 f"Generating solution for question {question_idx} "
-                                f"(id={question.get('question_id')}) using {context_label}"
+                                f"(id={question.get('question_id')})"
                             ),
                             subdir=subdir,
                         )
@@ -352,20 +347,18 @@ Visible Text Content:
 
 
 
-Session Instructions (highest priority):
-{clipboard_text if clipboard_text else 'No session instructions provided'}
 
-Personal Instructions:
-{instructions_text}
+{("Session Instructions (highest priority): " + clipboard_text) if clipboard_text else ''}
 
-Document Context:
+{("Personal Instructions: " + instructions_text) if instructions_text else ''}
+
+{("Document Context:\n") if context_section else ''}
+
 {context_section}
-
 
 ----------------------------------------
 
-
-Form Question:
+Solve and answer following Form Question:
 ```json
 {json.dumps(filtered_question, indent=2)}
 ```
@@ -472,19 +465,6 @@ Provide only the solution/answer as plain text. Do not include explanations unle
 
         tasks = [process_question(idx, question) for idx, question in enumerate(questions)]
         results = await asyncio.gather(*tasks)
-
-        if rag_enabled and rag_totals:
-            logger.info(
-                "RAG retrieval summary: %d text chunks, %d image chunks",
-                rag_totals.get("text", 0),
-                rag_totals.get("image", 0),
-            )
-            if file_logger:
-                file_logger.log_rag_chunk_counts(
-                    text_chunks=rag_totals.get("text", 0),
-                    image_chunks=rag_totals.get("image", 0),
-                    scope="total",
-                )
 
         logger.info("Solution generation complete for %d questions", len(results))
         return results
