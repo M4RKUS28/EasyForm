@@ -348,6 +348,19 @@ Visible Text Content:
                     # Filter question to only include question_data for Agent 2
                     filtered_question = extract_question_data_for_agent_2(question)
 
+                    if file_logger:
+                        question_json = json.dumps(filtered_question, indent=2, ensure_ascii=False)
+                        file_logger.log_agent_query(2, question_json, subdir=subdir)
+                        context_label = "RAG context" if rag_enabled and rag_service else "direct context"
+                        file_logger.log_agent_output(
+                            2,
+                            (
+                                f"Generating solution for question {question_idx} "
+                                f"(id={question.get('question_id')}) using {context_label}"
+                            ),
+                            subdir=subdir,
+                        )
+
                     solution_query = f"""Analyze the following form question and provide an appropriate solution/answer.
 
 
@@ -420,6 +433,18 @@ Provide only the solution/answer as plain text. Do not include explanations unle
                         solution = result["output"]
                     else:
                         solution = "Error: Could not generate solution"
+
+                    if file_logger:
+                        file_logger.log_agent_response(
+                            2,
+                            {
+                                "question_id": question.get("question_id"),
+                                "question": question,
+                                "solution": solution,
+                                "agent_output": result,
+                            },
+                            subdir=subdir,
+                        )
 
                     return {
                         "question_id": question.get("question_id"),

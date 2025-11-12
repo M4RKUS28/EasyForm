@@ -111,50 +111,6 @@ class RAGService:
             await files_crud.update_file_status(db, file_id, "failed")
             return False
 
-    async def should_use_rag(self, db: AsyncSession, user_id: str) -> bool:
-        """
-        Decide whether to use RAG or direct context injection.
-
-        Args:
-            db: Database session
-            user_id: User ID
-
-        Returns:
-            True if RAG should be used
-        """
-        user_files = await files_crud.get_user_files(db, user_id)
-
-        if not user_files:
-            return False
-
-        # Calculate total size and check thresholds
-        total_size = 0
-        for file in user_files:
-            if file.content_type == "application/pdf":
-                # Estimate: 1 page ≈ 2000 chars
-                estimated_size = (file.page_count or 1) * 2000
-                total_size += estimated_size
-
-                # Large file threshold
-                if file.page_count and file.page_count > MAX_DIRECT_FILE_PAGES:
-                    logger.info(f"Using RAG: file {file.id} has {file.page_count} pages")
-                    return True
-            else:
-                total_size += file.file_size
-
-        # Too many files
-        if len(user_files) > MAX_DIRECT_FILE_COUNT:
-            logger.info(f"Using RAG: {len(user_files)} files exceeds threshold")
-            return True
-
-        # Too much total content
-        if total_size > MAX_DIRECT_CONTEXT_SIZE:
-            logger.info(f"Using RAG: total size {total_size} exceeds threshold")
-            return True
-
-        logger.info(f"Using direct context: {len(user_files)} files, {total_size} chars")
-        return False
-
     async def retrieve_relevant_context(
         self,
         db: AsyncSession,

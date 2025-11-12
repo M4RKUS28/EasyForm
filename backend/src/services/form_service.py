@@ -487,7 +487,7 @@ async def process_form_analysis_async(
 
         # ===== PHASE 2: Generate Solutions =====
         async with get_async_db_context() as db:
-            db_session = cast(AsyncSession, db)
+            db_session = db
             # Update status to processing_step_2 (generating solutions)
             await form_requests_crud.update_form_request_status(
                 db_session, request_id, "processing_step_2"
@@ -501,49 +501,19 @@ async def process_form_analysis_async(
                 async_total_inputs,
             )
 
-            # Decide whether to use RAG or direct context
+            # RAG retrieval is now the default path
             rag_service = get_rag_service()
-            use_rag = await rag_service.should_use_rag(db_session, user_id)
-
-            if use_rag:
-                logger.info("[AsyncTask %s] Using RAG for context retrieval", request_id)
-            else:
-                logger.info("[AsyncTask %s] Using direct context (all files)", request_id)
-
-            user_files: Optional[List] = None
-            if not use_rag:
-                user_files = await files_crud.get_user_files(db_session, user_id)
-                logger.info(
-                    "[AsyncTask %s] Found %d user files for context",
-                    request_id,
-                    len(user_files),
-                )
-
-            if file_logger:
-                for q_idx, question in enumerate(normalized_questions_async):
-                    subdir = f"question_{q_idx}"
-                    filtered_question = extract_question_data_for_agent_2(question)
-                    question_json = json.dumps(filtered_question, indent=2, ensure_ascii=False)
-                    file_logger.log_agent_query(2, question_json, subdir=subdir)
-
-                    if use_rag:
-                        status_msg = f"Generating solution for question {q_idx} with RAG context"
-                    else:
-                        file_count = len(user_files) if user_files else 0
-                        status_msg = (
-                            f"Generating solution for question {q_idx} with direct context ({file_count} files)"
-                        )
-                    file_logger.log_agent_output(2, status_msg, subdir=subdir)
+            logger.info("[AsyncTask %s] Using RAG for context retrieval", request_id)
 
             question_solutions = await agent_service.generate_solutions_per_question(
                 user_id=user_id,
                 questions=normalized_questions_async,
                 visible_text=visible_clean,
                 clipboard_text=clipboard_clean,
-                user_files=None if use_rag else user_files,
+                user_files=None,
                 quality=request_data.quality,
                 personal_instructions=instructions_clean,
-                rag_service=rag_service if use_rag else None,
+                rag_service=rag_service,
                 rag_top_k=10,
                 file_logger=file_logger,
                 screenshots=screenshot_bytes,
@@ -555,17 +525,9 @@ async def process_form_analysis_async(
                 len(question_solutions),
             )
 
-            # Log per-question responses after agent call
-            if file_logger:
-                for q_idx, solution in enumerate(question_solutions):
-                    subdir = f"question_{q_idx}"
-                    solution_json = json.dumps(solution, indent=2, ensure_ascii=False)
-                    file_logger.log_agent_response(2, solution_json, subdir=subdir)
-            
-
         # ===== PHASE 3: Generate Actions from Solutions =====
         async with get_async_db_context() as db:
-            db_session = cast(AsyncSession, db)
+            db_session = db
             logger.info(
                 "[AsyncTask %s] Phase 3: Converting %d solutions to actions",
                 request_id,
@@ -609,7 +571,7 @@ async def process_form_analysis_async(
 
         # Save results to database
         async with get_async_db_context() as db:
-            db_session = cast(AsyncSession, db)
+            db_session = db
             # Convert actions to dict format and filter out incomplete values only when required
             actions_dict = []
             required_value_actions = {"fillText", "selectDropdown", "selectCheckbox", "setText"}
