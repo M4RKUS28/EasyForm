@@ -59,17 +59,13 @@ class InteractionData(BaseModel):
 class QuestionData(BaseModel):
     """Semantic question data for Agent 2 (Solution Generator)."""
 
-    prompt: str = Field(
+    question: str = Field(
         ...,
-        description="Complete question prompt combining title, description, context, and hints into natural language."
+        description="Exact wording of the question as it appears in the form (minimal cleanup, preserve original intent)."
     )
-    requirements: Optional[str] = Field(
+    additional_information: Optional[str] = Field(
         None,
-        description="Combined validation constraints, format requirements, and additional notes (e.g., 'Required, max 100 chars' or 'MM/DD/YYYY format')."
-    )
-    prefilled_value: Optional[str] = Field(
-        None,
-        description="Current value if the field is pre-filled (helps Agent 2 decide whether to keep or replace)."
+        description="Supplemental context to aid downstream RAG/solution steps (e.g., section headers, hints, validation rules, examples, detected prefilled values)."
     )
     selection_mode: str = Field(
         "none",

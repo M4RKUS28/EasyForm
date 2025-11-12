@@ -73,12 +73,11 @@ def _build_search_query_for_question(question: dict, max_inputs: int = 10) -> st
                 if isinstance(entry, str):
                     add_text(entry)
 
-    # New schema (preferred)
     question_data = question.get("question_data")
     if isinstance(question_data, dict):
-        add_text(question_data.get("prompt"))
+        add_text(question_data.get("question"))
+        add_text(question_data.get("additional_information"))
         add_iterable(question_data.get("available_options"))
-  
 
     sanitized = [phrase for phrase in phrases if phrase]
     return " ".join(sanitized).strip() or "form question context"
