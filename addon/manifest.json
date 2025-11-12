@@ -15,7 +15,7 @@
     "<all_urls>"
   ],
   "background": {
-    // firefox   "scripts": ["browser-polyfill.js", "background-unified.js"]
+    "scripts": ["browser-polyfill.js", "background-unified.js"],
     "service_worker": "background-unified.js"
   },
   "content_scripts": [

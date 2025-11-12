@@ -278,3 +278,6 @@ mobile/.metro-health-check*
 addon.crx
 addon.pem
 .gitignore
+backend/log/
+backend/__pycache__/
+backend/logs/

@@ -160,7 +160,9 @@ class RAGService:
         db: AsyncSession,
         query: str,
         user_id: str,
-        top_k: int = 10
+        top_k: int = 10,
+        file_logger = None,
+        question_subdir: Optional[str] = None
     ) -> Dict[str, List]:
         """
         Retrieve relevant text and image chunks for a query using dual retrieval.
@@ -174,6 +176,8 @@ class RAGService:
             query: Search query (e.g., form field labels)
             user_id: User ID for filtering
             top_k: Number of chunks to retrieve
+            file_logger: Optional FileLogger instance for logging RAG images
+            question_subdir: Optional subdirectory name for per-question logging (e.g., "question_0")
 
         Returns:
             Dict with 'text_chunks' and 'image_chunks' lists
@@ -186,12 +190,32 @@ class RAGService:
                 top_k=top_k
             )
 
+            # Log text collection search results
+            if file_logger:
+                text_search_summary = {
+                    "search_type": "text_collection",
+                    "results_count": len(text_results),
+                    "chunk_ids": [r["chunk_id"] for r in text_results],
+                    "similarities": [r["similarity"] for r in text_results]
+                }
+                file_logger.log_rag_response({"text_search_results": text_search_summary}, subdir=question_subdir)
+
             # Search image collection (visual image search)
             image_results = await self.image_embedding_service.search_images(
                 query_text=query,
                 user_id=user_id,
                 top_k=max(5, top_k // 2)  # Get fewer images since they're more expensive
             )
+
+            # Log image collection search results
+            if file_logger:
+                image_search_summary = {
+                    "search_type": "image_collection",
+                    "results_count": len(image_results),
+                    "chunk_ids": [r["chunk_id"] for r in image_results],
+                    "similarities": [r["similarity"] for r in image_results]
+                }
+                file_logger.log_rag_response({"image_search_results": image_search_summary}, subdir=question_subdir)
 
             # Collect all unique chunk IDs from both searches
             text_chunk_ids = [r["chunk_id"] for r in text_results]
@@ -241,6 +265,15 @@ class RAGService:
                         "similarity": combined_similarity
                     })
                 elif chunk_type_str == "image":
+                    # Save RAG image if file_logger enabled
+                    if file_logger and chunk.raw_content:
+                        file_logger.save_rag_image(
+                            chunk.raw_content,
+                            source_name=filename,
+                            index=len(image_chunks),
+                            subdir=question_subdir
+                        )
+
                     image_chunks.append({
                         "image_bytes": chunk.raw_content,
                         "description": chunk.content,  # OCR text

@@ -6,109 +6,116 @@ from typing import List, Optional
 from pydantic import BaseModel, Field
 
 
-class QuestionMetadata(BaseModel):
-    """Structured metadata for advanced form controls like grids and scales."""
-
-    rows: Optional[List[str]] = Field(
-        None,
-        description="Row labels for grid/matrix questions.",
-    )
-    columns: Optional[List[str]] = Field(
-        None,
-        description="Column labels for grid/matrix questions.",
-    )
-    scale_min: Optional[str] = Field(
-        None,
-        description="Minimum value for scale questions.",
-    )
-    scale_max: Optional[str] = Field(
-        None,
-        description="Maximum value for scale questions.",
-    )
-    step: Optional[str] = Field(
-        None,
-        description="Step value for numeric inputs or sliders.",
-    )
-    format: Optional[str] = Field(
-        None,
-        description="Expected format for special input types (e.g., 'MM/DD/YYYY' for dates).",
-    )
-    options: Optional[List[str]] = Field(
-        None,
-        description="Available options for custom widgets not captured elsewhere.",
-    )
+class GridStructure(BaseModel):
+    """Structure for grid/matrix questions."""
+    rows: List[str] = Field(default_factory=list, description="Row labels for grid/matrix questions")
+    columns: List[str] = Field(default_factory=list, description="Column labels for grid/matrix questions")
 
 
-class FormInput(BaseModel):
-    """Concrete interactable element belonging to a logical question."""
+class ScaleRange(BaseModel):
+    """Range configuration for scale/slider questions."""
+    min: str = Field(..., description="Minimum value for the scale")
+    max: str = Field(..., description="Maximum value for the scale")
+    step: Optional[str] = Field(None, description="Step value for numeric scales")
 
-    input_id: str = Field(
-        ..., description="Stable identifier unique within the question (e.g. question_id::option)."
-    )
+
+class InteractionTarget(BaseModel):
+    """Technical details for a single interactable element (radio/checkbox option, dropdown item, etc.)."""
+
     selector: str = Field(
-        ..., description="Precise CSS selector pointing to this input element so the extension can act on it."
+        ...,
+        description="Precise CSS selector pointing to this input element."
     )
-    input_type: str = Field(
-        ..., description="Specific control type such as text, textarea, radio_option, checkbox_option, dropdown_option, date_part, etc."
-    )
-    option_label: Optional[str] = Field(
+    value: Optional[str] = Field(
         None,
-        description="Human readable label for this specific option/input when applicable.",
+        description="The value attribute or canonical choice associated with this input."
     )
-    value_hint: Optional[str] = Field(
+    label: Optional[str] = Field(
         None,
-        description="The value attribute or canonical choice associated with the input if known.",
+        description="Human readable label for this specific option/input."
+    )
+    is_default: bool = Field(
+        False,
+        description="True if this option is pre-selected or represents the default state."
+    )
+
+
+class InteractionData(BaseModel):
+    """Technical interaction details for Agent 3 (Action Generator)."""
+
+    primary_selector: str = Field(
+        ...,
+        description="Primary CSS selector for the main input element (for text inputs, single select, etc.)."
+    )
+    action_type: str = Field(
+        ...,
+        description="Type of action required: input_text, select_option, check_box, click_radio, click_button, upload_file, select_date, custom."
+    )
+    targets: List[InteractionTarget] = Field(
+        default_factory=list,
+        description="Multiple targets for radio/checkbox groups or dropdown options. Empty for simple text inputs."
     )
     current_value: Optional[str] = Field(
         None,
-        description="Currently filled/selected value for this control when visible in the DOM.",
+        description="Currently filled/selected value visible in the DOM (for pre-filled inputs)."
     )
-    is_default: Optional[bool] = Field(
-        None,
-        description="True if this option is pre-selected or represents the default state.",
+
+
+class QuestionData(BaseModel):
+    """Semantic question data for Agent 2 (Solution Generator)."""
+
+    prompt: str = Field(
+        ...,
+        description="Complete question prompt combining title, description, context, and hints into natural language."
     )
-    constraints: Optional[str] = Field(
+    requirements: Optional[str] = Field(
         None,
-        description="Summary of validation constraints specific to this input (e.g., min/max, format hints).",
+        description="Combined validation constraints, format requirements, and additional notes (e.g., 'Required, max 100 chars' or 'MM/DD/YYYY format')."
     )
-    notes: Optional[str] = Field(
+    prefilled_value: Optional[str] = Field(
         None,
-        description="Additional clarifications that apply only to this input (kept concise).",
+        description="Current value if the field is pre-filled (helps Agent 2 decide whether to keep or replace)."
+    )
+    selection_mode: str = Field(
+        "none",
+        description="Selection mode: 'single' (radio/dropdown), 'multiple' (checkbox), 'none' (text/date/file)."
+    )
+    available_options: Optional[List[str]] = Field(
+        None,
+        description="List of available options for selection fields. Only populated if there are 10 or fewer options."
+    )
+    has_many_options: bool = Field(
+        False,
+        description="True if this is a selection field with more than 10 options (options not listed to save tokens)."
+    )
+    grid_structure: Optional[GridStructure] = Field(
+        None,
+        description="For grid/matrix questions: row and column labels for Agent 2 to understand the structure."
+    )
+    scale_range: Optional[ScaleRange] = Field(
+        None,
+        description="For scale questions: min/max/step values to guide Agent 2's answer generation."
     )
 
 
 class FormQuestion(BaseModel):
-    """Logical form question containing one or more concrete inputs."""
+    """Logical form question with separated semantic and interaction data."""
 
-    question_id: str = Field(
-        ..., description="Stable identifier for the question derived from the DOM (e.g. name/id of the group)."
+    id: str = Field(
+        ...,
+        description="Stable identifier for the question (e.g., name/id from the DOM)."
     )
-    question_type: str = Field(
-        ..., description="Normalized question type such as text, textarea, radio_scale, checkbox_grid, date, time, etc."
+    type: str = Field(
+        ...,
+        description="Normalized question type: text, textarea, email, tel, number, dropdown, radio, checkbox, date, time, file, scale, grid, custom."
     )
-    title: Optional[str] = Field(
-        None,
-        description="Primary label or prompt shown to the user.",
+    question_data: QuestionData = Field(
+        ...,
+        description="Semantic data for Agent 2 (Solution Generator) to understand what answer is needed."
     )
-    description: Optional[str] = Field(
-        None,
-        description="Additional help text, validation hints, or contextual instructions for the question.",
-    )
-    context: Optional[str] = Field(
-        None,
-        description="Concise surrounding context such as section headers or preceding text when relevant.",
-    )
-    hints: Optional[List[str]] = Field(
-        None,
-        description="Optional short bullet-like hints to retain extra guidance without bloating descriptions.",
-    )
-    inputs: List[FormInput] = Field(
-        default_factory=list,
-        description="All interactable inputs/options associated with this question.",
-    )
-    metadata: Optional[QuestionMetadata] = Field(
-        None,
-        description="Structured metadata for advanced clients (e.g., row/column labels for grids).",
+    interaction_data: InteractionData = Field(
+        ...,
+        description="Technical data for Agent 3 (Action Generator) to execute the interactions."
     )
 
 

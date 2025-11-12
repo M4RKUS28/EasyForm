@@ -12,6 +12,7 @@ from ..agents.action_generator_agent import ActionGeneratorAgent
 from ..agents.html_form_parser_agent import HtmlFormParserAgent
 from ..agents.solution_generator_agent import SolutionGeneratorAgent
 from ..config import settings
+from .question_filter import extract_question_data_for_agent_2, filter_question_solution_pairs_for_agent_3
 
 logger = getLogger(__name__)
 
@@ -214,12 +215,12 @@ Visible Text Content:
                     context_info: List[str] = []
 
                     # Prepare per-question assets
-                    question_id = str(question.get("question_id") or question_idx)
+                    question_id = str(question.get("question_id") or question.get("id") or question_idx)
                     per_question_context = (question_contexts or {}).get(question_id)
 
+                    # Agent 2 (Solution Generator) only gets context images, NOT screenshots
+                    # Screenshots are only for Agent 1 (Parser)
                     images: List[bytes] = list(direct_images)
-                    if screenshots:
-                        images.extend(screenshots)
 
                     if per_question_context:
                         text_chunks = per_question_context.get("text_chunks", [])
@@ -251,6 +252,9 @@ Visible Text Content:
 
                     context_section = "\n".join(context_info) if context_info else "No uploaded documents available."
 
+                    # Filter question to only include question_data for Agent 2
+                    filtered_question = extract_question_data_for_agent_2(question)
+
                     solution_query = f"""Analyze the following form question and provide an appropriate solution/answer.
 
 
@@ -270,7 +274,7 @@ Document Context:
 
 Form Question:
 ```json
-{json.dumps(question, indent=2)}
+{json.dumps(filtered_question, indent=2)}
 ```
 
 Provide only the solution/answer as plain text. Do not include explanations unless necessary.
@@ -398,23 +402,33 @@ Provide only the solution/answer as plain text. Do not include explanations unle
                     len(batch),
                 )
 
-                # Build the query with all questions and solutions
+                # Build the query with filtered questions and solutions
+                # Agent 3 only needs interaction_data (selectors/targets), not semantic data
                 questions_data = []
                 for idx, item in enumerate(batch):
                     question = item["question"]
                     solution = item["solution"]
-                    questions_data.append({
-                        "index": idx + 1,
-                        "question_id": question.get("question_id"),
-                        "question_type": question.get("question_type"),
-                        "title": question.get("title"),
-                        "description": question.get("description"),
-                        "context": question.get("context"),
-                        "hints": question.get("hints"),
-                        "inputs": question.get("inputs", []),
-                        "metadata": question.get("metadata"),
-                        "solution": solution,
-                    })
+
+                    # Filter question to only include interaction_data for Agent 3
+                    if "interaction_data" in question:
+                        # New schema
+                        questions_data.append({
+                            "index": idx + 1,
+                            "id": question.get("id"),
+                            "type": question.get("type"),
+                            "interaction_data": question.get("interaction_data"),
+                            "solution": solution,
+                        })
+                    else:
+                        # Old schema fallback
+                        questions_data.append({
+                            "index": idx + 1,
+                            "question_id": question.get("question_id"),
+                            "question_type": question.get("question_type"),
+                            "inputs": question.get("inputs", []),
+                            "metadata": question.get("metadata"),
+                            "solution": solution,
+                        })
 
                 action_query = f"""Convert the following form questions and their solutions into precise browser actions.
 

@@ -6,6 +6,7 @@ using AI and user context (uploaded files).
 """
 import asyncio
 import base64
+import json
 import logging
 import re
 from collections import Counter
@@ -18,6 +19,9 @@ from ..db.crud import files_crud, form_requests_crud, users_crud
 from ..db.database import get_async_db_context
 from .agent_service import AgentService
 from .rag_service import get_rag_service
+from .file_logger import create_file_logger
+from .question_filter import extract_question_data_for_agent_2, filter_question_solution_pairs_for_agent_3
+from ..config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -661,6 +665,11 @@ async def process_form_analysis_async(
             len(clipboard_clean),
         )
 
+        # Initialize FileLogger if enabled
+        file_logger = create_file_logger(user_id, request_id, enabled=settings.LOG_FILE)
+        if file_logger:
+            logger.info("[AsyncTask %s] File logging enabled at %s", request_id, file_logger.get_log_path())
+
         personal_instructions = None
         async with get_async_db_context() as db:
             personal_instructions = await users_crud.get_user_personal_instructions(db, user_id)
@@ -702,6 +711,15 @@ async def process_form_analysis_async(
         normalized_questions_async: List[dict] = []
         async_total_inputs = 0
 
+        # Log Agent 1 inputs
+        if file_logger:
+            if screenshot_bytes:
+                file_logger.save_screenshots(1, screenshot_bytes)
+            file_logger.log_agent_output(1, f"Starting HTML Form Parser - {len(screenshot_bytes) if screenshot_bytes else 0} screenshots")
+            # Log complete HTML as query
+            agent_1_query = f"HTML:\n{html_clean}\n\nVisible Text:\n{visible_clean}"
+            file_logger.log_agent_query(1, agent_1_query)
+
         async with get_async_db_context() as db:
             # Call HTML Form Parser Agent
             parser_result = await agent_service.parse_form_structure(
@@ -713,6 +731,10 @@ async def process_form_analysis_async(
                 quality=request_data.quality,
                 personal_instructions=instructions_clean,
             )
+
+            # Log Agent 1 response
+            if file_logger:
+                file_logger.log_agent_response(1, parser_result)
 
             # Validate parser result
             if not parser_result or "questions" not in parser_result:
@@ -794,16 +816,38 @@ async def process_form_analysis_async(
                 total_text_chunks = 0
                 total_image_chunks = 0
 
+                # Log per-question inputs before agent call
+                if file_logger:
+                    for q_idx, question in enumerate(normalized_questions_async):
+                        subdir = f"question_{q_idx}"
+                        # Log only question_data (semantic data) - Agent 2 doesn't receive interaction_data or screenshots
+                        filtered_question = extract_question_data_for_agent_2(question)
+                        question_json = json.dumps(filtered_question, indent=2, ensure_ascii=False)
+                        file_logger.log_agent_query(2, question_json, subdir=subdir)
+                        file_logger.log_agent_output(2, f"Generating solution for question {q_idx} with RAG context", subdir=subdir)
+                        # Note: Agent 2 does NOT receive screenshots - those are only for Agent 1
+
                 for q_idx, question in enumerate(normalized_questions_async):
                     question_query = build_search_query_for_question(question)
                     question_id = str(question.get("question_id") or q_idx)
+                    subdir = f"question_{q_idx}"
+
+                    # Log RAG query
+                    if file_logger:
+                        file_logger.log_rag_query(f"Question {question_id}: {question_query}", subdir=subdir)
 
                     context = await rag_service.retrieve_relevant_context(
                         db=db,
                         query=question_query,
                         user_id=user_id,
-                        top_k=10
+                        top_k=10,
+                        file_logger=file_logger,
+                        question_subdir=subdir
                     )
+
+                    # Log RAG response
+                    if file_logger:
+                        file_logger.log_rag_response(context, subdir=subdir)
 
                     question_contexts[question_id] = context
                     text_count = len(context.get("text_chunks", []))
@@ -839,6 +883,13 @@ async def process_form_analysis_async(
                     question_contexts=question_contexts,
                     screenshots=screenshot_bytes,  # Pass screenshots directly
                 )
+
+                # Log per-question responses after agent call
+                if file_logger:
+                    for q_idx, solution in enumerate(question_solutions):
+                        subdir = f"question_{q_idx}"
+                        solution_json = json.dumps(solution, indent=2, ensure_ascii=False)
+                        file_logger.log_agent_response(2, solution_json, subdir=subdir)
             else:
                 logger.info("[AsyncTask %s] Using direct context (all files)", request_id)
 
@@ -850,6 +901,17 @@ async def process_form_analysis_async(
                     len(user_files),
                 )
 
+                # Log per-question inputs before agent call (no RAG)
+                if file_logger:
+                    for q_idx, question in enumerate(normalized_questions_async):
+                        subdir = f"question_{q_idx}"
+                        # Log only question_data (semantic data) - Agent 2 doesn't receive interaction_data or screenshots
+                        filtered_question = extract_question_data_for_agent_2(question)
+                        question_json = json.dumps(filtered_question, indent=2, ensure_ascii=False)
+                        file_logger.log_agent_query(2, question_json, subdir=subdir)
+                        file_logger.log_agent_output(2, f"Generating solution for question {q_idx} with direct context ({len(user_files)} files)", subdir=subdir)
+                        # Note: Agent 2 does NOT receive screenshots - those are only for Agent 1
+
                 # Call Solution Generator Agent with direct files
                 question_solutions = await agent_service.generate_solutions_per_question(
                     user_id=user_id,
@@ -860,6 +922,13 @@ async def process_form_analysis_async(
                     quality=request_data.quality,
                     personal_instructions=instructions_clean,
                 )
+
+                # Log per-question responses after agent call (no RAG)
+                if file_logger:
+                    for q_idx, solution in enumerate(question_solutions):
+                        subdir = f"question_{q_idx}"
+                        solution_json = json.dumps(solution, indent=2, ensure_ascii=False)
+                        file_logger.log_agent_response(2, solution_json, subdir=subdir)
 
             logger.info(
                 "[AsyncTask %s] Phase 2 complete: Generated %d solutions",
@@ -875,6 +944,14 @@ async def process_form_analysis_async(
                 len(question_solutions),
             )
 
+            # Log Agent 3 input
+            if file_logger:
+                # Log only interaction_data (technical data) - Agent 3 doesn't need semantic question_data
+                filtered_for_agent_3 = filter_question_solution_pairs_for_agent_3(question_solutions)
+                agent_3_query = json.dumps(filtered_for_agent_3, indent=2, ensure_ascii=False)
+                file_logger.log_agent_query(3, agent_3_query)
+                file_logger.log_agent_output(3, f"Converting {len(question_solutions)} solutions to actions")
+
             # Call Action Generator Agent (with batching)
             generator_result = await agent_service.generate_actions_from_solutions(
                 user_id=user_id,
@@ -882,6 +959,11 @@ async def process_form_analysis_async(
                 quality=request_data.quality,
                 batch_size=10,
             )
+
+            # Log Agent 3 response
+            if file_logger:
+                file_logger.log_agent_response(3, generator_result)
+                file_logger.log_agent_output(3, f"Generated {len(generator_result.get('actions', []))} actions")
 
             # Validate generator result
             if not generator_result or "actions" not in generator_result:
