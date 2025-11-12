@@ -22,7 +22,6 @@ Return an object with a `questions` array. Each question MUST have two data sect
         "prefilled_value": null,
         "selection_mode": "single",
         "available_options": ["1 - Poor", "2 - Fair", "3 - Good", "4 - Very Good", "5 - Excellent"],
-        "has_many_options": false,
         "grid_structure": null,
         "scale_range": {"min": "1", "max": "5", "step": "1"}
       },
@@ -33,14 +32,12 @@ Return an object with a `questions` array. Each question MUST have two data sect
           {
             "selector": "div[role='radio'][data-value='1']",
             "value": "1",
-            "label": "1 - Poor",
-            "is_default": false
+            "label": "1 - Poor"
           },
           {
             "selector": "div[role='radio'][data-value='2']",
             "value": "2",
-            "label": "2 - Fair",
-            "is_default": false
+            "label": "2 - Fair"
           }
         ],
         "current_value": null
@@ -81,15 +78,10 @@ This section helps an AI understand WHAT answer to generate.
   - "none" - text inputs, dates, files (no selection)
 
 - **available_options** (optional): List of selectable options. Rules:
-  - Only populate if selection_mode is "single" or "multiple"
-  - Only list options if there are 10 or fewer
-  - If more than 10 options, leave this null and set has_many_options=true
+  - Always populate if selection_mode is "single" or "multiple"
+  - Include ALL available options regardless of count
   - Trim whitespace from each option
-
-- **has_many_options** (required): Boolean flag
-  - Set to true if this is a selection field with more than 10 options
-  - Set to false otherwise
-  - Saves tokens by not listing hundreds of dropdown options
+  - Extract option labels as they appear to the user
 
 - **grid_structure** (optional): For matrix/grid questions only:
   ```json
@@ -132,13 +124,12 @@ This section provides technical details for automated interaction.
 - **targets** (required): Array of individual interactive elements
   - For text inputs: Empty array []
   - For radio/checkbox groups: One entry per option
-  - For dropdowns: One entry per option (or empty if has_many_options=true)
+  - For dropdowns: One entry per option
 
   Each target contains:
   - `selector`: Precise CSS selector for this specific option
   - `value`: Value attribute or canonical choice value
   - `label`: Human-readable label for this option
-  - `is_default`: true if pre-selected/default, false otherwise
 
 - **current_value** (optional): Currently visible value in the DOM
   - For text inputs: Current text content
@@ -177,13 +168,11 @@ This section provides technical details for automated interaction.
 
 7. **Current values**:
    - Capture pre-filled answers in `prefilled_value` and `current_value`
-   - Mark pre-selected options with `is_default: true`
 
-8. **Large option lists**:
-   - If dropdown/select has >10 options, set `has_many_options=true`
-   - Leave `available_options` as null
-   - Leave `targets` as empty array
-   - This prevents token bloat from country lists, etc.
+8. **Option lists**:
+   - Always include ALL options in `available_options` for selection fields
+   - Always include ALL options as individual entries in `targets`
+   - Extract option labels exactly as shown to users
 
 9. **Custom widgets**:
    - If widget doesn't map to standard types, use `action_type: "custom"`
@@ -199,14 +188,12 @@ This section provides technical details for automated interaction.
 ## Quality Checklist
 - [ ] Every logical question appears exactly once
 - [ ] question_data.prompt combines all semantic context into natural language
-- [ ] question_data.available_options only populated for small lists (≤10 items)
-- [ ] question_data.has_many_options=true for large dropdowns
-- [ ] interaction_data.targets lists all radio/checkbox options with precise selectors
+- [ ] question_data.available_options populated with ALL options for selection fields
+- [ ] interaction_data.targets lists all radio/checkbox/dropdown options with precise selectors
 - [ ] All strings trimmed (no tabs, carriage returns, or extra spaces)
 - [ ] Selectors are precise and stable
 - [ ] Current values captured when visible
 - [ ] Grid/scale metadata included when applicable
-- [ ] Output fits token limits by using has_many_options flag
 
 ## IMPORTANT
 - IGNORE submit buttons and navigation elements

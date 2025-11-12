@@ -34,11 +34,6 @@ class InteractionTarget(BaseModel):
         None,
         description="Human readable label for this specific option/input."
     )
-    is_default: bool = Field(
-        False,
-        description="True if this option is pre-selected or represents the default state."
-    )
-
 
 class InteractionData(BaseModel):
     """Technical interaction details for Agent 3 (Action Generator)."""
@@ -82,11 +77,7 @@ class QuestionData(BaseModel):
     )
     available_options: Optional[List[str]] = Field(
         None,
-        description="List of available options for selection fields. Only populated if there are 10 or fewer options."
-    )
-    has_many_options: bool = Field(
-        False,
-        description="True if this is a selection field with more than 10 options (options not listed to save tokens)."
+        description="List of available options for selection fields (radio/dropdown/checkbox). Always populated for selection questions."
     )
     grid_structure: Optional[GridStructure] = Field(
         None,
