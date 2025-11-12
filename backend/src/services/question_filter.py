@@ -7,6 +7,31 @@ Agent 3 (Action Generator) only needs technical data (interaction_data).
 from typing import Dict, List, Any, Optional
 
 
+def _strip_nulls_and_empty_lists(value: Any) -> Any:
+    """Return a copy without None values or empty lists."""
+    if isinstance(value, dict):
+        cleaned = {
+            key: _strip_nulls_and_empty_lists(val)
+            for key, val in value.items()
+        }
+        return {
+            key: val
+            for key, val in cleaned.items()
+            if val is not None and not (isinstance(val, list) and len(val) == 0)
+        }
+    if isinstance(value, list):
+        cleaned_list = [
+            _strip_nulls_and_empty_lists(item)
+            for item in value
+        ]
+        return [
+            item
+            for item in cleaned_list
+            if item is not None and not (isinstance(item, list) and len(item) == 0)
+        ]
+    return value
+
+
 def extract_question_data_for_agent_2(question: Dict[str, Any]) -> Dict[str, Any]:
     """
     Extract only the semantic question_data portion for Agent 2 (Solution Generator).
@@ -21,23 +46,17 @@ def extract_question_data_for_agent_2(question: Dict[str, Any]) -> Dict[str, Any
     """
     # Handle new schema (with question_data/interaction_data split)
     if "question_data" in question:
+        cleaned_question_data = _strip_nulls_and_empty_lists(
+            question.get("question_data")
+        )
         return {
             "id": question.get("id"),
             "type": question.get("type"),
-            "question_data": question.get("question_data"),
+            "question_data": cleaned_question_data,
         }
-
+    
     # Fallback for old schema (backward compatibility during transition)
-    return {
-        "question_id": question.get("question_id"),
-        "question_type": question.get("question_type"),
-        "title": question.get("title"),
-        "description": question.get("description"),
-        "context": question.get("context"),
-        "hints": question.get("hints"),
-        "metadata": question.get("metadata"),
-        # Omit inputs/selectors - Agent 2 doesn't need technical details
-    }
+    return question
 
 
 def extract_interaction_data_for_agent_3(
