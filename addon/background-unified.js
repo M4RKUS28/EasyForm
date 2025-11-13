@@ -17,9 +17,7 @@ const CONFIG = {
 const STORAGE_KEYS = {
   getRequestId: (tabId) => `request_${tabId}`,
   getStartTime: (tabId) => `startTime_${tabId}`,
-  getAnalysisState: (tabId) => `analysisState_${tabId}`,
-  getAnalysisResult: (tabId) => `analysisResult_${tabId}`,
-  getAnalysisError: (tabId) => `analysisError_${tabId}`
+  getTabState: (tabId) => `tabState_${tabId}`  // Unified state object
 };
 
 const ANALYSIS_STATES = {
@@ -28,6 +26,34 @@ const ANALYSIS_STATES = {
   SUCCESS: 'success',
   ERROR: 'error'
 };
+
+// Helper functions for unified tab state
+async function getTabState(tabId) {
+  const data = await browser.storage.local.get(STORAGE_KEYS.getTabState(tabId));
+  return data[STORAGE_KEYS.getTabState(tabId)] || {
+    status: ANALYSIS_STATES.IDLE,
+    progress: null,
+    error: null,
+    actions: null,
+    mode: null,
+    executed: false,
+    timestamp: Date.now()
+  };
+}
+
+async function updateTabState(tabId, updates) {
+  const currentState = await getTabState(tabId);
+  const newState = {
+    ...currentState,
+    ...updates,
+    timestamp: Date.now()
+  };
+  await browser.storage.local.set({
+    [STORAGE_KEYS.getTabState(tabId)]: newState
+  });
+  console.log('[EasyForm State] Updated tab', tabId, ':', newState);
+  return newState;
+}
 
 const POLL_INTERVAL_MS = 1000;
 const POLL_TIMEOUT_MS = 1200000; // 20 minutes
@@ -259,9 +285,10 @@ async function handlePageAnalysisAsync(pageData, tabId) {
 
   } catch (error) {
     console.error('[EasyForm API] ❌ Error handling page analysis:', error);
-    await browser.storage.local.set({
-      [STORAGE_KEYS.getAnalysisState(tabId)]: ANALYSIS_STATES.ERROR,
-      [STORAGE_KEYS.getAnalysisError(tabId)]: error.message
+    await updateTabState(tabId, {
+      status: ANALYSIS_STATES.ERROR,
+      error: error.message,
+      progress: null
     });
     notifyError(tabId, error.message);
     throw error;
@@ -311,9 +338,10 @@ function startPolling(requestId, tabId, startTime, mode) {
     } catch (error) {
       console.error('[EasyForm Polling] ❌ Polling error:', error);
       stopPolling(tabId);
-      await browser.storage.local.set({
-        [STORAGE_KEYS.getAnalysisState(tabId)]: ANALYSIS_STATES.ERROR,
-        [STORAGE_KEYS.getAnalysisError(tabId)]: error.message
+      await updateTabState(tabId, {
+        status: ANALYSIS_STATES.ERROR,
+        error: error.message,
+        progress: null
       });
     }
   }, POLL_INTERVAL_MS);
@@ -342,9 +370,10 @@ async function pollRequestStatus(requestId, tabId, startTime, mode) {
     await cancelRequestInternal(tabId);
     const timeoutMinutes = Math.round(POLL_TIMEOUT_MS / 60000);
     const timeoutMessage = `Analysis timeout (${timeoutMinutes} minutes)`;
-    await browser.storage.local.set({
-      [STORAGE_KEYS.getAnalysisState(tabId)]: ANALYSIS_STATES.ERROR,
-      [STORAGE_KEYS.getAnalysisError(tabId)]: timeoutMessage
+    await updateTabState(tabId, {
+      status: ANALYSIS_STATES.ERROR,
+      error: timeoutMessage,
+      progress: null
     });
     notifyError(tabId, timeoutMessage);
     return;
@@ -370,6 +399,19 @@ async function pollRequestStatus(requestId, tabId, startTime, mode) {
   const status = await response.json();
   console.log('[EasyForm Polling] 📡 Poll status:', status.status, `(${Math.round(elapsed / 1000)}s)`);
 
+  // Extract latest progress message from backend
+  let progressMessage = null;
+  if (status.progress && Array.isArray(status.progress) && status.progress.length > 0) {
+    const latestProgress = status.progress[status.progress.length - 1];
+    progressMessage = latestProgress.message || null;
+
+    // Update progress in state
+    await updateTabState(tabId, {
+      status: ANALYSIS_STATES.RUNNING,
+      progress: progressMessage
+    });
+  }
+
   if (status.status === 'completed') {
     console.log('[EasyForm Polling] 🏁 Status completed - checking if polling is still active');
     if (!activePolls.has(tabId)) {
@@ -386,9 +428,10 @@ async function pollRequestStatus(requestId, tabId, startTime, mode) {
       return;
     }
     stopPolling(tabId);
-    await browser.storage.local.set({
-      [STORAGE_KEYS.getAnalysisState(tabId)]: ANALYSIS_STATES.ERROR,
-      [STORAGE_KEYS.getAnalysisError(tabId)]: status.error_message || 'Analysis failed'
+    await updateTabState(tabId, {
+      status: ANALYSIS_STATES.ERROR,
+      error: status.error_message || 'Analysis failed',
+      progress: null
     });
     notifyError(tabId, status.error_message || 'Analysis failed');
     await cleanupRequestStorage(tabId);
@@ -419,25 +462,39 @@ async function handleCompletedRequest(requestId, tabId, mode) {
     const result = await response.json();
     console.log('[EasyForm Polling] 📋 Actions received:', result.actions.length);
 
-    await browser.storage.local.set({
-      [STORAGE_KEYS.getAnalysisState(tabId)]: ANALYSIS_STATES.SUCCESS,
-      [STORAGE_KEYS.getAnalysisResult(tabId)]: result,
-      [STORAGE_KEYS.getAnalysisError(tabId)]: null
+    // UNIFIED LOGIC: Always store actions with mode
+    await updateTabState(tabId, {
+      status: ANALYSIS_STATES.SUCCESS,
+      progress: null,
+      error: null,
+      actions: result.actions,
+      mode: mode,
+      executed: false  // Initially not executed
     });
 
     if (result.actions && result.actions.length > 0) {
       console.log('[EasyForm Polling] 📋 Processing', result.actions.length, 'actions in mode:', mode);
+
       if (mode === 'automatic') {
-        console.log('[EasyForm Polling] 🤖 Auto-executing', result.actions.length, 'actions for tab:', tabId);
+        // AUTOMATIC MODE: Execute immediately without showing overlay
+        console.log('[EasyForm Polling] 🤖 Auto-mode: executing silently');
+
         const messageResponse = await browser.tabs.sendMessage(tabId, {
           action: 'executeActions',
           actions: result.actions,
           autoExecute: true
         });
         console.log('[EasyForm Polling] ✅ Execution response:', messageResponse);
+
+        // Mark as executed
+        await updateTabState(tabId, {
+          executed: true
+        });
+
         notifyInfo(tabId, `Executed ${result.actions.length} action(s)`);
       } else {
-        console.log('[EasyForm Polling] 👁️ Showing overlay with', result.actions.length, 'actions');
+        // MANUAL MODE: Show overlay for user review (auto-open)
+        console.log('[EasyForm Polling] 👁️ Manual mode: showing overlay for user review');
         await browser.tabs.sendMessage(tabId, {
           action: 'showOverlay',
           actions: result.actions
@@ -452,9 +509,10 @@ async function handleCompletedRequest(requestId, tabId, mode) {
 
   } catch (error) {
     console.error('[EasyForm Polling] ❌ Error handling completed request:', error);
-    await browser.storage.local.set({
-      [STORAGE_KEYS.getAnalysisState(tabId)]: ANALYSIS_STATES.ERROR,
-      [STORAGE_KEYS.getAnalysisError(tabId)]: error.message
+    await updateTabState(tabId, {
+      status: ANALYSIS_STATES.ERROR,
+      error: error.message,
+      progress: null
     });
     notifyError(tabId, error.message);
   }
@@ -492,9 +550,10 @@ async function cancelRequestInternal(tabId) {
 
     await cleanupRequestStorage(tabId);
 
-    await browser.storage.local.set({
-      [STORAGE_KEYS.getAnalysisState(tabId)]: ANALYSIS_STATES.IDLE,
-      [STORAGE_KEYS.getAnalysisError(tabId)]: null
+    await updateTabState(tabId, {
+      status: ANALYSIS_STATES.IDLE,
+      progress: null,
+      error: null
     });
 
   } catch (error) {
@@ -512,14 +571,12 @@ async function cleanupTab(tabId) {
   stopPolling(tabId);
   await cleanupRequestStorage(tabId);
 
-  // Clean up analysis state for this tab
+  // Clean up unified tab state
   await browser.storage.local.remove([
-    STORAGE_KEYS.getAnalysisState(tabId),
-    STORAGE_KEYS.getAnalysisResult(tabId),
-    STORAGE_KEYS.getAnalysisError(tabId)
+    STORAGE_KEYS.getTabState(tabId)
   ]);
 
-  console.log('[EasyForm Storage] 🧹 Cleaned up analysis state for tab:', tabId);
+  console.log('[EasyForm Storage] 🧹 Cleaned up tab state for tab:', tabId);
 }
 
 // ===== MAIN =====
@@ -623,22 +680,17 @@ browser.runtime.onMessage.addListener((request, sender, sendResponse) => {
       const tabId = request.tabId;
       if (!tabId) {
         sendResponse({
-          state: ANALYSIS_STATES.IDLE,
-          result: null,
-          error: 'No tab ID provided'
+          status: ANALYSIS_STATES.IDLE,
+          progress: null,
+          error: null,
+          actions: null,
+          mode: null,
+          executed: false
         });
         return;
       }
-      const data = await browser.storage.local.get([
-        STORAGE_KEYS.getAnalysisState(tabId),
-        STORAGE_KEYS.getAnalysisResult(tabId),
-        STORAGE_KEYS.getAnalysisError(tabId)
-      ]);
-      sendResponse({
-        state: data[STORAGE_KEYS.getAnalysisState(tabId)] || ANALYSIS_STATES.IDLE,
-        result: data[STORAGE_KEYS.getAnalysisResult(tabId)],
-        error: data[STORAGE_KEYS.getAnalysisError(tabId)]
-      });
+      const tabState = await getTabState(tabId);
+      sendResponse(tabState);
     })();
     return true;
   }
@@ -668,14 +720,14 @@ browser.runtime.onMessage.addListener((request, sender, sendResponse) => {
           stopPolling(tabId);
           await cleanupRequestStorage(tabId);
 
-          // Remove tab-specific analysis state
-          await browser.storage.local.remove([
-            STORAGE_KEYS.getAnalysisResult(tabId),
-            STORAGE_KEYS.getAnalysisError(tabId)
-          ]);
-
-          await browser.storage.local.set({
-            [STORAGE_KEYS.getAnalysisState(tabId)]: ANALYSIS_STATES.IDLE
+          // Reset to idle state (clears everything)
+          await updateTabState(tabId, {
+            status: ANALYSIS_STATES.IDLE,
+            progress: null,
+            error: null,
+            actions: null,
+            mode: null,
+            executed: false
           });
         } else {
           // Fallback: stop all polls if no tab specified
@@ -683,14 +735,13 @@ browser.runtime.onMessage.addListener((request, sender, sendResponse) => {
             stopPolling(activeTabId);
             await cleanupRequestStorage(activeTabId);
 
-            // Remove tab-specific analysis state
-            await browser.storage.local.remove([
-              STORAGE_KEYS.getAnalysisResult(activeTabId),
-              STORAGE_KEYS.getAnalysisError(activeTabId)
-            ]);
-
-            await browser.storage.local.set({
-              [STORAGE_KEYS.getAnalysisState(activeTabId)]: ANALYSIS_STATES.IDLE
+            await updateTabState(activeTabId, {
+              status: ANALYSIS_STATES.IDLE,
+              progress: null,
+              error: null,
+              actions: null,
+              mode: null,
+              executed: false
             });
           }
         }
@@ -698,6 +749,57 @@ browser.runtime.onMessage.addListener((request, sender, sendResponse) => {
         sendResponse({ success: true });
       } catch (error) {
         console.error('[EasyForm] ❌ Error resetting state:', error);
+        sendResponse({ success: false, error: error.message });
+      }
+    })();
+    return true;
+  }
+
+  if (request.action === 'clearActions') {
+    (async () => {
+      try {
+        const tabId = request.tabId;
+        if (!tabId) {
+          sendResponse({ success: false, error: 'No tab ID provided' });
+          return;
+        }
+
+        // Clear actions and reset to idle (Option A from user requirements)
+        await updateTabState(tabId, {
+          status: ANALYSIS_STATES.IDLE,
+          progress: null,
+          error: null,
+          actions: null,
+          mode: null,
+          executed: false
+        });
+
+        sendResponse({ success: true });
+      } catch (error) {
+        console.error('[EasyForm] ❌ Error clearing actions:', error);
+        sendResponse({ success: false, error: error.message });
+      }
+    })();
+    return true;
+  }
+
+  if (request.action === 'markExecuted') {
+    (async () => {
+      try {
+        const tabId = request.tabId;
+        if (!tabId) {
+          sendResponse({ success: false, error: 'No tab ID provided' });
+          return;
+        }
+
+        // Mark actions as executed
+        await updateTabState(tabId, {
+          executed: true
+        });
+
+        sendResponse({ success: true });
+      } catch (error) {
+        console.error('[EasyForm] ❌ Error marking executed:', error);
         sendResponse({ success: false, error: error.message });
       }
     })();
@@ -717,9 +819,15 @@ async function analyzePage(tabId) {
       throw new Error('Analysis already running for this tab. Please cancel it first.');
     }
 
-    await browser.storage.local.set({
-      [STORAGE_KEYS.getAnalysisState(tabId)]: ANALYSIS_STATES.RUNNING,
-      [STORAGE_KEYS.getAnalysisError(tabId)]: null
+    // Get current config to store mode in state
+    const config = await getConfig();
+    const executionMode = config.executionMode || CONFIG.mode;
+
+    await updateTabState(tabId, {
+      status: ANALYSIS_STATES.RUNNING,
+      progress: 'Starting analysis...',
+      error: null,
+      mode: executionMode
     });
 
     console.log('[EasyForm] 📨 Requesting page data from content script...');
@@ -751,9 +859,10 @@ async function analyzePage(tabId) {
     }
   } catch (error) {
     console.error('[EasyForm] ❌ Error analyzing page:', error);
-    await browser.storage.local.set({
-      [STORAGE_KEYS.getAnalysisState(tabId)]: ANALYSIS_STATES.ERROR,
-      [STORAGE_KEYS.getAnalysisError(tabId)]: error.message
+    await updateTabState(tabId, {
+      status: ANALYSIS_STATES.ERROR,
+      error: error.message,
+      progress: null
     });
   }
 }

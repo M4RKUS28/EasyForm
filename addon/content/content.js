@@ -66,9 +66,15 @@
         return false;
 
       case 'toggleOverlay':
-        toggleOverlay();
-        sendResponse({ success: true });
-        return false;
+        (async () => {
+          try {
+            await toggleOverlay();
+            sendResponse({ success: true });
+          } catch (error) {
+            sendResponse({ error: error.message });
+          }
+        })();
+        return true;
 
       case 'showNotification':
         showNotification(request.type, request.message);
@@ -174,13 +180,36 @@
   }
 
   /**
-   * Toggle overlay visibility
+   * Toggle overlay visibility - loads stored actions from background
    */
-  function toggleOverlay() {
+  async function toggleOverlay() {
     if (overlayVisible) {
       removeOverlay();
-    } else if (currentActions.length > 0) {
-      showOverlay(currentActions);
+    } else {
+      // Load stored actions from background
+      try {
+        const tabs = await browser.tabs.query({ active: true, currentWindow: true });
+        const tabId = tabs[0]?.id;
+
+        if (!tabId) {
+          console.warn('[EasyForm Content] No active tab found');
+          return;
+        }
+
+        const response = await browser.runtime.sendMessage({
+          action: 'getAnalysisState',
+          tabId: tabId
+        });
+
+        if (response && response.actions && response.actions.length > 0) {
+          currentActions = response.actions;
+          showOverlay(response.actions);
+        } else {
+          console.log('[EasyForm Content] No stored actions to display');
+        }
+      } catch (error) {
+        console.error('[EasyForm Content] Error loading stored actions:', error);
+      }
     }
   }
 
@@ -393,10 +422,11 @@
 
     content.appendChild(list);
 
-    // Footer with execute button
+    // Footer with execute and clear buttons
     const footer = document.createElement('div');
     footer.className = 'easyform-footer';
     footer.innerHTML = `
+      <button class="easyform-clear" id="easyform-clear">Clear Actions</button>
       <button class="easyform-execute" id="easyform-execute">
         Execute Actions (${filteredActions.length})
       </button>
@@ -418,6 +448,30 @@
 
     // Event listeners
     overlay.querySelector('#easyform-close').addEventListener('click', removeOverlay);
+
+    // Clear Actions button
+    overlay.querySelector('#easyform-clear').addEventListener('click', async () => {
+      try {
+        const tabs = await browser.tabs.query({ active: true, currentWindow: true });
+        const tabId = tabs[0]?.id;
+
+        if (tabId) {
+          await browser.runtime.sendMessage({
+            action: 'clearActions',
+            tabId: tabId
+          });
+          console.log('[EasyForm Content] ✅ Actions cleared');
+        }
+
+        removeOverlay();
+        showNotification('info', 'Actions cleared');
+      } catch (error) {
+        console.error('[EasyForm Content] Error clearing actions:', error);
+        showNotification('error', 'Failed to clear actions');
+      }
+    });
+
+    // Execute Actions button
     overlay.querySelector('#easyform-execute').addEventListener('click', async () => {
       if (filteredActions.length === 0) return;
 
@@ -427,7 +481,23 @@
 
       try {
         const result = await executeActions(filteredActions, true);
+
         if (result.success) {
+          // Mark as executed in background
+          try {
+            const tabs = await browser.tabs.query({ active: true, currentWindow: true });
+            const tabId = tabs[0]?.id;
+
+            if (tabId) {
+              await browser.runtime.sendMessage({
+                action: 'markExecuted',
+                tabId: tabId
+              });
+            }
+          } catch (error) {
+            console.error('[EasyForm Content] Error marking executed:', error);
+          }
+
           showNotification('success', `Executed ${result.successCount} action(s)`);
           removeOverlay();
         } else {

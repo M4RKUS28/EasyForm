@@ -6,6 +6,7 @@ let statusCheckInterval = null;
 let isCanceling = false;
 let lastAnalysisState = null;
 let lastAnalysisError = null;
+let lastAnalysisProgress = null;
 let cachedBackendUrl = DEFAULT_BACKEND_URL;
 let infoResetTimeout = null;
 let lastInfoMessage = 'Ready';
@@ -309,17 +310,28 @@ async function checkAnalysisState() {
     });
     if (!response) return;
 
-    const currentState = response.state || 'idle';
+    const currentStatus = response.status || 'idle';
+    const currentProgress = response.progress || null;
     const currentError = response.error || null;
+    const actions = response.actions || null;
+    const executed = response.executed || false;
 
-    if (currentState === lastAnalysisState && currentError === lastAnalysisError) {
+    // Check if state actually changed
+    const stateChanged = (
+      currentStatus !== lastAnalysisState ||
+      currentError !== lastAnalysisError ||
+      currentProgress !== lastAnalysisProgress
+    );
+
+    if (!stateChanged) {
       return;
     }
 
-    lastAnalysisState = currentState;
+    lastAnalysisState = currentStatus;
     lastAnalysisError = currentError;
+    lastAnalysisProgress = currentProgress;
 
-    console.log('[EasyForm Popup] 📊 Analysis state changed:', currentState, currentError ? `- ${currentError}` : '');
+    console.log('[EasyForm Popup] 📊 State changed:', { currentStatus, currentProgress, executed, actionsCount: actions?.length });
 
     const startBtn = document.getElementById('startBtn');
     const cancelBtn = document.getElementById('cancelBtn');
@@ -330,14 +342,15 @@ async function checkAnalysisState() {
     resetBtn.textContent = 'Reset';
     cancelBtn.classList.remove('show');
 
-    switch (currentState) {
+    switch (currentStatus) {
       case 'running':
         setHealthStatus('pending');
         startBtn.disabled = true;
         startBtn.textContent = 'Running...';
         startBtn.style.display = 'none';
         cancelBtn.classList.add('show');
-        updateInfo('Analyzing page...');
+        // Show detailed progress message
+        updateInfo(currentProgress || 'Analyzing page...');
         clearError();
         break;
 
@@ -346,10 +359,12 @@ async function checkAnalysisState() {
         startBtn.disabled = false;
         startBtn.textContent = 'Start';
         startBtn.style.display = 'block';
-        if (response.result && response.result.actions) {
-          const count = response.result.actions.length;
-          console.log('[EasyForm Popup] 📋 Actions found:', count);
-          updateInfo(`${count} action${count !== 1 ? 's' : ''} found`);
+        if (actions && actions.length > 0) {
+          const count = actions.length;
+          // Option B: Show executed status
+          const statusText = executed ? ' ✓ executed' : '';
+          console.log('[EasyForm Popup] 📋 Actions:', count, 'Executed:', executed);
+          updateInfo(`${count} action${count !== 1 ? 's' : ''}${statusText}`);
         } else {
           updateInfo('Analysis complete');
         }
@@ -451,6 +466,7 @@ async function handleResetClick() {
 
     lastAnalysisState = null;
     lastAnalysisError = null;
+    lastAnalysisProgress = null;
 
     setHealthStatus('pending');
     clearError();
