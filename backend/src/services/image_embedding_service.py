@@ -5,6 +5,7 @@ Handles visual image embeddings separate from text embeddings.
 import base64
 import io
 import logging
+import asyncio
 from typing import List, Dict, Optional
 import chromadb
 from chromadb.config import Settings
@@ -122,8 +123,9 @@ class ImageEmbeddingService:
             # Create image input from bytes
             image = ImageBytesInput(image_bytes=image_bytes)
 
-            # Generate embedding
-            embeddings = self.model.get_embeddings(
+            # Generate embedding (run in thread as it's CPU/GPU intensive and blocking)
+            embeddings = await asyncio.to_thread(
+                self.model.get_embeddings,
                 image=image,
                 dimension=app_settings.IMAGE_EMBEDDING_DIMENSIONS
             )
@@ -215,8 +217,9 @@ class ImageEmbeddingService:
                 logger.warning("No valid image embeddings generated")
                 return 0
 
-            # Batch add to ChromaDB
-            self.image_collection.add(
+            # Batch add to ChromaDB (run in thread as it's blocking I/O)
+            await asyncio.to_thread(
+                self.image_collection.add,
                 embeddings=embeddings,
                 documents=documents,
                 metadatas=metadatas,
@@ -254,8 +257,9 @@ class ImageEmbeddingService:
             return []
 
         try:
-            # Generate text query embedding using multimodal model
-            embeddings = self.model.get_embeddings(
+            # Generate text query embedding using multimodal model (run in thread as it's blocking)
+            embeddings = await asyncio.to_thread(
+                self.model.get_embeddings,
                 contextual_text=query_text,
                 dimension=app_settings.IMAGE_EMBEDDING_DIMENSIONS
             )
@@ -271,8 +275,9 @@ class ImageEmbeddingService:
 
             where_filter = {"$and": where_conditions}
 
-            # Query ChromaDB
-            results = self.image_collection.query(
+            # Query ChromaDB (run in thread as it's blocking I/O)
+            results = await asyncio.to_thread(
+                self.image_collection.query,
                 query_embeddings=[query_embedding],
                 n_results=top_k,
                 where=where_filter,
@@ -308,7 +313,9 @@ class ImageEmbeddingService:
             Success status
         """
         try:
-            self.image_collection.delete(
+            # Delete image chunks (run in thread as it's blocking I/O)
+            await asyncio.to_thread(
+                self.image_collection.delete,
                 where={"file_id": file_id}
             )
             logger.info(f"Deleted image chunks for file {file_id} from ChromaDB")

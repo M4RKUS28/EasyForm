@@ -3,6 +3,7 @@ Service for generating text embeddings and managing ChromaDB text vector store.
 Uses Gemini embedding model for text chunks and OCR text from images.
 """
 import logging
+import asyncio
 from typing import List, Dict, Optional
 import chromadb
 from chromadb.config import Settings
@@ -167,8 +168,9 @@ class EmbeddingService:
 
                 ids.append(chunk["id"])  # Use chunk ID as Chroma ID
 
-            # Batch add to ChromaDB text collection
-            self.text_collection.add(
+            # Batch add to ChromaDB text collection (run in thread as it's blocking I/O)
+            await asyncio.to_thread(
+                self.text_collection.add,
                 embeddings=embeddings,
                 documents=documents,
                 metadatas=metadatas,
@@ -218,8 +220,9 @@ class EmbeddingService:
                 # Single condition can be used directly
                 where_filter = {"user_id": user_id}
 
-            # Query ChromaDB text collection
-            results = self.text_collection.query(
+            # Query ChromaDB text collection (run in thread as it's blocking I/O)
+            results = await asyncio.to_thread(
+                self.text_collection.query,
                 query_embeddings=[query_embedding],
                 n_results=top_k,
                 where=where_filter,
@@ -255,8 +258,9 @@ class EmbeddingService:
             Success status
         """
         try:
-            # Delete by file_id metadata
-            self.text_collection.delete(
+            # Delete by file_id metadata (run in thread as it's blocking I/O)
+            await asyncio.to_thread(
+                self.text_collection.delete,
                 where={"file_id": file_id}
             )
             logger.info(f"Deleted text chunks for file {file_id} from ChromaDB")
