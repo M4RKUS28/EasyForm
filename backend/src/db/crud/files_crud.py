@@ -72,7 +72,16 @@ async def get_user_files_metadata_only(
     """
     # Note: SQLAlchemy will still load all columns, but we can use .options(defer()) in the future
     result = await db.execute(
-        select(File.id, File.user_id, File.filename, File.content_type, File.file_size, File.created_at)
+        select(
+            File.id,
+            File.user_id,
+            File.filename,
+            File.content_type,
+            File.file_size,
+            File.created_at,
+            File.processing_status,
+            File.page_count
+        )
         .filter(File.user_id == user_id)
         .order_by(File.created_at.desc())
         .offset(skip)
@@ -88,6 +97,8 @@ async def get_user_files_metadata_only(
             content_type=row.content_type,
             file_size=row.file_size,
             created_at=row.created_at,
+            processing_status=row.processing_status,
+            page_count=row.page_count,
             data=b''  # Empty data for metadata-only queries
         )
         files.append(file_obj)

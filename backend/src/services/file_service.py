@@ -90,7 +90,9 @@ async def upload_file(
         filename=new_file.filename,
         content_type=new_file.content_type,
         file_size=new_file.file_size,
-        created_at=new_file.created_at
+        created_at=new_file.created_at,
+        processing_status=new_file.processing_status or "pending",
+        page_count=new_file.page_count
     )
 
 
@@ -111,7 +113,9 @@ async def get_user_files(
                 filename=file.filename,
                 content_type=file.content_type,
                 file_size=file.file_size,
-                created_at=file.created_at
+                created_at=file.created_at,
+                processing_status=file.processing_status or "pending",
+                page_count=file.page_count
             )
             for file in files
         ],

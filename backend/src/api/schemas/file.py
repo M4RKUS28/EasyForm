@@ -35,6 +35,8 @@ class FileResponse(BaseModel):
     content_type: str
     file_size: int
     created_at: datetime
+    processing_status: Optional[str] = "pending"  # pending, processing, completed, failed
+    page_count: Optional[int] = None
 
     class Config:
         from_attributes = True
