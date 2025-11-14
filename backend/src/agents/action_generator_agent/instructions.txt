@@ -140,9 +140,8 @@ If solution is "Select 'United States'" and input has value_hint: "US", option_l
 
 **Examples:**
 - Solution: "SKIP_NO_DATA" → No actions generated
-- Solution: "SKIP_OPTIONAL" → No actions generated
 - Solution: "LEAVE_BLANK" → No actions generated
-- Solution: "UNCHECK" for checkbox → Action: `{"action_type": "selectCheckbox", "selector": "...", "value": false}`
+
 ### Multiple Inputs per Question
 - Some questions have multiple related inputs (e.g., date parts: day, month, year)
 - Generate separate actions for each input if the solution provides the information
