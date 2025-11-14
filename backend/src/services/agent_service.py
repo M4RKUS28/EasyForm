@@ -208,7 +208,7 @@ Visible Text Content:
         self,
         user_id: str,
         questions: list,
-        user_files: Optional[List] = None,
+        #user_files: Optional[List] = None,
         #visible_text: str,
         clipboard_text: str | None = None,
         quality: str = DEFAULT_QUALITY,
@@ -241,23 +241,8 @@ Visible Text Content:
         profile = MODEL_CONFIG.get(quality, MODEL_CONFIG[DEFAULT_QUALITY])
         solution_model = profile.solution_model
 
-        # Collect context sources
-        base_pdf_attachments: List[Tuple[str, bytes]] = []
-        base_image_attachments: List[Tuple[str, bytes]] = []
-        if user_files:
-            for file in user_files:
-                filename = getattr(file, "filename", None) or f"user_file_{len(base_pdf_attachments) + len(base_image_attachments) + 1}"
-                content_type = getattr(file, "content_type", "") or ""
-                if content_type == "application/pdf":
-                    pdf_name = filename if filename.lower().endswith(".pdf") else f"{filename}.pdf"
-                    base_pdf_attachments.append((pdf_name, file.data))
-                elif content_type.startswith("image/"):
-                    ext = mimetypes.guess_extension(content_type) or ".png"
-                    img_name = filename if filename.lower().endswith(ext) else f"{filename}{ext}"
-                    base_image_attachments.append((img_name, file.data))
-
         logger.info(
-            "Generating solutions for %d questions using %s",
+            "Generating solutions for %d questions using %s (RAG-only mode)",
             len(questions),
             solution_model,
         )
@@ -282,9 +267,9 @@ Visible Text Content:
                 solution_text: str = "Error: Could not generate solution"
                 agent_output: Dict[str, Any] = {}
                 question_id = str(question.get("question_id") or question.get("id") or question_idx)
-                question_image_attachments: List[Tuple[str, bytes]] = list(base_image_attachments)
-                images_payload: List[bytes] = [data for _, data in question_image_attachments]
-                pdf_payloads: List[bytes] = [data for _, data in base_pdf_attachments]
+                # Only use RAG-retrieved context (no base files)
+                question_image_attachments: List[Tuple[str, bytes]] = []
+                images_payload: List[bytes] = []
                 rag_image_attachments: List[Tuple[str, bytes]] = []
                 subdir = f"question_{question_idx}"
                 try:
@@ -367,16 +352,7 @@ Visible Text Content:
                                 images_payload.append(image_bytes)
                                 rag_image_attachments.append((attachment_name, image_bytes))
 
-                    if (
-                        not text_chunks
-                        and not image_chunks
-                        and (base_pdf_attachments or base_image_attachments)
-                    ):
-                        context_info.append(
-                            f"User uploaded {len(base_pdf_attachments)} PDF(s) and {len(base_image_attachments)} image(s) that may contain relevant information."
-                        )
-
-                    context_section = "\n".join(context_info) if context_info else "No uploaded documents available."
+                    context_section = "\n".join(context_info) if context_info else "No relevant context retrieved from documents."
 
                     filtered_question = extract_question_data_for_agent_2(question)
 
@@ -412,41 +388,24 @@ Form Question:
 Provide only the solution/answer as plain text. Do not include explanations unless necessary.
 """
 
-                    pdf_argument = pdf_payloads if pdf_payloads else None
+                    # Only pass RAG-retrieved images (no PDFs, no base files)
                     images_argument = images_payload if images_payload else None
                     content = create_multipart_query(
                         query=solution_query,
-                        pdf_files=pdf_argument,
                         images=images_argument,
                     )
 
                     if file_logger:
                         file_logger.log_agent_query(2, solution_query, subdir=subdir)
-                        if base_pdf_attachments:
-                            file_logger.log_agent_output(
-                                2,
-                                f"Saving {len(base_pdf_attachments)} static PDF attachment(s)",
-                                subdir=subdir,
-                            )
-                            for filename, data in base_pdf_attachments:
-                                file_logger.save_agent_media(2, filename, data, subdir=subdir)
-                        if base_image_attachments:
-                            file_logger.log_agent_output(
-                                2,
-                                f"Saving {len(base_image_attachments)} static image attachment(s)",
-                                subdir=subdir,
-                            )
-                            for filename, data in base_image_attachments:
-                                file_logger.save_agent_media(2, filename, data, subdir=subdir)
                         if rag_image_attachments:
                             file_logger.log_agent_output(
                                 2,
-                                f"Saving {len(rag_image_attachments)} RAG-specific image attachment(s)",
+                                f"Saving {len(rag_image_attachments)} RAG-retrieved image attachment(s)",
                                 subdir=subdir,
                             )
                             for filename, data in rag_image_attachments:
                                 file_logger.save_agent_media(2, filename, data, subdir=subdir)
-                        file_logger.log_agent_output(2, "Executing Solution Generator agent", subdir=subdir)
+                        file_logger.log_agent_output(2, "Executing Solution Generator agent (RAG-only mode)", subdir=subdir)
 
                     result = await solution_agent.run(
                         user_id=user_id,
@@ -607,20 +566,22 @@ Provide only the solution/answer as plain text. Do not include explanations unle
                     )
 
                 # Build the query with filtered questions and solutions
-                # Agent 3 only needs interaction_data (selectors/targets), not semantic data
+                # Agent 3 needs interaction_data (selectors/targets) and question text
                 questions_data = []
                 for idx, item in enumerate(batch):
                     question = item["question"]
                     solution = item["solution"]
 
-                    # Filter question to only include interaction_data for Agent 3
+                    # Filter question to only include interaction_data and question text for Agent 3
                     if "interaction_data" in question:
-                        # New schema
+                        # New schema - extract just the question string from question_data
+                        question_text = question.get("question_data", {}).get("question") if isinstance(question.get("question_data"), dict) else None
                         questions_data.append({
                             "index": idx + 1,
                             "id": question.get("id"),
                             "type": question.get("type"),
                             "interaction_data": question.get("interaction_data"),
+                            "question": question_text,
                             "solution": solution,
                         })
                     else:

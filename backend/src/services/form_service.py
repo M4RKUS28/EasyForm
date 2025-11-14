@@ -565,7 +565,6 @@ async def process_form_analysis_async(
             # RAG retrieval is now the default path
             rag_service = get_rag_service()
             logger.info("[AsyncTask %s] Using RAG for context retrieval", request_id)
-            user_files = await files_crud.get_user_files(db_session, user_id)
 
             async def solutions_progress_callback(completed_idx: int, total: int, payload: Dict[str, Any]):
                 effective_total = total or total_questions or 1
@@ -583,7 +582,7 @@ async def process_form_analysis_async(
             question_solutions = await agent_service.generate_solutions_per_question(
                 user_id=user_id,
                 questions=normalized_questions_async,
-                user_files=user_files,
+                #user_files=user_files,
                 #visible_text=visible_clean,
                 clipboard_text=clipboard_clean,
                 quality=request_data.quality,
