@@ -98,6 +98,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   setHealthStatus('pending'); // Set to orange initially
   updateInfo('Checking backend...');
 
+  // Set up event listeners first so buttons work even if health check fails
+  setupEventListeners();
+
   // Perform health check
   const healthOk = await checkBackendHealth();
 
@@ -116,7 +119,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   await loadConfig();
   await loadStatus();
   await loadSessionInstructions();
-  setupEventListeners();
 
   // Check analysis state on popup open
   await checkAnalysisState();

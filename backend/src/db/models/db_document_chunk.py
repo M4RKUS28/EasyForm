@@ -30,7 +30,7 @@ class DocumentChunk(Base):
 
     # Extracted content
     content = Column(Text, nullable=True)  # Text content or OCR result
-    raw_content = Column(LargeBinary, nullable=True)  # For images (optional, can reference file)
+    raw_content = Column(LargeBinary(length=2**30), nullable=True)  # For images (optional, can reference file)
 
     # Metadata for traceability
     metadata_json = Column(JSON, nullable=True)  # {page: 5, bbox: [...], etc.}
