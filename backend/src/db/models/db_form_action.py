@@ -28,6 +28,7 @@ class FormAction(Base):
     selector = Column(Text, nullable=False)  # CSS selector
     value = Column(Text, nullable=True)  # JSON or plain text value
     label = Column(Text, nullable=True)  # Human-readable label
+    question = Column(Text, nullable=True)  # Original form question text
 
     # Order of execution
     order_index = Column(Integer, nullable=False, default=0)

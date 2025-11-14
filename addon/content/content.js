@@ -296,7 +296,7 @@
           // Regular action
           const action = item.action;
           const index = item.index;
-          const question = action.label || action.question || `Field ${index + 1}`;
+          const question = action.question || action.label || `Field ${index + 1}`;
           const description = action.description || '';
           const value = action.value !== null && action.value !== undefined ? action.value : '-';
 
@@ -322,7 +322,10 @@
           // Checkbox group
           const label = item.label;
           const group = item.group;
-          
+
+          // Get question from first action in group (all should have same question)
+          const question = group.length > 0 ? (group[0].action.question || label) : label;
+
           // Extract checkbox values from selectors
           const checkboxes = group.map(({ action, index }) => {
             const match = action.selector.match(/\[value=['"]([^'"]+)['"]\]/);
@@ -330,27 +333,29 @@
             const isChecked = action.value === '1' || action.value === 1 || action.value === true;
             return { optionValue, isChecked, index };
           });
-          
+
           const selectedOptions = checkboxes.filter(cb => cb.isChecked).map(cb => cb.optionValue);
           const unselectedOptions = checkboxes.filter(cb => !cb.isChecked).map(cb => cb.optionValue);
-          
-          const displayValue = selectedOptions.length > 0 
-            ? `✓ ${selectedOptions.join(', ')}`
+
+          const displayValue = selectedOptions.length > 0
+            ? selectedOptions.join(', ')
             : 'None selected';
-          
+
           itemDiv.innerHTML = `
             <div class="easyform-item-content">
               <div class="easyform-item-header">
                 <div class="easyform-question-wrapper">
                   <span class="easyform-number">${itemNumber}.</span>
-                  <span class="easyform-question">${escapeHtml(label)}</span>
+                  <span class="easyform-question">${escapeHtml(question)}</span>
                 </div>
                 <button class="easyform-remove-group" data-label="${escapeHtml(label)}" title="Remove all ${escapeHtml(label)} actions">×</button>
               </div>
-              <div class="easyform-answer easyform-checkbox-answer">${escapeHtml(displayValue)}</div>
+              <div class="easyform-answer easyform-checkbox-answer">
+                ${selectedOptions.length > 0 ? `<span class="easyform-checkbox-checked">☑ ${escapeHtml(displayValue)}</span>` : `<span class="easyform-checkbox-none">${escapeHtml(displayValue)}</span>`}
+              </div>
               ${unselectedOptions.length > 0 ? `
                 <div class="easyform-checkbox-unselected">
-                  ✗ ${escapeHtml(unselectedOptions.join(', '))}
+                  ☐ ${escapeHtml(unselectedOptions.join(', '))}
                 </div>
               ` : ''}
             </div>
@@ -359,27 +364,32 @@
           // Radio group
           const label = item.label;
           const group = item.group;
-          
+
+          // Get question from first action in group (all should have same question)
+          const question = group.length > 0 ? (group[0].action.question || label) : label;
+
           // Extract radio values from selectors
           const radios = group.map(({ action, index }) => {
             const match = action.selector.match(/\[value=['"]([^'"]+)['"]\]/);
             const optionValue = match ? match[1] : 'unknown';
             return { optionValue, index };
           });
-          
+
           // Only one radio should be selected (the one in the group)
           const selectedValue = radios.length > 0 ? radios[0].optionValue : 'unknown';
-          
+
           itemDiv.innerHTML = `
             <div class="easyform-item-content">
               <div class="easyform-item-header">
                 <div class="easyform-question-wrapper">
                   <span class="easyform-number">${itemNumber}.</span>
-                  <span class="easyform-question">${escapeHtml(label)}</span>
+                  <span class="easyform-question">${escapeHtml(question)}</span>
                 </div>
                 <button class="easyform-remove-group" data-label="${escapeHtml(label)}" title="Remove ${escapeHtml(label)} action">×</button>
               </div>
-              <div class="easyform-answer easyform-radio-answer">◉ ${escapeHtml(selectedValue)}</div>
+              <div class="easyform-answer easyform-radio-answer">
+                <span class="easyform-radio-selected">⦿ ${escapeHtml(selectedValue)}</span>
+              </div>
             </div>
           `;
         }

@@ -25,6 +25,10 @@ class GeneratedAction(BaseModel):
         None,
         description="Human readable label describing the field for logging/tracking.",
     )
+    question: Optional[str] = Field(
+        None,
+        description="The original form question text this action answers.",
+    )
 
 
 class ActionGeneratorOutput(BaseModel):

@@ -178,6 +178,7 @@ async def create_form_actions(
             selector=action_data.get("selector", ""),
             value=action_data.get("value"),
             label=action_data.get("label", ""),
+            question=action_data.get("question"),
             order_index=idx
         )
         db_actions.append(db_action)

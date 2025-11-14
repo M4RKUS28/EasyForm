@@ -49,6 +49,10 @@ class FormAction(BaseModel):
         None,
         description="Human-readable label or description of the field"
     )
+    question: Optional[str] = Field(
+        None,
+        description="The original form question text this action answers"
+    )
 
 
 class FormAnalyzeResponse(BaseModel):
