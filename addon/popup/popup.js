@@ -13,8 +13,18 @@ let lastInfoMessage = 'Ready';
 let lastPersistentInfoMessage = 'Ready';
 
 document.addEventListener('DOMContentLoaded', async () => {
+  // Show loading indicator and set initial status
   setHealthStatus('pending'); // Set to orange initially
+  updateInfo('Checking backend...');
+
+  // Perform health check
   await checkBackendHealth();
+
+  // Hide loading indicator and show main content
+  document.getElementById('loadingContainer').classList.remove('show');
+  document.getElementById('mainContent').classList.remove('hidden');
+
+  // Load configuration and state
   await loadConfig();
   await loadStatus();
   await loadSessionInstructions();

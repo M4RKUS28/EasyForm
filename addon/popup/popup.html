@@ -150,12 +150,55 @@
     /* Main Content */
     .content {
       padding: 14px 16px;
+      min-height: 200px;
+      position: relative;
+    }
+
+    /* Loading State */
+    .loading-container {
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 200px;
+      gap: 12px;
+    }
+
+    .loading-container.show {
+      display: flex;
+    }
+
+    .loading-spinner {
+      width: 32px;
+      height: 32px;
+      border: 3px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    .loading-text {
+      font-size: 13px;
+      color: var(--text-secondary);
+    }
+
+    .main-content {
+      display: block;
+    }
+
+    .main-content.hidden {
+      display: none;
     }
 
     /* Mode Section */
     .mode-section {
       margin-bottom: 14px;
-      padding: 0;
+      padding: 0 0 14px 0;
+      border-bottom: 1px solid var(--border);
     }
 
     .mode-section-title {
@@ -170,13 +213,19 @@
     .toggle-group {
       display: flex;
       flex-direction: column;
-      gap: 10px;
+      gap: 0;
     }
 
     .toggle-row {
       display: flex;
       align-items: center;
       justify-content: space-between;
+      padding: 10px 0;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .toggle-row:last-child {
+      border-bottom: none;
     }
 
     .toggle-label {
@@ -384,42 +433,51 @@
 
   <!-- Content -->
   <div class="content">
-    <!-- Mode Toggles -->
-    <div class="mode-section">
-      <div class="mode-section-title">Mode</div>
-      <div class="toggle-group">
-        <div class="toggle-row">
-          <span class="toggle-label">Automatic Execution</span>
-          <label class="toggle-switch">
-            <input type="checkbox" id="executionModeToggle">
-            <span class="toggle-slider"></span>
-          </label>
-        </div>
-        <div class="toggle-row">
-          <span class="toggle-label">Screenshot Analysis</span>
-          <label class="toggle-switch">
-            <input type="checkbox" id="analysisModeToggle">
-            <span class="toggle-slider"></span>
-          </label>
-        </div>
-      </div>
+    <!-- Loading Indicator -->
+    <div class="loading-container show" id="loadingContainer">
+      <div class="loading-spinner"></div>
+      <div class="loading-text">Loading...</div>
     </div>
 
-    <!-- Instructions (Collapsible) -->
-    <div class="instructions-section">
-      <button class="instructions-toggle" id="instructionsToggle">
-        <span>Optional Instructions</span>
-        <svg class="instructions-icon" viewBox="0 0 16 16" fill="currentColor">
-          <path d="M8 11L3 6h10z"/>
-        </svg>
-      </button>
-      <div class="instructions-content" id="instructionsContent">
-        <div class="instructions-input-wrapper">
-          <textarea
-            class="instructions-input"
-            id="sessionInstructionsInput"
-            placeholder="Add custom instructions for this session..."
-          ></textarea>
+    <!-- Main Content -->
+    <div class="main-content hidden" id="mainContent">
+      <!-- Mode Toggles -->
+      <div class="mode-section">
+        <div class="mode-section-title">Mode</div>
+        <div class="toggle-group">
+          <div class="toggle-row">
+            <span class="toggle-label">Automatic Execution</span>
+            <label class="toggle-switch">
+              <input type="checkbox" id="executionModeToggle">
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+          <div class="toggle-row">
+            <span class="toggle-label">Screenshot Analysis</span>
+            <label class="toggle-switch">
+              <input type="checkbox" id="analysisModeToggle">
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <!-- Instructions (Collapsible) -->
+      <div class="instructions-section">
+        <button class="instructions-toggle" id="instructionsToggle">
+          <span>Optional Instructions</span>
+          <svg class="instructions-icon" viewBox="0 0 16 16" fill="currentColor">
+            <path d="M8 11L3 6h10z"/>
+          </svg>
+        </button>
+        <div class="instructions-content" id="instructionsContent">
+          <div class="instructions-input-wrapper">
+            <textarea
+              class="instructions-input"
+              id="sessionInstructionsInput"
+              placeholder="Add custom instructions for this session..."
+            ></textarea>
+          </div>
         </div>
       </div>
     </div>
