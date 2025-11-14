@@ -154,6 +154,30 @@
       .success-message.show {
         display: block;
       }
+
+      .checkbox-group {
+        margin-bottom: 20px;
+      }
+
+      .checkbox-wrapper {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+
+      .checkbox-wrapper input[type="checkbox"] {
+        width: 18px;
+        height: 18px;
+        cursor: pointer;
+        accent-color: var(--accent-color);
+      }
+
+      .checkbox-wrapper label {
+        font-size: 14px;
+        font-weight: 500;
+        color: var(--text-primary);
+        cursor: pointer;
+      }
     </style>
   </head>
   <body>
@@ -205,6 +229,20 @@
           <div class="help-text">
             Controls AI model pairing. All modes process each question
             individually for consistent accuracy.
+          </div>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-title">Preview Options</div>
+
+        <div class="checkbox-group">
+          <div class="checkbox-wrapper">
+            <input type="checkbox" id="autoOpenPreview" checked />
+            <label for="autoOpenPreview">Open Preview Window automatically</label>
+          </div>
+          <div class="help-text">
+            Automatically show the preview overlay when form analysis completes
           </div>
         </div>
       </div>

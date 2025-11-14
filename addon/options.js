@@ -16,8 +16,12 @@ async function loadSettings() {
     document.getElementById('apiToken').value = response.apiToken || '';
 
     // Set quality dropdown
-  const quality = response.quality || 'fast';
+    const quality = response.quality || 'fast';
     document.getElementById('quality').value = quality;
+
+    // Set auto-open preview checkbox (default true)
+    const autoOpenPreview = response.autoOpenPreview !== undefined ? response.autoOpenPreview : true;
+    document.getElementById('autoOpenPreview').checked = autoOpenPreview;
   } catch (error) {
     console.error('Error loading settings:', error);
   }
@@ -46,6 +50,7 @@ async function saveSettings() {
     const backendUrl = document.getElementById('backendUrl').value.trim();
     const apiToken = document.getElementById('apiToken').value.trim();
     const quality = document.getElementById('quality').value;
+    const autoOpenPreview = document.getElementById('autoOpenPreview').checked;
 
     if (!backendUrl) {
       alert('Please enter a backend URL');
@@ -64,7 +69,8 @@ async function saveSettings() {
       action: 'setConfig',
       backendUrl,
       apiToken,
-      quality
+      quality,
+      autoOpenPreview
     });
 
     if (response && response.success) {

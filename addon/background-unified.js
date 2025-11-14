@@ -82,7 +82,7 @@ async function cleanupRequestStorage(tabId) {
 
 async function getConfig() {
   const result = await browser.storage.sync.get(
-    ['backendUrl', 'mode', 'executionMode', 'analysisMode', 'apiToken', 'quality']
+    ['backendUrl', 'mode', 'executionMode', 'analysisMode', 'apiToken', 'quality', 'autoOpenPreview']
   );
 
   return {
@@ -91,7 +91,8 @@ async function getConfig() {
     executionMode: result.executionMode || result.mode,
     analysisMode: result.analysisMode || 'basic',
     apiToken: result.apiToken || '',
-    quality: result.quality || 'fast'
+    quality: result.quality || 'fast',
+    autoOpenPreview: result.autoOpenPreview !== undefined ? result.autoOpenPreview : true
   };
 }
 
@@ -489,12 +490,20 @@ async function handleCompletedRequest(requestId, tabId, mode) {
 
         notifyInfo(tabId, `Executed ${result.actions.length} action(s)`);
       } else {
-        // MANUAL MODE: Show overlay for user review (auto-open)
-        console.log('[EasyForm Polling] 👁️ Manual mode: showing overlay for user review');
-        await browser.tabs.sendMessage(tabId, {
-          action: 'showOverlay',
-          actions: result.actions
-        });
+        // MANUAL MODE: Check if auto-open preview is enabled
+        const config = await getConfig();
+        const autoOpenPreview = config.autoOpenPreview !== undefined ? config.autoOpenPreview : true;
+
+        if (autoOpenPreview) {
+          console.log('[EasyForm Polling] 👁️ Manual mode: showing overlay for user review (auto-open enabled)');
+          await browser.tabs.sendMessage(tabId, {
+            action: 'showOverlay',
+            actions: result.actions
+          });
+        } else {
+          console.log('[EasyForm Polling] 📋 Manual mode: preview saved but not auto-opened (user disabled auto-open)');
+          notifyInfo(tabId, `${result.actions.length} action(s) ready - click preview to review`);
+        }
       }
     } else {
       console.log('[EasyForm Polling] ⚠️ No actions to execute');
@@ -645,7 +654,8 @@ browser.runtime.onMessage.addListener((request, sender, sendResponse) => {
         executionMode: config.executionMode || CONFIG.mode,
         analysisMode: config.analysisMode || 'basic',
         apiToken: config.apiToken || '',
-  quality: config.quality || 'fast'
+        quality: config.quality || 'fast',
+        autoOpenPreview: config.autoOpenPreview !== undefined ? config.autoOpenPreview : true
       });
     });
     return true;
@@ -659,6 +669,7 @@ browser.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (request.analysisMode !== undefined) updates.analysisMode = request.analysisMode;
     if (request.apiToken !== undefined) updates.apiToken = request.apiToken;
     if (request.quality !== undefined) updates.quality = request.quality;
+    if (request.autoOpenPreview !== undefined) updates.autoOpenPreview = request.autoOpenPreview;
 
     setConfig(updates)
       .then(() => {
