@@ -64,16 +64,17 @@ def extract_interaction_data_for_agent_3(
     solution: str
 ) -> Dict[str, Any]:
     """
-    Extract only the technical interaction_data portion for Agent 3 (Action Generator).
+    Extract the technical interaction_data and question_data for Agent 3 (Action Generator).
 
-    Agent 3 needs to know HOW to interact with the form, not WHAT the question means.
+    Agent 3 needs to know HOW to interact with the form (interaction_data)
+    AND the original question text (question_data) to populate the question field in actions.
 
     Args:
         question: Complete question dict from Agent 1 (with new schema)
         solution: The generated solution from Agent 2
 
     Returns:
-        Filtered dict with only interaction_data and minimal metadata
+        Filtered dict with interaction_data, question_data, and minimal metadata
     """
     # Handle new schema (with question_data/interaction_data split)
     if "interaction_data" in question:
@@ -81,6 +82,7 @@ def extract_interaction_data_for_agent_3(
             "id": question.get("id"),
             "type": question.get("type"),
             "interaction_data": question.get("interaction_data"),
+            "question_data": question.get("question_data"),
             "solution": solution,
         }
 
@@ -91,7 +93,6 @@ def extract_interaction_data_for_agent_3(
         "inputs": question.get("inputs", []),
         "metadata": question.get("metadata"),
         "solution": solution,
-        # Omit title/description/context - Agent 3 doesn't need semantic context
     }
 
 

@@ -180,7 +180,6 @@ async def get_request_actions(
                 action_type=action.action_type,
                 selector=action.selector,
                 value=action.value,
-                label=action.label,
                 question=action.question
             )
             for action in form_request.actions

@@ -21,13 +21,9 @@ class GeneratedAction(BaseModel):
         None,
         description="Value to apply for the action; null when no value can be determined.",
     )
-    label: Optional[str] = Field(
-        None,
-        description="Human readable label describing the field for logging/tracking.",
-    )
     question: Optional[str] = Field(
         None,
-        description="The original form question text this action answers.",
+        description="The original form question text from the form (e.g., '1) 18 + 27 = ?').",
     )
 
 

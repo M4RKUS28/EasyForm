@@ -45,10 +45,6 @@ class FormAction(BaseModel):
         None,
         description="Value to set (for input fields, selects, etc.)"
     )
-    label: Optional[str] = Field(
-        None,
-        description="Human-readable label or description of the field"
-    )
     question: Optional[str] = Field(
         None,
         description="The original form question text this action answers"

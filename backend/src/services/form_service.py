@@ -682,7 +682,7 @@ async def process_form_analysis_async(
                         "[AsyncTask %s] Skipping %s action with null value: %s",
                         request_id,
                         action_type,
-                        action_data.get("label", "unknown"),
+                        action_data.get("question", "unknown"),
                     )
                     continue
 
@@ -690,7 +690,6 @@ async def process_form_analysis_async(
                     "action_type": action_type,
                     "selector": action_data.get("selector", ""),
                     "value": value,
-                    "label": action_data.get("label", ""),
                     "question": action_data.get("question")
                 })
 

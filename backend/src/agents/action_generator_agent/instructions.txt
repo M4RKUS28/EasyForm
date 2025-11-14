@@ -13,9 +13,10 @@ Your job is to convert each solution into concrete browser actions that can be e
 ## Input Structure
 
 For each question, you receive:
-- **Question Details**: ID, type, title, description, hints, available inputs
+- **Question Details**: ID, type, question_data (with the original question text), available inputs
 - **Solution**: Plain text describing what to fill/select for this question
 - **Available Inputs**: All selectors and options with their properties
+- **question_data**: Object containing `question` field with the original form question text
 
 ## Output Format
 
@@ -23,39 +24,38 @@ Generate a flat list of actions across ALL questions. Each action must specify:
 - `action_type`: One of "fillText", "selectDropdown", "selectRadio", "selectCheckbox", "click"
 - `selector`: The CSS selector from the input (MUST match exactly)
 - `value`: The value to apply (string, number, boolean, or null)
-- `label`: Human-readable description for logging
-- `question`: The original form question text (title or description from the question data)
+- `question`: The original form question text extracted from `question_data.question` field (e.g., "1) 18 + 27 = ?")
 
 ## Action Type Guidelines
 
 ### fillText
 - For text inputs, textareas, date fields, number fields
 - Value: The text/number/date to enter
-- Example: `{"action_type": "fillText", "selector": "#name", "value": "John Smith", "label": "Full Name", "question": "What is your full name?"}`
+- Example: `{"action_type": "fillText", "selector": "#name", "value": "John Smith", "question": "What is your full name?"}`
 
 ### selectDropdown
 - For dropdown/select elements
 - Value: The option value or label to select
 - Match against `value_hint` or `option_label` from inputs
-- Example: `{"action_type": "selectDropdown", "selector": "#country", "value": "US", "label": "Country: United States", "question": "Select your country"}`
+- Example: `{"action_type": "selectDropdown", "selector": "#country", "value": "US", "question": "Select your country"}`
 
 ### selectRadio
 - For radio button options
 - Value: true (to select) or null (to skip)
 - Only create action for the option to SELECT (not all options)
-- Example: `{"action_type": "selectRadio", "selector": "#agree_yes", "value": true, "label": "Agreement: Yes", "question": "Do you agree to the terms?"}`
+- Example: `{"action_type": "selectRadio", "selector": "#agree_yes", "value": true, "question": "Do you agree to the terms?"}`
 
 ### selectCheckbox
 - For checkbox options
 - Value: true (check) or false (uncheck)
 - Create actions for each checkbox that needs to change state
-- Example: `{"action_type": "selectCheckbox", "selector": "#skill_python", "value": true, "label": "Skill: Python", "question": "What programming languages do you know?"}`
+- Example: `{"action_type": "selectCheckbox", "selector": "#skill_python", "value": true, "question": "What programming languages do you know?"}`
 
 ### click
 - For buttons, links, or other clickable elements
 - Value: typically null or true
 - Use when the solution indicates clicking is needed
-- Example: `{"action_type": "click", "selector": "#submit_btn", "value": true, "label": "Submit Button", "question": null}`
+- Example: `{"action_type": "click", "selector": "#submit_btn", "value": true, "question": null}`
 
 ## Matching Solutions to Inputs
 
@@ -66,7 +66,6 @@ If solution is "John Smith" and input type is "text":
   "action_type": "fillText",
   "selector": "#name_field",
   "value": "John Smith",
-  "label": "Name",
   "question": "What is your name?"
 }
 ```
@@ -82,7 +81,6 @@ Generate:
   "action_type": "selectRadio",
   "selector": "#q1_agree",
   "value": true,
-  "label": "Satisfaction: Strongly Agree",
   "question": "How satisfied are you with our service?"
 }
 ```
@@ -100,14 +98,12 @@ Generate:
     "action_type": "selectCheckbox",
     "selector": "#skill_python",
     "value": true,
-    "label": "Skills: Python",
     "question": "What programming languages do you know?"
   },
   {
     "action_type": "selectCheckbox",
     "selector": "#skill_js",
     "value": true,
-    "label": "Skills: JavaScript",
     "question": "What programming languages do you know?"
   }
 ]
@@ -129,7 +125,6 @@ If solution is "Select 'United States'" and input has value_hint: "US", option_l
   "action_type": "selectDropdown",
   "selector": "#country",
   "value": "US",
-  "label": "Country: United States",
   "question": "Select your country"
 }
 ```
@@ -214,28 +209,24 @@ Output ALL actions in a single flat list (not grouped by question).
       "action_type": "selectRadio",
       "selector": "#q1_very_satisfied",
       "value": true,
-      "label": "Satisfaction: Very Satisfied",
       "question": "How satisfied are you?"
     },
     {
       "action_type": "fillText",
       "selector": "#name",
       "value": "Jane Doe",
-      "label": "Your name",
       "question": "Your name"
     },
     {
       "action_type": "selectCheckbox",
       "selector": "#lang_python",
       "value": true,
-      "label": "Languages: Python",
       "question": "Select programming languages you know"
     },
     {
       "action_type": "selectCheckbox",
       "selector": "#lang_js",
       "value": true,
-      "label": "Languages: JavaScript",
       "question": "Select programming languages you know"
     }
   ]

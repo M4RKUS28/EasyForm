@@ -82,7 +82,8 @@ if [ "${VENV_CREATED}" = true ] || [ "${FORCE_INSTALL}" = true ]; then
         echo "Failed to install requirements."
         exit 1
     fi
-    echo "Requirements installed successfully."
+    python.exe -m pip install --upgrade pip
+    echo "Requirements installed successfully and pip upgraded."
 else
     echo "Skipping requirements installation (use './run.sh u' to force)."
 fi

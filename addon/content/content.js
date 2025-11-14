@@ -247,24 +247,24 @@
     const renderActions = () => {
       list.innerHTML = '';
       
-      // Group checkbox and radio actions by label
+      // Group checkbox and radio actions by question
       const groupedActions = [];
       const checkboxGroups = new Map();
       const radioGroups = new Map();
-      
+
       filteredActions.forEach((action, index) => {
         if (action.action_type === 'selectCheckbox') {
-          const label = action.label || 'Checkbox';
-          if (!checkboxGroups.has(label)) {
-            checkboxGroups.set(label, []);
+          const groupKey = action.question || 'Checkbox';
+          if (!checkboxGroups.has(groupKey)) {
+            checkboxGroups.set(groupKey, []);
           }
-          checkboxGroups.get(label).push({ action, index });
+          checkboxGroups.get(groupKey).push({ action, index });
         } else if (action.action_type === 'selectRadio') {
-          const label = action.label || 'Radio';
-          if (!radioGroups.has(label)) {
-            radioGroups.set(label, []);
+          const groupKey = action.question || 'Radio';
+          if (!radioGroups.has(groupKey)) {
+            radioGroups.set(groupKey, []);
           }
-          radioGroups.get(label).push({ action, index });
+          radioGroups.get(groupKey).push({ action, index });
         } else {
           groupedActions.push({ action, index, type: 'single' });
         }
@@ -296,7 +296,7 @@
           // Regular action
           const action = item.action;
           const index = item.index;
-          const question = action.question || action.label || `Field ${index + 1}`;
+          const question = action.question || `Field ${index + 1}`;
           const description = action.description || '';
           const value = action.value !== null && action.value !== undefined ? action.value : '-';
 
@@ -320,11 +320,8 @@
           `;
         } else if (item.type === 'checkbox-group') {
           // Checkbox group
-          const label = item.label;
+          const question = item.label; // label here is the grouping key (derived from question)
           const group = item.group;
-
-          // Get question from first action in group (all should have same question)
-          const question = group.length > 0 ? (group[0].action.question || label) : label;
 
           // Extract checkbox values from selectors
           const checkboxes = group.map(({ action, index }) => {
@@ -348,7 +345,7 @@
                   <span class="easyform-number">${itemNumber}.</span>
                   <span class="easyform-question">${escapeHtml(question)}</span>
                 </div>
-                <button class="easyform-remove-group" data-label="${escapeHtml(label)}" title="Remove all ${escapeHtml(label)} actions">×</button>
+                <button class="easyform-remove-group" data-label="${escapeHtml(question)}" title="Remove all ${escapeHtml(question)} actions">×</button>
               </div>
               <div class="easyform-answer easyform-checkbox-answer">
                 ${selectedOptions.length > 0 ? `<span class="easyform-checkbox-checked">☑ ${escapeHtml(displayValue)}</span>` : `<span class="easyform-checkbox-none">${escapeHtml(displayValue)}</span>`}
@@ -362,11 +359,8 @@
           `;
         } else if (item.type === 'radio-group') {
           // Radio group
-          const label = item.label;
+          const question = item.label; // label here is the grouping key (derived from question)
           const group = item.group;
-
-          // Get question from first action in group (all should have same question)
-          const question = group.length > 0 ? (group[0].action.question || label) : label;
 
           // Extract radio values from selectors
           const radios = group.map(({ action, index }) => {
@@ -385,7 +379,7 @@
                   <span class="easyform-number">${itemNumber}.</span>
                   <span class="easyform-question">${escapeHtml(question)}</span>
                 </div>
-                <button class="easyform-remove-group" data-label="${escapeHtml(label)}" title="Remove ${escapeHtml(label)} action">×</button>
+                <button class="easyform-remove-group" data-label="${escapeHtml(question)}" title="Remove ${escapeHtml(question)} action">×</button>
               </div>
               <div class="easyform-answer easyform-radio-answer">
                 <span class="easyform-radio-selected">⦿ ${escapeHtml(selectedValue)}</span>

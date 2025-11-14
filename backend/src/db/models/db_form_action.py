@@ -27,7 +27,6 @@ class FormAction(Base):
     action_type = Column(String(50), nullable=False)  # fillText, selectDropdown, etc.
     selector = Column(Text, nullable=False)  # CSS selector
     value = Column(Text, nullable=True)  # JSON or plain text value
-    label = Column(Text, nullable=True)  # Human-readable label
     question = Column(Text, nullable=True)  # Original form question text
 
     # Order of execution

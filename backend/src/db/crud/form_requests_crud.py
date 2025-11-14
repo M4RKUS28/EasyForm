@@ -177,7 +177,6 @@ async def create_form_actions(
             action_type=action_data.get("action_type", ""),
             selector=action_data.get("selector", ""),
             value=action_data.get("value"),
-            label=action_data.get("label", ""),
             question=action_data.get("question"),
             order_index=idx
         )
