@@ -6,19 +6,6 @@ from typing import List, Optional
 from pydantic import BaseModel, Field
 
 
-class GridStructure(BaseModel):
-    """Structure for grid/matrix questions."""
-    rows: List[str] = Field(default_factory=list, description="Row labels for grid/matrix questions")
-    columns: List[str] = Field(default_factory=list, description="Column labels for grid/matrix questions")
-
-
-class ScaleRange(BaseModel):
-    """Range configuration for scale/slider questions."""
-    min: str = Field(..., description="Minimum value for the scale")
-    max: str = Field(..., description="Maximum value for the scale")
-    step: Optional[str] = Field(None, description="Step value for numeric scales")
-
-
 class InteractionTarget(BaseModel):
     """Technical details for a single interactable element (radio/checkbox option, dropdown item, etc.)."""
 
@@ -69,7 +56,7 @@ class QuestionData(BaseModel):
     )
     solving_context: Optional[str] = Field(
         None,
-        description="Additional context for the Solution Agent to understand how to answer the question (e.g., hints, validation rules, examples, detected prefilled values, help text, placeholders)."
+        description="Additional context for the Solution Agent to understand how to answer the question (e.g., hints, validation rules, examples, detected prefilled values, help text, placeholders, grid/matrix structure, scale ranges)."
     )
     selection_mode: str = Field(
         "none",
@@ -78,14 +65,6 @@ class QuestionData(BaseModel):
     available_options: Optional[List[str]] = Field(
         None,
         description="List of available options for selection fields (radio/dropdown/checkbox). Always populated for selection questions."
-    )
-    grid_structure: Optional[GridStructure] = Field(
-        None,
-        description="For grid/matrix questions: row and column labels for Agent 2 to understand the structure."
-    )
-    scale_range: Optional[ScaleRange] = Field(
-        None,
-        description="For scale questions: min/max/step values to guide Agent 2's answer generation."
     )
 
 

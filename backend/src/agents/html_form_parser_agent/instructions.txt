@@ -21,9 +21,7 @@ Return an object with a `questions` array. Each question MUST have two data sect
         "rag_context": "Section: Product Satisfaction Survey",
         "solving_context": "Required response. Scale 1-5 where 1=Poor and 5=Excellent.",
         "selection_mode": "single",
-        "available_options": ["1 - Poor", "2 - Fair", "3 - Good", "4 - Very Good", "5 - Excellent"],
-        "grid_structure": null,
-        "scale_range": {"min": "1", "max": "5", "step": "1"}
+        "available_options": ["1 - Poor", "2 - Fair", "3 - Good", "4 - Very Good", "5 - Excellent"]
       },
       "interaction_data": {
         "primary_selector": "div[role='radiogroup'][data-name='entry.123']",
@@ -58,7 +56,7 @@ This section helps an AI (and RAG retriever) understand WHAT answer is needed.
 
 - **question** (required): Exact wording from the UI. Preserve phrasing (light trimming only) so it can be matched directly against documents.
 - **rag_context** (optional): Context for building semantic search queries to retrieve relevant documents. Include section headers, form title, category labels, topic keywords. Examples: "Section: Employment History", "Category: Technical Skills", "Form: Annual Performance Review".
-- **solving_context** (optional): Additional context for the AI to understand HOW to answer the question. Include hints, validation rules, examples, help text, placeholders, detected prefilled values, format constraints, dependencies. Examples: "Required field. Must be valid email format. Placeholder: user@example.com", "Prefilled with: John Doe from user profile".
+- **solving_context** (optional): Additional context for the AI to understand HOW to answer the question. Include hints, validation rules, examples, help text, placeholders, detected prefilled values, format constraints, dependencies, grid/scale structure. Examples: "Required field. Must be valid email format. Placeholder: user@example.com", "Prefilled with: John Doe from user profile", "Grid with rows [Speed, Quality] and columns [Poor, Fair, Good]", "Scale from 1 to 10".
 - **selection_mode** (required):
   - "single" – radios/dropdowns (select exactly one)
   - "multiple" – checkboxes (select many)
@@ -66,21 +64,10 @@ This section helps an AI (and RAG retriever) understand WHAT answer is needed.
 - **available_options** (optional but recommended for selection fields):
   - Always include ALL visible options when `selection_mode` is not "none"
   - Trim whitespace; keep human-friendly labels
-- **grid_structure** (optional): For matrix/grid questions:
-  ```json
-  {
-    "rows": ["Row 1", "Row 2"],
-    "columns": ["Column A", "Column B"]
-  }
-  ```
-- **scale_range** (optional): For numeric scale/slider questions:
-  ```json
-  {
-    "min": "1",
-    "max": "10",
-    "step": "1"
-  }
-  ```
+
+**For grid/matrix and scale questions**: Include structure information in `solving_context`:
+- Grid/matrix: "Grid with rows [Row1, Row2] and columns [ColA, ColB]"
+- Scale/slider: "Scale from 1 to 10 with step 1" or "Slider range 0-100"
 
 ### interaction_data (Technical - For Automation)
 This section provides technical details for automated interaction.
@@ -134,9 +121,9 @@ This section provides technical details for automated interaction.
    - Dropdown = ONE question with N targets (or empty if >10 options)
 
 4. **Matrix/Grid questions**:
-   - Create ONE question with grid_structure populated
+   - Create ONE question with grid structure described in `solving_context`
    - Include each row/column combination as a target
-   - Use grid structure to help AI understand layout
+   - Format example: "Grid with rows [Speed, Quality, Support] and columns [Poor, Fair, Good, Excellent]"
 
 5. **Consolidate question text**:
    - Place the literal on-screen wording (labels, inline question text) in `question`
@@ -173,13 +160,13 @@ This section provides technical details for automated interaction.
 - [ ] Every logical question appears exactly once
 - [ ] `question_data.question` mirrors the literal on-screen wording
 - [ ] `question_data.rag_context` captures section headers, form title, category labels for better document retrieval
-- [ ] `question_data.solving_context` captures hints, validation rules, examples, help text, prefilled values for solution generation
+- [ ] `question_data.solving_context` captures hints, validation rules, examples, help text, prefilled values, grid/scale structure for solution generation
 - [ ] `question_data.available_options` populated with ALL options for selection fields
 - [ ] `interaction_data.targets` lists all radio/checkbox/dropdown options with precise selectors
 - [ ] All strings trimmed (no tabs, carriage returns, or extra spaces)
 - [ ] Selectors are precise and stable
 - [ ] Current values captured via `solving_context` (semantic) and/or `interaction_data.current_value` (technical) when visible
-- [ ] Grid/scale metadata included when applicable
+- [ ] Grid/scale structure information included in `solving_context` when applicable
 
 ## IMPORTANT
 - IGNORE submit buttons and navigation elements
