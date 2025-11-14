@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { tokenAPI, fileAPI, userAPI } from '../api/client';
@@ -11,7 +11,12 @@ const Dashboard = () => {
   const [tokens, setTokens] = useState([]);
   const [files, setFiles] = useState([]);
   const [totalStorage, setTotalStorage] = useState(0);
-  const [loading, setLoading] = useState(true);
+
+  // Individual loading states for each section
+  const [tokensLoading, setTokensLoading] = useState(true);
+  const [filesLoading, setFilesLoading] = useState(true);
+  const [instructionsLoading, setInstructionsLoading] = useState(true);
+
   const [tokenName, setTokenName] = useState('');
   const [newToken, setNewToken] = useState(null);
   const [uploadProgress, setUploadProgress] = useState(false);
@@ -19,7 +24,10 @@ const Dashboard = () => {
   const [personalInstructions, setPersonalInstructions] = useState('');
   const [instructionsSaving, setInstructionsSaving] = useState(false);
   const [instructionsDirty, setInstructionsDirty] = useState(false);
-  
+
+  // Polling ref to track active interval
+  const pollingIntervalRef = useRef(null);
+
   // Modal state
   const [deleteModal, setDeleteModal] = useState({
     isOpen: false,
@@ -28,38 +36,100 @@ const Dashboard = () => {
     isDeleting: false
   });
 
+  // Load all sections on mount
   useEffect(() => {
-    loadData({ includeInstructions: true });
+    loadTokens();
+    loadFiles();
+    loadInstructions();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const loadData = async ({ includeInstructions = false } = {}) => {
-    setLoading(true);
-    try {
-      const [tokensRes, filesRes] = await Promise.all([
-        tokenAPI.getTokens(),
-        fileAPI.getFiles(),
-      ]);
-      setTokens(tokensRes.data.tokens);
-      setFiles(filesRes.data.files);
-      setTotalStorage(filesRes.data.total_storage_bytes);
+  // Auto-refresh files while processing
+  useEffect(() => {
+    const hasProcessingFiles = files.some(
+      file => file.processing_status === 'processing' || file.processing_status === 'pending'
+    );
 
-      if (includeInstructions) {
-        try {
-          const instructionsRes = await userAPI.getPersonalInstructions();
-          const savedInstructions = instructionsRes.data.personal_instructions || '';
-          setPersonalInstructions(savedInstructions);
-          setInstructionsDirty(false);
-        } catch (instructionsError) {
-          console.error('Error loading personal instructions:', instructionsError);
-          showMessage('Error loading personal instructions', 'error');
-        }
+    if (hasProcessingFiles && !pollingIntervalRef.current) {
+      // Start polling if we have processing files and aren't already polling
+      console.log('Starting file status polling...');
+      pollingIntervalRef.current = setInterval(async () => {
+        await loadFiles();
+      }, 3000); // Refresh every 3 seconds
+    } else if (!hasProcessingFiles && pollingIntervalRef.current) {
+      // Stop polling if all files are done
+      console.log('Stopping file status polling - all files processed');
+      clearInterval(pollingIntervalRef.current);
+      pollingIntervalRef.current = null;
+    }
+
+    // Cleanup on unmount
+    return () => {
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current);
+        pollingIntervalRef.current = null;
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [files]);
+
+  const loadTokens = async () => {
+    setTokensLoading(true);
+    try {
+      const tokensRes = await tokenAPI.getTokens();
+      setTokens(tokensRes.data.tokens);
+    } catch (error) {
+      console.error('Error loading tokens:', error);
+      showMessage('Error loading tokens', 'error');
+    } finally {
+      setTokensLoading(false);
+    }
+  };
+
+  const loadFiles = async () => {
+    setFilesLoading(true);
+    try {
+      const filesRes = await fileAPI.getFiles();
+      const newFiles = filesRes.data.files;
+      const newTotalStorage = filesRes.data.total_storage_bytes;
+
+      // Only update if data has actually changed (prevents UI flickering during polling)
+      const filesChanged = files.length !== newFiles.length ||
+        files.some((file, index) => {
+          const newFile = newFiles[index];
+          return !newFile ||
+            file.id !== newFile.id ||
+            file.processing_status !== newFile.processing_status ||
+            file.page_count !== newFile.page_count;
+        });
+
+      if (filesChanged) {
+        setFiles(newFiles);
+      }
+
+      if (totalStorage !== newTotalStorage) {
+        setTotalStorage(newTotalStorage);
       }
     } catch (error) {
-      console.error('Error loading data:', error);
-      showMessage('Error loading data', 'error');
+      console.error('Error loading files:', error);
+      showMessage('Error loading files', 'error');
     } finally {
-      setLoading(false);
+      setFilesLoading(false);
+    }
+  };
+
+  const loadInstructions = async () => {
+    setInstructionsLoading(true);
+    try {
+      const instructionsRes = await userAPI.getPersonalInstructions();
+      const savedInstructions = instructionsRes.data.personal_instructions || '';
+      setPersonalInstructions(savedInstructions);
+      setInstructionsDirty(false);
+    } catch (error) {
+      console.error('Error loading personal instructions:', error);
+      showMessage('Error loading personal instructions', 'error');
+    } finally {
+      setInstructionsLoading(false);
     }
   };
 
@@ -75,7 +145,7 @@ const Dashboard = () => {
       const response = await tokenAPI.createToken(tokenName || 'Browser Extension');
       setNewToken(response.data);
       setTokenName('');
-      await loadData();
+      await loadTokens();
       showMessage('Token created successfully!');
     } catch (error) {
       console.error('Error creating token:', error);
@@ -108,12 +178,13 @@ const Dashboard = () => {
       if (deleteModal.type === 'token') {
         await tokenAPI.deleteToken(deleteModal.item.id);
         showMessage('Token deleted successfully!');
+        await loadTokens();
       } else if (deleteModal.type === 'file') {
         await fileAPI.deleteFile(deleteModal.item.id);
         showMessage('File deleted successfully!');
+        await loadFiles();
       }
-      
-      await loadData();
+
       setDeleteModal({ isOpen: false, type: null, item: null, isDeleting: false });
     } catch (error) {
       console.error(`Error deleting ${deleteModal.type}:`, error);
@@ -163,7 +234,7 @@ const Dashboard = () => {
         data: base64,
       });
 
-      await loadData();
+      await loadFiles();
       showMessage('File uploaded successfully!');
       e.target.value = ''; // Reset input
     } catch (error) {
@@ -217,17 +288,6 @@ const Dashboard = () => {
     if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(2) + ' KB';
     return (bytes / (1024 * 1024)).toFixed(2) + ' MB';
   };
-
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-gray-50 dark:bg-slate-950 transition-colors duration-300">
-        <Header />
-        <div className="flex items-center justify-center py-20">
-          <div className="text-xl text-gray-600 dark:text-gray-300 transition-colors">Loading...</div>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-slate-950 transition-colors duration-300">
@@ -318,7 +378,11 @@ const Dashboard = () => {
 
             {/* Token List */}
             <div className="space-y-3">
-              {tokens.length === 0 ? (
+              {tokensLoading ? (
+                <div className="flex items-center justify-center py-8">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 dark:border-blue-400"></div>
+                </div>
+              ) : tokens.length === 0 ? (
                 <p className="text-gray-500 dark:text-gray-400 italic transition-colors">No tokens created yet.</p>
               ) : (
                 tokens.map((token) => (
@@ -357,49 +421,55 @@ const Dashboard = () => {
             <p className="text-gray-600 dark:text-gray-300 mb-4 transition-colors">
               Add optional notes that are stored locally and included when you upload new files.
             </p>
-            <div>
-              <label
-                htmlFor="personalInstructions"
-                className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-2 transition-colors"
-              >
-                Personal Instructions
-              </label>
-              <textarea
-                id="personalInstructions"
-                value={personalInstructions}
-                onChange={(e) => {
-                  setPersonalInstructions(e.target.value);
-                  setInstructionsDirty(true);
-                }}
-                rows={4}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-400 transition-colors"
-                placeholder="Add optional notes for yourself..."
-              />
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mt-3">
-                <div>
-                  <p className="text-xs text-gray-500 dark:text-gray-400 transition-colors">
-                    These notes are stored with your account and sent to the AI when analyzing forms.
-                  </p>
-                  {instructionsDirty && (
-                    <p className="text-xs text-amber-600 dark:text-amber-400 font-medium mt-1 transition-colors">
-                      Unsaved changes — click Save to keep them.
-                    </p>
-                  )}
-                </div>
-                <button
-                  type="button"
-                  onClick={handleSavePersonalInstructions}
-                  disabled={instructionsSaving || !instructionsDirty}
-                  className={`px-6 py-2 rounded-lg text-white transition ${
-                    instructionsSaving || !instructionsDirty
-                      ? 'bg-blue-300 dark:bg-blue-700/60 cursor-not-allowed'
-                      : 'bg-blue-600 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600'
-                  }`}
-                >
-                  {instructionsSaving ? 'Saving...' : 'Save Instructions'}
-                </button>
+            {instructionsLoading ? (
+              <div className="flex items-center justify-center py-8">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 dark:border-blue-400"></div>
               </div>
-            </div>
+            ) : (
+              <div>
+                <label
+                  htmlFor="personalInstructions"
+                  className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-2 transition-colors"
+                >
+                  Personal Instructions
+                </label>
+                <textarea
+                  id="personalInstructions"
+                  value={personalInstructions}
+                  onChange={(e) => {
+                    setPersonalInstructions(e.target.value);
+                    setInstructionsDirty(true);
+                  }}
+                  rows={4}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-indigo-400 transition-colors"
+                  placeholder="Add optional notes for yourself..."
+                />
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mt-3">
+                  <div>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 transition-colors">
+                      These notes are stored with your account and sent to the AI when analyzing forms.
+                    </p>
+                    {instructionsDirty && (
+                      <p className="text-xs text-amber-600 dark:text-amber-400 font-medium mt-1 transition-colors">
+                        Unsaved changes — click Save to keep them.
+                      </p>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleSavePersonalInstructions}
+                    disabled={instructionsSaving || !instructionsDirty}
+                    className={`px-6 py-2 rounded-lg text-white transition ${
+                      instructionsSaving || !instructionsDirty
+                        ? 'bg-blue-300 dark:bg-blue-700/60 cursor-not-allowed'
+                        : 'bg-blue-600 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600'
+                    }`}
+                  >
+                    {instructionsSaving ? 'Saving...' : 'Save Instructions'}
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </section>
 
@@ -431,34 +501,68 @@ const Dashboard = () => {
 
             {/* File List */}
             <div className="space-y-3">
-              {files.length === 0 ? (
+              {filesLoading ? (
+                <div className="flex items-center justify-center py-8">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 dark:border-blue-400"></div>
+                </div>
+              ) : files.length === 0 ? (
                 <p className="text-gray-500 dark:text-gray-400 italic transition-colors">No files uploaded yet.</p>
               ) : (
-                files.map((file) => (
-                  <div
-                    key={file.id}
-                    className="flex items-center justify-between p-4 border border-gray-200 dark:border-slate-700 rounded-lg bg-white/70 dark:bg-slate-900/70 transition-colors"
-                  >
-                    <div className="flex items-center gap-4">
-                      <div className="text-3xl">
-                        {file.content_type.startsWith('image/') ? '🖼️' : '📄'}
-                      </div>
-                      <div>
-                        <p className="font-medium text-gray-900 dark:text-gray-100 transition-colors">{file.filename}</p>
-                        <p className="text-sm text-gray-500 dark:text-gray-400 transition-colors">
-                          {formatFileSize(file.file_size)} • Uploaded{' '}
-                          {new Date(file.created_at).toLocaleDateString()}
-                        </p>
-                      </div>
-                    </div>
-                    <button
-                      onClick={() => handleDeleteFile(file.id)}
-                      className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 dark:bg-red-500 dark:hover:bg-red-600 transition-colors"
+                files.map((file) => {
+                  const isProcessing = file.processing_status === 'processing' || file.processing_status === 'pending';
+                  const hasFailed = file.processing_status === 'failed';
+
+                  return (
+                    <div
+                      key={file.id}
+                      className={`flex items-center justify-between p-4 border rounded-lg transition-colors ${
+                        isProcessing
+                          ? 'border-blue-300 dark:border-blue-700 bg-blue-50/70 dark:bg-blue-950/30'
+                          : hasFailed
+                          ? 'border-red-300 dark:border-red-700 bg-red-50/70 dark:bg-red-950/30'
+                          : 'border-gray-200 dark:border-slate-700 bg-white/70 dark:bg-slate-900/70'
+                      }`}
                     >
-                      Delete
-                    </button>
-                  </div>
-                ))
+                      <div className="flex items-center gap-4">
+                        <div className="text-3xl relative">
+                          {file.content_type.startsWith('image/') ? '🖼️' : '📄'}
+                          {isProcessing && (
+                            <div className="absolute -top-1 -right-1 w-4 h-4 bg-blue-500 rounded-full animate-pulse"></div>
+                          )}
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <p className="font-medium text-gray-900 dark:text-gray-100 transition-colors">
+                              {file.filename}
+                            </p>
+                            {isProcessing && (
+                              <span className="px-2 py-0.5 text-xs font-medium bg-blue-100 dark:bg-blue-900/60 text-blue-700 dark:text-blue-300 rounded-full">
+                                Processing...
+                              </span>
+                            )}
+                            {hasFailed && (
+                              <span className="px-2 py-0.5 text-xs font-medium bg-red-100 dark:bg-red-900/60 text-red-700 dark:text-red-300 rounded-full">
+                                Processing Failed
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-sm text-gray-500 dark:text-gray-400 transition-colors">
+                            {formatFileSize(file.file_size)}
+                            {file.page_count && ` • ${file.page_count} pages`}
+                            {' • Uploaded '}
+                            {new Date(file.created_at).toLocaleDateString()}
+                          </p>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => handleDeleteFile(file.id)}
+                        className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 dark:bg-red-500 dark:hover:bg-red-600 transition-colors"
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  );
+                })
               )}
             </div>
           </div>
