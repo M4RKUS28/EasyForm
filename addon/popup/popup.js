@@ -18,7 +18,14 @@ document.addEventListener('DOMContentLoaded', async () => {
   updateInfo('Checking backend...');
 
   // Perform health check
-  await checkBackendHealth();
+  const healthOk = await checkBackendHealth();
+
+  if (!healthOk) {
+    // Health check failed - show error and stop
+    document.getElementById('loadingContainer').classList.remove('show');
+    // Don't show main content when health check fails
+    return;
+  }
 
   // Hide loading indicator and show main content
   document.getElementById('loadingContainer').classList.remove('show');
@@ -57,19 +64,23 @@ async function checkBackendHealth() {
     if (response.healthy) {
       // Backend is healthy - show green indicator
       console.log('[EasyForm Popup] ✅ Backend is healthy');
-    setHealthStatus('healthy');
-    clearError();
+      setHealthStatus('healthy');
+      clearError();
+      updateInfo('Ready');
+      return true;
     } else {
       // Backend is not healthy
       console.warn('[EasyForm Popup] ⚠️ Backend is not healthy:', response.error);
-      setHealthStatus('unhealthy');
-      showError(response.error || 'Backend health check failed');
+      setHealthStatus('error');
+      showHealthError(response.error || 'Backend health check failed');
+      return false;
     }
   } catch (error) {
     // Health check failed
     console.error('[EasyForm Popup] ❌ Health check failed:', error);
-    setHealthStatus('unhealthy');
-    showError(error.message || 'Cannot connect to backend');
+    setHealthStatus('error');
+    showHealthError(error.message || 'Cannot connect to backend');
+    return false;
   }
 }
 
@@ -239,13 +250,13 @@ function setTemporaryInfo(text, duration = 2000) {
   }, duration);
 }
 
-function setHealthStatus(status) { // status can be 'healthy', 'unhealthy', 'pending'
+function setHealthStatus(status) { // status can be 'healthy', 'error', 'pending'
   const statusDot = document.getElementById('statusDot');
   statusDot.classList.remove('error', 'warning');
 
   if (status === 'healthy') {
     // Green
-  } else if (status === 'unhealthy') {
+  } else if (status === 'error') {
     statusDot.classList.add('error'); // Red
   } else {
     statusDot.classList.add('warning'); // Orange
@@ -274,6 +285,18 @@ function clearError(nextStatus = null) {
   const errorDiv = document.getElementById('errorMessage');
   errorDiv.textContent = '';
   errorDiv.classList.remove('show');
+}
+
+function showHealthError(message) {
+  // Show error container in main content area
+  const errorContainer = document.getElementById('errorContainer');
+  const errorDetails = document.getElementById('errorDetails');
+
+  errorDetails.textContent = message;
+  errorContainer.classList.add('show');
+
+  // Update status footer
+  updateInfo('Connection failed');
 }
 
 // Handle start button click

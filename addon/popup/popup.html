@@ -5,12 +5,13 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>EasyForm</title>
   <style>
+    /* Light mode (default) */
     :root {
-      --bg: #f8fafc;
-      --surface: #ffffff;
-      --text: #0f172a;
-      --text-secondary: #475569;
-      --text-muted: #94a3b8;
+      --bg: #ffffff;
+      --surface: #f8fafc;
+      --text: #1a202c;
+      --text-secondary: #4a5568;
+      --text-muted: #718096;
       --border: #e2e8f0;
       --accent: #6366f1;
       --accent-hover: #4f46e5;
@@ -149,9 +150,18 @@
 
     /* Main Content */
     .content {
-      padding: 14px 16px;
+      padding: 14px 16px 0 16px;
       min-height: 200px;
       position: relative;
+    }
+
+    .main-content {
+      display: block;
+      padding-bottom: 14px;
+    }
+
+    .main-content.hidden {
+      display: none;
     }
 
     /* Loading State */
@@ -186,12 +196,38 @@
       color: var(--text-secondary);
     }
 
-    .main-content {
-      display: block;
+    /* Error State */
+    .error-container {
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 200px;
+      gap: 12px;
+      padding: 20px;
+      text-align: center;
     }
 
-    .main-content.hidden {
-      display: none;
+    .error-container.show {
+      display: flex;
+    }
+
+    .error-icon {
+      font-size: 48px;
+      color: var(--error);
+    }
+
+    .error-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text);
+      margin-bottom: 4px;
+    }
+
+    .error-details {
+      font-size: 12px;
+      color: var(--text-secondary);
+      line-height: 1.5;
     }
 
     /* Mode Section */
@@ -353,7 +389,9 @@
 
     /* Action Buttons */
     .actions {
-      padding: 0 16px 14px;
+      padding: 14px 0 0 0;
+      margin-top: 14px;
+      border-top: 1px solid var(--border);
     }
 
     .primary-btn {
@@ -439,6 +477,13 @@
       <div class="loading-text">Loading...</div>
     </div>
 
+    <!-- Error Container -->
+    <div class="error-container" id="errorContainer">
+      <div class="error-icon">⚠️</div>
+      <div class="error-title">Connection Error</div>
+      <div class="error-details" id="errorDetails">Cannot connect to backend</div>
+    </div>
+
     <!-- Main Content -->
     <div class="main-content hidden" id="mainContent">
       <!-- Mode Toggles -->
@@ -480,14 +525,14 @@
           </div>
         </div>
       </div>
-    </div>
-  </div>
 
-  <!-- Actions -->
-  <div class="actions">
-    <button class="primary-btn" id="startBtn">Start Analysis</button>
-    <button class="secondary-btn" id="cancelBtn">Cancel</button>
-    <button class="secondary-btn" id="resetBtn" style="display: none;">Reset</button>
+      <!-- Actions -->
+      <div class="actions">
+        <button class="primary-btn" id="startBtn">Start Analysis</button>
+        <button class="secondary-btn" id="cancelBtn">Cancel</button>
+        <button class="secondary-btn" id="resetBtn" style="display: none;">Reset</button>
+      </div>
+    </div>
   </div>
 
   <!-- Status Footer -->
