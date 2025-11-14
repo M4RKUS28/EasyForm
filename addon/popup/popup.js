@@ -74,9 +74,9 @@ async function loadConfig() {
 
     cachedBackendUrl = normalizeBackendUrl(response.backendUrl) || DEFAULT_BACKEND_URL;
 
-    // Set dropdown values
-    document.getElementById('executionMode').value = executionMode;
-    document.getElementById('analysisMode').value = analysisMode;
+    // Set toggle states (checked = automatic/extended, unchecked = manual/basic)
+    document.getElementById('executionModeToggle').checked = (executionMode === 'automatic');
+    document.getElementById('analysisModeToggle').checked = (analysisMode === 'extended');
   } catch (error) {
     console.error('Error loading config:', error);
   }
@@ -113,14 +113,16 @@ async function loadSessionInstructions() {
 }
 
 function setupEventListeners() {
-  // Execution mode dropdown
-  document.getElementById('executionMode').addEventListener('change', async (e) => {
-    await setConfig({ executionMode: e.target.value, mode: e.target.value }); // mode for backward compat
+  // Execution mode toggle (checked = automatic, unchecked = manual)
+  document.getElementById('executionModeToggle').addEventListener('change', async (e) => {
+    const mode = e.target.checked ? 'automatic' : 'manual';
+    await setConfig({ executionMode: mode, mode: mode }); // mode for backward compat
   });
 
-  // Analysis mode dropdown
-  document.getElementById('analysisMode').addEventListener('change', async (e) => {
-    await setConfig({ analysisMode: e.target.value });
+  // Analysis mode toggle (checked = extended, unchecked = basic)
+  document.getElementById('analysisModeToggle').addEventListener('change', async (e) => {
+    const mode = e.target.checked ? 'extended' : 'basic';
+    await setConfig({ analysisMode: mode });
   });
 
   // Start button
@@ -148,6 +150,21 @@ function setupEventListeners() {
 
   document.getElementById('openBackendBtn').addEventListener('click', async () => {
     await handleOpenBackendClick();
+  });
+
+  // Instructions toggle button
+  document.getElementById('instructionsToggle').addEventListener('click', () => {
+    const toggle = document.getElementById('instructionsToggle');
+    const content = document.getElementById('instructionsContent');
+    const isExpanded = content.classList.contains('expanded');
+
+    if (isExpanded) {
+      content.classList.remove('expanded');
+      toggle.classList.remove('active');
+    } else {
+      content.classList.add('expanded');
+      toggle.classList.add('active');
+    }
   });
 
   // Session instructions input - save to storage when edited

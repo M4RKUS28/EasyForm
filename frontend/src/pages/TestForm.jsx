@@ -72,16 +72,10 @@ function TestForm() {
             <p className="form-description">
               Practice answering deterministic math questions and general knowledge checks that reference a candidate CV.
             </p>
-            <p className="mt-3 text-sm font-semibold text-red-600 bg-red-50 border border-red-200 rounded-md px-3 py-2">
+            <p className="mt-3 text-sm font-semibold text-red-600 bg-red-50 border border-red-200 rounded-md px-3 py-2 text-center">
               After installing the extension, please reload every page (including this one) once so EasyForm can run properly.
             </p>
           </div>
-          <Link
-            to="/dashboard"
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600 font-medium transition-colors whitespace-nowrap"
-          >
-            Dashboard
-          </Link>
         </div>
 
         <form onSubmit={handleSubmit} className="test-form">

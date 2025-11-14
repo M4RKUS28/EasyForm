@@ -188,17 +188,10 @@
     } else {
       // Load stored actions from background
       try {
-        const tabs = await browser.tabs.query({ active: true, currentWindow: true });
-        const tabId = tabs[0]?.id;
-
-        if (!tabId) {
-          console.warn('[EasyForm Content] No active tab found');
-          return;
-        }
-
+        // Content scripts can't access browser.tabs, but background script
+        // will automatically detect the tab ID from the sender
         const response = await browser.runtime.sendMessage({
-          action: 'getAnalysisState',
-          tabId: tabId
+          action: 'getAnalysisState'
         });
 
         if (response && response.actions && response.actions.length > 0) {
@@ -452,16 +445,11 @@
     // Clear Actions button
     overlay.querySelector('#easyform-clear').addEventListener('click', async () => {
       try {
-        const tabs = await browser.tabs.query({ active: true, currentWindow: true });
-        const tabId = tabs[0]?.id;
-
-        if (tabId) {
-          await browser.runtime.sendMessage({
-            action: 'clearActions',
-            tabId: tabId
-          });
-          console.log('[EasyForm Content] ✅ Actions cleared');
-        }
+        // Content scripts can't access browser.tabs - background will detect tab from sender
+        await browser.runtime.sendMessage({
+          action: 'clearActions'
+        });
+        console.log('[EasyForm Content] ✅ Actions cleared');
 
         removeOverlay();
         showNotification('info', 'Actions cleared');
@@ -485,15 +473,10 @@
         if (result.success) {
           // Mark as executed in background
           try {
-            const tabs = await browser.tabs.query({ active: true, currentWindow: true });
-            const tabId = tabs[0]?.id;
-
-            if (tabId) {
-              await browser.runtime.sendMessage({
-                action: 'markExecuted',
-                tabId: tabId
-              });
-            }
+            // Content scripts can't access browser.tabs - background will detect tab from sender
+            await browser.runtime.sendMessage({
+              action: 'markExecuted'
+            });
           } catch (error) {
             console.error('[EasyForm Content] Error marking executed:', error);
           }

@@ -677,7 +677,8 @@ browser.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
   if (request.action === 'getAnalysisState') {
     (async () => {
-      const tabId = request.tabId;
+      // Use tabId from request, or fallback to sender's tab (for content scripts)
+      const tabId = request.tabId || sender.tab?.id;
       if (!tabId) {
         sendResponse({
           status: ANALYSIS_STATES.IDLE,
@@ -758,7 +759,8 @@ browser.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === 'clearActions') {
     (async () => {
       try {
-        const tabId = request.tabId;
+        // Use tabId from request, or fallback to sender's tab (for content scripts)
+        const tabId = request.tabId || sender.tab?.id;
         if (!tabId) {
           sendResponse({ success: false, error: 'No tab ID provided' });
           return;
@@ -786,7 +788,8 @@ browser.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === 'markExecuted') {
     (async () => {
       try {
-        const tabId = request.tabId;
+        // Use tabId from request, or fallback to sender's tab (for content scripts)
+        const tabId = request.tabId || sender.tab?.id;
         if (!tabId) {
           sendResponse({ success: false, error: 'No tab ID provided' });
           return;
