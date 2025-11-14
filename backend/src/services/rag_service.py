@@ -215,7 +215,7 @@ class RAGService:
 
                 chunk_type_str = chunk.chunk_type.value if hasattr(chunk.chunk_type, 'value') else str(chunk.chunk_type)
 
-                logger.debug(f"Processing chunk {chunk.id}: type={chunk_type_str}, file={filename}")
+                logger.info(f"Processing chunk {chunk.id}: type={chunk_type_str}, file={filename}")
 
                 # Use max similarity from either search
                 text_sim = text_similarity_map.get(chunk.id, 0.0)

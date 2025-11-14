@@ -273,7 +273,7 @@ def optimize_actions(actions: List[form_schema.FormAction]) -> List[form_schema.
         if action.action_type == "selectRadio":
             key = _radio_group_key(action)
             if key in seen_radio_keys:
-                logger.debug("Dropping redundant radio action for key %s selector=%s", key, action.selector)
+                logger.info("Dropping redundant radio action for key %s selector=%s", key, action.selector)
                 continue
             seen_radio_keys.add(key)
 
@@ -284,7 +284,7 @@ def optimize_actions(actions: List[form_schema.FormAction]) -> List[form_schema.
         )
 
         if generic_key in seen_generic_keys:
-            logger.debug(
+            logger.info(
                 "Dropping duplicate action type=%s selector=%s value=%s",
                 action.action_type,
                 action.selector,

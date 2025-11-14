@@ -110,5 +110,14 @@ import os
 
 port = int(os.getenv('PORT', $PORT))
 reload = os.getenv('EASYFORM_RELOAD_FLAG', 'true').lower() == 'true'
-uvicorn.run('src.main:app', host='0.0.0.0', port=port, reload=reload)
+uvicorn.run(
+    'src.main:app',
+    host='0.0.0.0',
+    port=port,
+    reload=reload,
+    reload_excludes=[
+        '**/__init__.py',
+        r'**\\__init__.py'
+    ]
+)
 "

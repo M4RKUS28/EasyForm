@@ -39,12 +39,14 @@ class EmbeddingService:
         )
 
         logger.info(
-            f"ChromaDB text collection '{app_settings.CHROMA_TEXT_COLLECTION_NAME}' initialized with "
-            f"{self.text_collection.count()} existing documents"
+            "ChromaDB text collection '%s' initialized with %d existing documents",
+            app_settings.CHROMA_TEXT_COLLECTION_NAME,
+            self.text_collection.count()
         )
         logger.info(
-            f"Using text embedding model: {app_settings.TEXT_EMBEDDING_MODEL} "
-            f"with {app_settings.TEXT_EMBEDDING_DIMENSIONS} dimensions"
+            "Using text embedding model: %s with %d dimensions",
+            app_settings.TEXT_EMBEDDING_MODEL,
+            app_settings.TEXT_EMBEDDING_DIMENSIONS
         )
 
         # Keep legacy reference for backward compatibility
@@ -61,7 +63,9 @@ class EmbeddingService:
             Embedding vector (configured dimensions, default 3072)
         """
         try:
-            result = genai.embed_content(
+            # Run embedding generation in thread as it's a blocking API call
+            result = await asyncio.to_thread(
+                genai.embed_content,
                 model=app_settings.TEXT_EMBEDDING_MODEL,
                 content=text,
                 task_type="retrieval_document",
@@ -91,8 +95,8 @@ class EmbeddingService:
             if caption and caption.strip():
                 return await self.embed_text(caption)
             else:
-                # If no caption, create a generic image marker
-                logger.warning("Image has no OCR caption, using generic marker")
+                # If no caption, create a generic image marker (common for charts/diagrams/logos)
+                logger.debug("Image has no OCR text, using generic marker")
                 return await self.embed_text("[Image content]")
 
         except Exception as e:
@@ -113,29 +117,40 @@ class EmbeddingService:
             return 0
 
         try:
-            embeddings = []
-            documents = []
-            metadatas = []
-            ids = []
+            # Prepare embedding tasks for parallel execution
+            embedding_tasks = []
+            chunk_info = []  # Store chunk metadata for later processing
 
             for chunk in chunks:
-                # Generate embedding based on type
+                # Get chunk type
                 chunk_type = chunk["chunk_type"]
                 if hasattr(chunk_type, 'value'):
                     chunk_type_str = chunk_type.value
                 else:
                     chunk_type_str = str(chunk_type)
 
+                # Create embedding task based on type
                 if chunk_type_str == "text":
-                    embedding = await self.embed_text(chunk["content"])
+                    embedding_tasks.append(self.embed_text(chunk["content"]))
+                    chunk_info.append((chunk, chunk_type_str))
                 elif chunk_type_str == "image":
                     # Embed OCR text in text collection
-                    embedding = await self.embed_ocr_text(caption=chunk.get("content"))
+                    embedding_tasks.append(self.embed_ocr_text(caption=chunk.get("content")))
+                    chunk_info.append((chunk, chunk_type_str))
                 else:
                     logger.warning(f"Unknown chunk type: {chunk_type}")
                     continue
 
-                embeddings.append(embedding)
+            # Generate all embeddings in parallel
+            logger.info(f"Generating {len(embedding_tasks)} embeddings in parallel")
+            embeddings = await asyncio.gather(*embedding_tasks)
+
+            # Build final lists for ChromaDB
+            documents = []
+            metadatas = []
+            ids = []
+
+            for chunk, chunk_type_str in chunk_info:
                 documents.append(chunk.get("content", ""))  # Store text for retrieval
 
                 # Store metadata for filtering (prune unsupported/null values)
@@ -177,8 +192,8 @@ class EmbeddingService:
                 ids=ids
             )
 
-            logger.info(f"Added {len(chunks)} chunks to ChromaDB text collection")
-            return len(chunks)
+            logger.info(f"Added {len(embeddings)} chunks to ChromaDB text collection")
+            return len(embeddings)
 
         except Exception as e:
             logger.error(f"Failed to add chunks to ChromaDB: {e}", exc_info=True)

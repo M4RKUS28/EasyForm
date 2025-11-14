@@ -154,10 +154,9 @@ class ImageEmbeddingService:
             return 0
 
         try:
-            embeddings = []
-            documents = []
-            metadatas = []
-            ids = []
+            # Prepare embedding tasks for parallel execution
+            embedding_tasks = []
+            chunk_info = []  # Store valid chunks for later processing
 
             for chunk in chunks:
                 # Only process image chunks
@@ -176,8 +175,25 @@ class ImageEmbeddingService:
                     logger.warning(f"Image chunk {chunk['id']} has no raw_content")
                     continue
 
-                # Generate visual embedding
-                embedding = await self.embed_image(image_bytes)
+                # Create embedding task
+                embedding_tasks.append(self.embed_image(image_bytes))
+                chunk_info.append((chunk, chunk_type_str))
+
+            if not embedding_tasks:
+                logger.warning("No valid image chunks to embed")
+                return 0
+
+            # Generate all embeddings in parallel
+            logger.info(f"Generating {len(embedding_tasks)} image embeddings in parallel")
+            embeddings_raw = await asyncio.gather(*embedding_tasks)
+
+            # Filter out None results and build final lists
+            embeddings = []
+            documents = []
+            metadatas = []
+            ids = []
+
+            for (chunk, chunk_type_str), embedding in zip(chunk_info, embeddings_raw):
                 if embedding is None:
                     logger.warning(f"Failed to embed image chunk {chunk['id']}")
                     continue

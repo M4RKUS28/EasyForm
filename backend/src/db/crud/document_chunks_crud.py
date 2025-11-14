@@ -37,7 +37,7 @@ async def get_chunks_by_ids(db: AsyncSession, chunk_ids: List[str]) -> List[Docu
     logger = logging.getLogger(__name__)
 
     logger.info(f"Querying database for {len(chunk_ids)} chunk IDs")
-    logger.debug(f"Chunk IDs to query: {chunk_ids[:5]}{'...' if len(chunk_ids) > 5 else ''}")
+    logger.info(f"Chunk IDs to query: {chunk_ids[:5]}{'...' if len(chunk_ids) > 5 else ''}")
 
     result = await db.execute(
         select(DocumentChunk).filter(DocumentChunk.id.in_(chunk_ids))

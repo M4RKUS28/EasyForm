@@ -146,7 +146,7 @@ class FileLogger:
             with open(query_file, "w", encoding="utf-8") as f:
                 f.write(query)
             subdir_info = f" in {subdir}" if subdir else ""
-            logger.debug(f"Logged query for {self.AGENT_NAMES[agent_num]}{subdir_info} ({len(query)} chars)")
+            logger.info(f"Logged query for {self.AGENT_NAMES[agent_num]}{subdir_info} ({len(query)} chars)")
         except Exception as e:
             logger.error(f"Failed to log query for agent {agent_num}: {e}", exc_info=True)
 
@@ -171,7 +171,7 @@ class FileLogger:
             with open(response_file, "w", encoding="utf-8") as f:
                 f.write(response_str)
             subdir_info = f" in {subdir}" if subdir else ""
-            logger.debug(f"Logged response for {self.AGENT_NAMES[agent_num]}{subdir_info} ({len(response_str)} chars)")
+            logger.info(f"Logged response for {self.AGENT_NAMES[agent_num]}{subdir_info} ({len(response_str)} chars)")
         except Exception as e:
             logger.error(f"Failed to log response for agent {agent_num}: {e}", exc_info=True)
 
@@ -239,7 +239,7 @@ class FileLogger:
             with open(filepath, "wb") as f:
                 f.write(data)
             subdir_info = f" in {subdir}" if subdir else ""
-            logger.debug(
+            logger.info(
                 f"Saved media file for {self.AGENT_NAMES[agent_num]}{subdir_info}: {safe_name} ({len(data)} bytes)"
             )
         except Exception as e:
@@ -273,7 +273,7 @@ class FileLogger:
                     f.write("\n" + "="*80 + "\n")
                 f.write(query)
             subdir_info = f" in {subdir}" if subdir else ""
-            logger.debug(f"Logged RAG query{subdir_info} ({len(query)} chars)")
+            logger.info(f"Logged RAG query{subdir_info} ({len(query)} chars)")
         except Exception as e:
             logger.error(f"Failed to log RAG query: {e}", exc_info=True)
 
@@ -306,7 +306,7 @@ class FileLogger:
                     f.write("\n" + "="*80 + "\n")
                 f.write(response_str)
             subdir_info = f" in {subdir}" if subdir else ""
-            logger.debug(f"Logged RAG response{subdir_info} ({len(response_str)} chars)")
+            logger.info(f"Logged RAG response{subdir_info} ({len(response_str)} chars)")
         except Exception as e:
             logger.error(f"Failed to log RAG response: {e}", exc_info=True)
 
@@ -344,7 +344,7 @@ class FileLogger:
                 f.write(json.dumps(entry, ensure_ascii=False))
                 f.write("\n")
             subdir_info = f" in {subdir}" if subdir else ""
-            logger.debug(
+            logger.info(
                 "Logged RAG chunk counts%s: scope=%s text=%d image=%d",
                 subdir_info,
                 scope,
@@ -381,7 +381,7 @@ class FileLogger:
 
             with open(filepath, "wb") as f:
                 f.write(image_bytes)
-            logger.debug(f"Saved RAG image to {filepath} ({len(image_bytes)} bytes)")
+            logger.info(f"Saved RAG image to {filepath} ({len(image_bytes)} bytes)")
         except Exception as e:
             logger.error(f"Failed to save RAG image: {e}", exc_info=True)
 
@@ -410,7 +410,7 @@ class FileLogger:
 
             with open(filepath, "wb") as f:
                 f.write(file_bytes)
-            logger.debug(f"Saved RAG file to {filepath} ({len(file_bytes)} bytes)")
+            logger.info(f"Saved RAG file to {filepath} ({len(file_bytes)} bytes)")
         except Exception as e:
             logger.error(f"Failed to save RAG file: {e}", exc_info=True)
 

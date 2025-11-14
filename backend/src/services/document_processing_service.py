@@ -234,7 +234,13 @@ class DocumentProcessingService:
             return text.strip() if text.strip() else None
 
         except Exception as e:
-            logger.warning(f"OCR failed: {e}")
+            # Tesseract on Windows produces harmless ObjectCache cleanup warnings
+            # Log these as debug to reduce noise
+            error_str = str(e)
+            if "ObjectCache" in error_str and "LEAK" in error_str:
+                logger.warning(f"Tesseract cleanup warning (harmless): {error_str[:100]}...")
+            else:
+                logger.warning(f"OCR failed: {e}")
             return None
 
     def _resize_image(self, image_bytes: bytes) -> bytes:
