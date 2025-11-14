@@ -9,7 +9,8 @@
     "scripting",
     "contextMenus",
     "storage",
-    "clipboardRead"
+    "clipboardRead",
+    "theme"
   ],
   "host_permissions": [
     "<all_urls>"

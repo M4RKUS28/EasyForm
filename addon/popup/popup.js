@@ -12,7 +12,88 @@ let infoResetTimeout = null;
 let lastInfoMessage = 'Ready';
 let lastPersistentInfoMessage = 'Ready';
 
+// Apply theme based on browser's actual theme (cross-browser)
+async function applyTheme() {
+  if (!document.body) {
+    return;
+  }
+
+  let isDark = false;
+
+  try {
+    // Try Firefox theme API first (not available in Chrome)
+    if (browser.theme && typeof browser.theme.getCurrent === 'function') {
+      const theme = await browser.theme.getCurrent();
+
+      // If theme has custom colors, use those
+      if (theme && theme.colors) {
+        const hasFrameColor = theme.colors.frame && isColorDark(theme.colors.frame);
+        const hasToolbarColor = theme.colors.toolbar && isColorDark(theme.colors.toolbar);
+        isDark = hasFrameColor || hasToolbarColor;
+      } else {
+        // No custom theme colors, fall back to prefers-color-scheme
+        isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      }
+    } else {
+      // Chrome or theme API not available - use prefers-color-scheme
+      isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    }
+  } catch (error) {
+    // Error accessing theme API, fall back to prefers-color-scheme
+    isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+  }
+
+  // Apply the theme
+  if (isDark) {
+    document.body.classList.add('dark-theme');
+  } else {
+    document.body.classList.remove('dark-theme');
+  }
+}
+
+// Helper to determine if a color is dark
+function isColorDark(color) {
+  // Parse RGB color string or array
+  let r, g, b;
+
+  if (Array.isArray(color)) {
+    [r, g, b] = color;
+  } else if (typeof color === 'string') {
+    // Handle rgb(r, g, b) format
+    const match = color.match(/rgb\((\d+),\s*(\d+),\s*(\d+)\)/);
+    if (match) {
+      r = parseInt(match[1]);
+      g = parseInt(match[2]);
+      b = parseInt(match[3]);
+    } else {
+      // Handle hex format #RRGGBB
+      const hex = color.replace('#', '');
+      r = parseInt(hex.substr(0, 2), 16);
+      g = parseInt(hex.substr(2, 2), 16);
+      b = parseInt(hex.substr(4, 2), 16);
+    }
+  }
+
+  // Calculate luminance using standard formula
+  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  return luminance < 0.5; // Dark if luminance is below 50%
+}
+
 document.addEventListener('DOMContentLoaded', async () => {
+  // Apply theme first thing when DOM is ready
+  await applyTheme();
+
+  // Listen for theme changes (Firefox only)
+  if (browser.theme && typeof browser.theme.onUpdated !== 'undefined') {
+    browser.theme.onUpdated.addListener(() => {
+      applyTheme();
+    });
+  }
+
+  // Listen for system color scheme changes (works in both Firefox and Chrome)
+  window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+    applyTheme();
+  });
   // Show loading indicator and set initial status
   setHealthStatus('pending'); // Set to orange initially
   updateInfo('Checking backend...');
