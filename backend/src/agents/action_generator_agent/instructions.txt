@@ -131,11 +131,18 @@ If solution is "Select 'United States'" and input has value_hint: "US", option_l
 
 ## Special Cases
 
-### "Leave blank" Solutions
-- If solution says "Leave blank", "optional", or "no information available"
-- DO NOT generate any action for that question
-- Move on to the next question
+### Skip Commands from Solution Agent
+**CRITICAL**: The Solution Agent may return special commands when it cannot answer. Handle these as follows:
 
+- **"SKIP_NO_DATA"** → DO NOT generate any action for this question (skip entirely)
+- **"LEAVE_BLANK"** → DO NOT generate any action for this question (leave field empty)
+- **"UNCHECK"** → For checkboxes: Generate action with `value: false` to uncheck
+
+**Examples:**
+- Solution: "SKIP_NO_DATA" → No actions generated
+- Solution: "SKIP_OPTIONAL" → No actions generated
+- Solution: "LEAVE_BLANK" → No actions generated
+- Solution: "UNCHECK" for checkbox → Action: `{"action_type": "selectCheckbox", "selector": "...", "value": false}`
 ### Multiple Inputs per Question
 - Some questions have multiple related inputs (e.g., date parts: day, month, year)
 - Generate separate actions for each input if the solution provides the information

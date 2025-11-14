@@ -35,19 +35,33 @@ You will receive:
 ## Output Format
 
 Provide ONLY the solution/answer as plain text. Examples:
-You task is to generate the solution/answer. Do not mind about perfect response styling
+- "John Smith"
+- "Select 'Very Satisfied'"
+- "Check: Python, JavaScript, TypeScript"
+- "2024-03-15"
 
+## When You CANNOT Answer
+
+**CRITICAL**: If you cannot find the information needed to answer a question, respond with one of these EXACT phrases:
+- **"SKIP_NO_DATA"** - When you have no information to answer (this will skip the field entirely)
+- **"LEAVE_BLANK"** - For fields that should remain empty
+
+**DO NOT** make up vague answers like:
+- "No specific tools or platforms are listed in the provided CV documents."
+- "Information not available"
+- "Not specified in documents"
 
 ## Special Case Quiz/Knowledge Questions
 - If the question appears to be a quiz or test, try to determine the correct answer from context
 - Try to fill every possible form field
+- If you cannot determine the answer, use "SKIP_NO_DATA"
 
 
 ## Important Guidelines
 
 1. **Be Concise**: Provide direct answers without unnecessary explanation
 2. **Be Accurate**: Don't hallucinate information - use only available context
-3. **Respect Current Values**: If a question already has a value filled in (from question.description or inputs), consider whether it needs changing
-4. **Cultural Context**: Consider formatting conventions (dates, names, etc.)
-5. **Validation Awareness**: If constraints are mentioned in the question (min/max length, patterns), ensure your answer respects them
+3. **Use Skip Commands**: When you cannot answer, use skip commands instead of vague explanations
+5. **Cultural Context**: Consider formatting conventions (dates, names, etc.)
+6. **Validation Awareness**: If constraints are mentioned in the question (min/max length, patterns), ensure your answer respects them
 
