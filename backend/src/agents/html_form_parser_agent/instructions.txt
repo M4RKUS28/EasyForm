@@ -55,7 +55,11 @@ Return an object with a `questions` array. Each question MUST have two data sect
 This section helps an AI (and RAG retriever) understand WHAT answer is needed.
 
 - **question** (required): Exact wording from the UI. Preserve phrasing (light trimming only) so it can be matched directly against documents.
-- **rag_context** (optional): Context for building semantic search queries to retrieve relevant documents. Include section headers, form title, category labels, topic keywords. Examples: "Section: Employment History", "Category: Technical Skills", "Form: Annual Performance Review".
+- **rag_context** (optional): **QUESTION-SPECIFIC** context for building semantic search queries to retrieve relevant documents. For EACH question, create a tailored context that includes:
+  1. Section/category if relevant
+  2. Specific topic keywords describing what this question is asking for
+  3. Form title if it provides useful context
+  -> Do NOT create generic context that's identical for all questions in the same section. Each question should have unique, specific keywords.
 - **solving_context** (optional): Additional context for the AI to understand HOW to answer the question. Include hints, validation rules, examples, help text, placeholders, detected prefilled values, format constraints, dependencies, grid/scale structure. Examples: "Required field. Must be valid email format. Placeholder: user@example.com", "Prefilled with: John Doe from user profile", "Grid with rows [Speed, Quality] and columns [Poor, Fair, Good]", "Scale from 1 to 10".
 - **selection_mode** (required):
   - "single" – radios/dropdowns (select exactly one)

@@ -178,9 +178,16 @@ class RAGService:
             image_chunk_ids = [r["chunk_id"] for r in image_results]
             all_chunk_ids = list(set(text_chunk_ids + image_chunk_ids))
 
+            logger.info(
+                f"Collected {len(all_chunk_ids)} unique chunk IDs from search results "
+                f"(text: {len(text_chunk_ids)}, image: {len(image_chunk_ids)})"
+            )
+
             # Fetch full chunk data from database
             from ..db.crud import document_chunks_crud
             chunks = await document_chunks_crud.get_chunks_by_ids(db, all_chunk_ids)
+
+            logger.info(f"Fetched {len(chunks)} chunks from database for {len(all_chunk_ids)} IDs")
 
             # Create similarity maps from both searches
             text_similarity_map = {r["chunk_id"]: r["similarity"] for r in text_results}
@@ -208,15 +215,21 @@ class RAGService:
 
                 chunk_type_str = chunk.chunk_type.value if hasattr(chunk.chunk_type, 'value') else str(chunk.chunk_type)
 
+                logger.debug(f"Processing chunk {chunk.id}: type={chunk_type_str}, file={filename}")
+
                 # Use max similarity from either search
                 text_sim = text_similarity_map.get(chunk.id, 0.0)
                 img_sim = image_similarity_map.get(chunk.id, 0.0)
                 combined_similarity = max(text_sim, img_sim)
 
+                # Safely get metadata
+                metadata = chunk.metadata_json if chunk.metadata_json else {}
+                page_num = metadata.get('page', '?')
+
                 if chunk_type_str == "text":
                     text_chunks.append({
                         "content": chunk.content,
-                        "source": f"{filename} (page {chunk.metadata_json.get('page', '?')})",
+                        "source": f"{filename} (page {page_num})",
                         "file_id": file_id,
                         "similarity": combined_similarity
                     })
@@ -233,11 +246,15 @@ class RAGService:
                     image_chunks.append({
                         "image_bytes": chunk.raw_content,
                         "description": chunk.content,  # OCR text
-                        "source": f"{filename} (page {chunk.metadata_json.get('page', '?')})",
+                        "source": f"{filename} (page {page_num})",
                         "file_id": file_id,
                         "similarity": combined_similarity,
                         "visual_match": img_sim > 0,  # Flag if found by visual search
                     })
+                else:
+                    logger.warning(
+                        f"Chunk {chunk.id} has unknown type '{chunk_type_str}' (expected 'text' or 'image'), skipping"
+                    )
 
             # Sort by similarity (descending)
             text_chunks.sort(key=lambda x: x["similarity"], reverse=True)
@@ -247,13 +264,35 @@ class RAGService:
                 f"Retrieved {len(text_chunks)} text chunks and {len(image_chunks)} image chunks "
                 f"(text search: {len(text_results)}, visual search: {len(image_results)})"
             )
+
+            # Log final chunk breakdown
+            if file_logger:
+                final_summary = {
+                    "final_retrieval": {
+                        "text_chunks_count": len(text_chunks),
+                        "image_chunks_count": len(image_chunks),
+                        "total_db_chunks_fetched": len(chunks),
+                        "unique_search_chunk_ids": len(all_chunk_ids)
+                    }
+                }
+                file_logger.log_rag_response(final_summary, subdir=question_subdir)
+
             return {
                 "text_chunks": text_chunks,
                 "image_chunks": image_chunks
             }
 
         except Exception as e:
-            logger.error(f"Context retrieval failed: {e}", exc_info=True)
+            logger.error(
+                f"Context retrieval failed with exception: {type(e).__name__}: {e}",
+                exc_info=True
+            )
+            # Log the error to file logger if available
+            if file_logger and question_subdir:
+                file_logger.log_rag_response(
+                    {"error": f"{type(e).__name__}: {str(e)}"},
+                    subdir=question_subdir
+                )
             return {"text_chunks": [], "image_chunks": []}
 
 

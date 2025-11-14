@@ -33,10 +33,32 @@ async def get_chunk_by_id(db: AsyncSession, chunk_id: str) -> Optional[DocumentC
 
 async def get_chunks_by_ids(db: AsyncSession, chunk_ids: List[str]) -> List[DocumentChunk]:
     """Get multiple chunks by IDs."""
+    import logging
+    logger = logging.getLogger(__name__)
+
+    logger.info(f"Querying database for {len(chunk_ids)} chunk IDs")
+    logger.debug(f"Chunk IDs to query: {chunk_ids[:5]}{'...' if len(chunk_ids) > 5 else ''}")
+
     result = await db.execute(
         select(DocumentChunk).filter(DocumentChunk.id.in_(chunk_ids))
     )
-    return result.scalars().all()
+    chunks = result.scalars().all()
+
+    logger.info(f"Database returned {len(chunks)} chunks for {len(chunk_ids)} requested IDs")
+    if len(chunks) == 0 and len(chunk_ids) > 0:
+        logger.warning(
+            f"Database returned 0 chunks but {len(chunk_ids)} IDs were requested. "
+            "This suggests a data integrity issue between ChromaDB and PostgreSQL."
+        )
+        # Check if ANY chunks exist in the database
+        count_result = await db.execute(select(DocumentChunk))
+        all_chunks = count_result.scalars().all()
+        logger.warning(f"Total chunks in database: {len(all_chunks)}")
+        if len(all_chunks) > 0:
+            logger.warning(f"Sample chunk ID from database: {all_chunks[0].id}")
+            logger.warning(f"Requested chunk ID example: {chunk_ids[0]}")
+
+    return chunks
 
 
 async def get_chunks_by_file_id(
