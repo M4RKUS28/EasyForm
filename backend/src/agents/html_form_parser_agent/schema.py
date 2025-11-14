@@ -63,9 +63,13 @@ class QuestionData(BaseModel):
         ...,
         description="Exact wording of the question as it appears in the form (minimal cleanup, preserve original intent)."
     )
-    additional_information: Optional[str] = Field(
+    rag_context: Optional[str] = Field(
         None,
-        description="Supplemental context to aid downstream RAG/solution steps (e.g., section headers, hints, validation rules, examples, detected prefilled values)."
+        description="Context for building semantic RAG search queries (e.g., section headers, form title, category labels, topic keywords). Used to improve document retrieval relevance."
+    )
+    solving_context: Optional[str] = Field(
+        None,
+        description="Additional context for the Solution Agent to understand how to answer the question (e.g., hints, validation rules, examples, detected prefilled values, help text, placeholders)."
     )
     selection_mode: str = Field(
         "none",

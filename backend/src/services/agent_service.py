@@ -76,8 +76,11 @@ def _build_search_query_for_question(question: dict, max_inputs: int = 10) -> st
 
     question_data = question.get("question_data")
     if isinstance(question_data, dict):
+        # Use rag_context first (section headers, categories, topics) for better retrieval
+        add_text(question_data.get("rag_context"))
+        # Then add the actual question text
         add_text(question_data.get("question"))
-        add_text(question_data.get("additional_information"))
+        # Include available options for selection questions
         add_iterable(question_data.get("available_options"))
 
     sanitized = [phrase for phrase in phrases if phrase]

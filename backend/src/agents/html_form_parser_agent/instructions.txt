@@ -18,7 +18,8 @@ Return an object with a `questions` array. Each question MUST have two data sect
       "type": "radio",
       "question_data": {
         "question": "Rate the product quality",
-        "additional_information": "Section: Satisfaction. Required response. Mentioned in hero copy.",
+        "rag_context": "Section: Product Satisfaction Survey",
+        "solving_context": "Required response. Scale 1-5 where 1=Poor and 5=Excellent.",
         "selection_mode": "single",
         "available_options": ["1 - Poor", "2 - Fair", "3 - Good", "4 - Very Good", "5 - Excellent"],
         "grid_structure": null,
@@ -56,13 +57,14 @@ Return an object with a `questions` array. Each question MUST have two data sect
 This section helps an AI (and RAG retriever) understand WHAT answer is needed.
 
 - **question** (required): Exact wording from the UI. Preserve phrasing (light trimming only) so it can be matched directly against documents.
-- **additional_information** (optional): Concise bullet-like sentences that add valuable context not present in the literal wording. Include section headers, validation or format constraints, dependencies, examples, or detected prefilled/current values. Prefer facts that improve retrieval quality.
-- **selection_mode** (required):  
-  - "single" – radios/dropdowns (select exactly one)  
-  - "multiple" – checkboxes (select many)  
+- **rag_context** (optional): Context for building semantic search queries to retrieve relevant documents. Include section headers, form title, category labels, topic keywords. Examples: "Section: Employment History", "Category: Technical Skills", "Form: Annual Performance Review".
+- **solving_context** (optional): Additional context for the AI to understand HOW to answer the question. Include hints, validation rules, examples, help text, placeholders, detected prefilled values, format constraints, dependencies. Examples: "Required field. Must be valid email format. Placeholder: user@example.com", "Prefilled with: John Doe from user profile".
+- **selection_mode** (required):
+  - "single" – radios/dropdowns (select exactly one)
+  - "multiple" – checkboxes (select many)
   - "none" – free text, dates, uploads, sliders, etc.
-- **available_options** (optional but recommended for selection fields):  
-  - Always include ALL visible options when `selection_mode` is not "none"  
+- **available_options** (optional but recommended for selection fields):
+  - Always include ALL visible options when `selection_mode` is not "none"
   - Trim whitespace; keep human-friendly labels
 - **grid_structure** (optional): For matrix/grid questions:
   ```json
@@ -138,7 +140,8 @@ This section provides technical details for automated interaction.
 
 5. **Consolidate question text**:
    - Place the literal on-screen wording (labels, inline question text) in `question`
-   - Move supporting context (section headers, hints, validation notes, prefilled/current values, dependencies) into `additional_information`
+   - Move section headers, form title, category labels into `rag_context` to improve document retrieval
+   - Move hints, validation notes, examples, help text, prefilled/current values, dependencies into `solving_context`
    - Keep statements concise but factual; prefer sentences or bullet-like fragments separated by periods
 
 6. **Trim all strings**:
@@ -147,7 +150,7 @@ This section provides technical details for automated interaction.
    - Trim leading/trailing whitespace
 
 7. **Current values**:
-   - Capture pre-filled answers or detected defaults in `additional_information`
+   - Capture pre-filled answers or detected defaults in `solving_context`
    - Mirror the technical state in `interaction_data.current_value` when possible
 
 8. **Option lists**:
@@ -157,7 +160,7 @@ This section provides technical details for automated interaction.
 
 9. **Custom widgets**:
    - If widget doesn't map to standard types, use `action_type: "custom"`
-   - Describe how to operate it inside `additional_information`
+   - Describe how to operate it inside `solving_context`
    - Provide the most reliable selector(s)
 
 10. **Validation**:
@@ -169,16 +172,19 @@ This section provides technical details for automated interaction.
 ## Quality Checklist
 - [ ] Every logical question appears exactly once
 - [ ] `question_data.question` mirrors the literal on-screen wording
-- [ ] `question_data.additional_information` captures helpful extra context (validation, dependencies, prefilled values, section info)
+- [ ] `question_data.rag_context` captures section headers, form title, category labels for better document retrieval
+- [ ] `question_data.solving_context` captures hints, validation rules, examples, help text, prefilled values for solution generation
 - [ ] `question_data.available_options` populated with ALL options for selection fields
 - [ ] `interaction_data.targets` lists all radio/checkbox/dropdown options with precise selectors
 - [ ] All strings trimmed (no tabs, carriage returns, or extra spaces)
 - [ ] Selectors are precise and stable
-- [ ] Current values captured via `additional_information` (semantic) and/or `interaction_data.current_value` (technical) when visible
+- [ ] Current values captured via `solving_context` (semantic) and/or `interaction_data.current_value` (technical) when visible
 - [ ] Grid/scale metadata included when applicable
 
 ## IMPORTANT
 - IGNORE submit buttons and navigation elements
 - Focus ONLY on form input fields that need user answers
 - Separate semantic data (what to answer) from technical data (how to interact)
-- You MAY add clarifying or inferred details in `additional_information` whenever it helps downstream RAG/solution agents locate the right supporting context (e.g., “Prefilled with ACME Corp from user profile”, “Matches policy number on insurance card”).
+- Use `rag_context` for information that helps FIND relevant documents (section headers, categories, topics)
+- Use `solving_context` for information that helps ANSWER the question (hints, examples, validation rules, prefilled values)
+- You MAY add clarifying or inferred details in `solving_context` whenever it helps the solution agent understand how to answer (e.g., "Prefilled with ACME Corp from user profile", "Matches policy number on insurance card").
