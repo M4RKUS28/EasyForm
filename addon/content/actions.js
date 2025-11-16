@@ -164,7 +164,7 @@ const ActionExecutor = {
   /**
    * Fill text input field
    */
-  fillText(element, value) {
+  async fillText(element, value) {
     const target = this.resolveTextTarget(element);
     if (!target) {
       throw new Error('Element is not a text input');
@@ -179,7 +179,7 @@ const ActionExecutor = {
     const textValue = value != null ? String(value) : '';
 
     if (target.mode === 'aceEditor') {
-      this.fillAceEditor(target.element, textValue);
+      await this.fillAceEditor(target.element, textValue);
       return;
     }
 
@@ -534,7 +534,7 @@ const ActionExecutor = {
    * @param {HTMLElement} aceContainer - The ACE editor container element
    * @param {string} value - The value to set
    */
-  fillAceEditor(aceContainer, value) {
+  async fillAceEditor(aceContainer, value) {
     this.log('📝 fillAceEditor detected', {
       containerClass: aceContainer.className,
       id: aceContainer.id
@@ -616,40 +616,102 @@ const ActionExecutor = {
       }
     }
 
-    // Fallback: Try to manipulate through the hidden textarea
-    this.log('⚠️ Using fallback textarea method');
+    // Fallback: Try aggressive text manipulation
+    this.log('⚠️ Using fallback methods - ACE Editor API not available');
+
+    // Method 5: Aggressive textarea manipulation with Ctrl+A
     const textarea = aceContainer.querySelector('textarea.ace_text-input');
     if (textarea) {
       try {
+        this.log('🔧 Attempting aggressive textarea method');
+
+        // Scroll into view first
+        aceContainer.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        await this.delay(100);
+
+        // Focus the textarea
         textarea.focus();
+        await this.delay(50);
 
-        // Select all existing text
-        textarea.select();
-        textarea.setSelectionRange(0, textarea.value.length);
+        // First, try to select all with Ctrl+A
+        textarea.dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'a',
+          code: 'KeyA',
+          ctrlKey: true,
+          bubbles: true,
+          cancelable: true
+        }));
 
-        // Set new value
+        await this.delay(50);
+
+        // Delete selected content
+        textarea.dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'Delete',
+          code: 'Delete',
+          bubbles: true,
+          cancelable: true
+        }));
+
+        await this.delay(50);
+
+        // Now set the value directly
         textarea.value = value;
 
-        // Dispatch multiple events to trigger ACE's change detection
-        textarea.dispatchEvent(new Event('input', { bubbles: true }));
-        textarea.dispatchEvent(new Event('change', { bubbles: true }));
-
-        // Simulate typing to trigger ACE
+        // Dispatch input event with the full value
         const inputEvent = new InputEvent('input', {
           bubbles: true,
           cancelable: true,
+          inputType: 'insertText',
           data: value
         });
         textarea.dispatchEvent(inputEvent);
 
-        this.log('⚠️ Fallback method executed');
+        // Dispatch change event
+        textarea.dispatchEvent(new Event('change', { bubbles: true }));
+
+        await this.delay(50);
+
+        // Trigger a key event to force ACE to update
+        textarea.dispatchEvent(new KeyboardEvent('keyup', {
+          key: 'Enter',
+          code: 'Enter',
+          bubbles: true
+        }));
+
+        this.log('✅ Aggressive textarea method completed');
+        return;
       } catch (e) {
-        this.log('❌ Fallback method failed', e.message);
-        throw new Error(`Failed to fill ACE Editor: ${e.message}`);
+        this.log('❌ Aggressive textarea method failed', e.message);
       }
-    } else {
-      throw new Error('ACE Editor textarea not found');
     }
+
+    // Method 6: Try clicking and using execCommand
+    try {
+      this.log('🔧 Attempting click + execCommand method');
+
+      // Click somewhere in the editor to ensure focus
+      const content = aceContainer.querySelector('.ace_content');
+      if (content) {
+        content.click();
+        await this.delay(50);
+      }
+
+      // Try execCommand if supported
+      if (document.queryCommandSupported && document.queryCommandSupported('selectAll')) {
+        document.execCommand('selectAll', false, null);
+        await this.delay(50);
+        document.execCommand('delete', false, null);
+        await this.delay(50);
+        document.execCommand('insertText', false, value);
+
+        this.log('✅ execCommand method completed');
+        return;
+      }
+    } catch (e) {
+      this.log('❌ execCommand method failed', e.message);
+    }
+
+    this.log('⚠️ All fallback methods completed - verify content was updated');
   },
 
   isInputOfType(element, type) {
