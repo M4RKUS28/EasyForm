@@ -178,6 +178,11 @@ const ActionExecutor = {
 
     const textValue = value != null ? String(value) : '';
 
+    if (target.mode === 'aceEditor') {
+      this.fillAceEditor(target.element, textValue);
+      return;
+    }
+
     if (target.mode === 'contentEditable') {
       this.fillContentEditable(target.element, textValue);
       return;
@@ -411,6 +416,12 @@ const ActionExecutor = {
       return null;
     }
 
+    // Check for ACE Editor first
+    const aceEditor = this.findAceEditor(element);
+    if (aceEditor) {
+      return { element: aceEditor, mode: 'aceEditor' };
+    }
+
     if (this.isStandardTextInput(element)) {
       return { element, mode: 'input' };
     }
@@ -486,6 +497,159 @@ const ActionExecutor = {
     element.dispatchEvent(new Event('input', { bubbles: true }));
     element.dispatchEvent(new Event('change', { bubbles: true }));
     element.blur();
+  },
+
+  /**
+   * Find ACE Editor instance for an element
+   * @param {HTMLElement} element - The element to check
+   * @returns {HTMLElement|null} The ACE editor container or null
+   */
+  findAceEditor(element) {
+    if (!element) {
+      return null;
+    }
+
+    // Check if element itself is an ACE editor container
+    if (element.classList && element.classList.contains('ace_editor')) {
+      return element;
+    }
+
+    // Check if element is inside an ACE editor
+    const aceContainer = element.closest('.ace_editor');
+    if (aceContainer) {
+      return aceContainer;
+    }
+
+    // Check if element has an ACE editor as descendant
+    const aceDescendant = element.querySelector('.ace_editor');
+    if (aceDescendant) {
+      return aceDescendant;
+    }
+
+    return null;
+  },
+
+  /**
+   * Fill ACE Editor with value
+   * @param {HTMLElement} aceContainer - The ACE editor container element
+   * @param {string} value - The value to set
+   */
+  fillAceEditor(aceContainer, value) {
+    this.log('📝 fillAceEditor detected', {
+      containerClass: aceContainer.className,
+      id: aceContainer.id
+    });
+
+    // Try multiple methods to get the editor instance
+    let editor = null;
+    let method = 'unknown';
+
+    // Method 1: Direct env.editor property (most reliable)
+    if (aceContainer.env?.editor) {
+      editor = aceContainer.env.editor;
+      method = 'env.editor';
+    }
+
+    // Method 2: Check if editor instance is directly attached
+    if (!editor && aceContainer.editor) {
+      editor = aceContainer.editor;
+      method = 'container.editor';
+    }
+
+    // Method 3: Try using ID with ace.edit (if container has ID)
+    if (!editor && aceContainer.id && window.ace) {
+      try {
+        const tempEditor = window.ace.edit(aceContainer.id);
+        if (tempEditor && typeof tempEditor.setValue === 'function') {
+          editor = tempEditor;
+          method = 'ace.edit(id)';
+        }
+      } catch (e) {
+        this.log('⚠️ ace.edit(id) failed', e.message);
+      }
+    }
+
+    // Method 4: Search through all ace editors
+    if (!editor && window.ace?.edit) {
+      try {
+        // Some versions store editor in aceContainer directly
+        for (const key in aceContainer) {
+          if (aceContainer[key]?.setValue && aceContainer[key]?.session) {
+            editor = aceContainer[key];
+            method = `container.${key}`;
+            break;
+          }
+        }
+      } catch (e) {
+        this.log('⚠️ Property search failed', e.message);
+      }
+    }
+
+    // If we found an editor instance, use the API
+    if (editor && typeof editor.setValue === 'function') {
+      this.log('✅ ACE Editor API found via', method);
+
+      try {
+        // Scroll into view
+        aceContainer.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+        // Use ACE's setValue method
+        // The second parameter (-1) moves cursor to the start
+        editor.setValue(value, -1);
+
+        // Trigger focus to ensure the editor is active
+        editor.focus();
+
+        // Clear selection
+        editor.clearSelection();
+
+        // Trigger change event to ensure listeners are notified
+        if (editor.session) {
+          editor.session.getDocument().setValue(value);
+        }
+
+        this.log('✅ ACE Editor content set successfully');
+        return;
+      } catch (e) {
+        this.log('❌ ACE Editor API failed', e.message);
+        // Fall through to fallback method
+      }
+    }
+
+    // Fallback: Try to manipulate through the hidden textarea
+    this.log('⚠️ Using fallback textarea method');
+    const textarea = aceContainer.querySelector('textarea.ace_text-input');
+    if (textarea) {
+      try {
+        textarea.focus();
+
+        // Select all existing text
+        textarea.select();
+        textarea.setSelectionRange(0, textarea.value.length);
+
+        // Set new value
+        textarea.value = value;
+
+        // Dispatch multiple events to trigger ACE's change detection
+        textarea.dispatchEvent(new Event('input', { bubbles: true }));
+        textarea.dispatchEvent(new Event('change', { bubbles: true }));
+
+        // Simulate typing to trigger ACE
+        const inputEvent = new InputEvent('input', {
+          bubbles: true,
+          cancelable: true,
+          data: value
+        });
+        textarea.dispatchEvent(inputEvent);
+
+        this.log('⚠️ Fallback method executed');
+      } catch (e) {
+        this.log('❌ Fallback method failed', e.message);
+        throw new Error(`Failed to fill ACE Editor: ${e.message}`);
+      }
+    } else {
+      throw new Error('ACE Editor textarea not found');
+    }
   },
 
   isInputOfType(element, type) {
