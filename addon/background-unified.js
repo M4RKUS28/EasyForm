@@ -1,8 +1,18 @@
 // Unified Background Script for EasyForm
 // Combines all background modules into one file for compatibility
+// Works in both Firefox and Chrome
 
-// Note: browser-polyfill.js is loaded via manifest.json
-// The global 'browser' object is provided by the polyfill
+// Load browser-polyfill for service workers (Chrome)
+// In Firefox, it's already loaded via manifest.json
+try {
+  if (typeof importScripts !== 'undefined') {
+    importScripts('browser-polyfill.js');
+  }
+} catch (e) {
+  // Already loaded via manifest or not in service worker context
+}
+
+// The global 'browser' object is now available from the polyfill
 
 // ===== CONSTANTS =====
 const CONFIG = {
