@@ -216,8 +216,6 @@ Agent 1 output should be:
 }
 ```
 
-Notice how `solving_context` includes the COMPLETE problem description from the top of the page, not just the field label.
-
 
 ## IMPORTANT
 - IGNORE submit buttons and navigation elements
