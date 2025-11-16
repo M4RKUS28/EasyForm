@@ -284,3 +284,4 @@ backend/logs/
 
 # Browser extension builds
 addon_v*.zip
+addon/manifest.json
