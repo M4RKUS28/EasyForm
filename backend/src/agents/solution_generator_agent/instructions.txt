@@ -56,7 +56,8 @@ Provide ONLY the solution/answer as plain text.
 ### Coding Related Forms
 When the form is a coding task (programming challenges, code submissions, algorithm problems):
 - Solution should be programming code WITHOUT any annotations or comments
-- Indicate that helper functions should be used when appropriate
+- Use helper functions when when appropriate
+- Write simple, clean and correctly working code
 
 ## Important Guidelines
 
