@@ -26,4 +26,3 @@ zip -r "$ZIP_NAME" . \
 echo "✓ Chrome build ready"
 echo "✓ Package created: $ZIP_NAME"
 echo ""
-echo "background-unified.js works for both Firefox and Chrome!"
