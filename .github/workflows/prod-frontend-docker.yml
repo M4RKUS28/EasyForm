@@ -3,7 +3,7 @@ name: Build & Deploy Frontend to Cloud Run (prod)
 on:
   push:
     branches:
-      - main
+      - prod
     paths:
       - "frontend/**"
       - ".github/workflows/prod-frontend-docker.yml"

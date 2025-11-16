@@ -155,6 +155,13 @@ class AgentService:
             "Follow the JSON structure and extraction rules specified in your system instructions.",
         ]
 
+        if clipboard_text:
+            query_parts.extend([
+                "",
+                "Personal Instructions specifically for this Session:",
+                clipboard_text,
+            ])
+
         if personal_instructions:
             query_parts.extend([
                 "",
@@ -610,6 +617,7 @@ Provide only the solution/answer as plain text. Do not include explanations unle
 
                 action_query = f"""Convert the following form questions and their solutions into precise browser actions.
 
+                
 Questions and Solutions:
 ```json
 {json.dumps(questions_data, indent=2)}

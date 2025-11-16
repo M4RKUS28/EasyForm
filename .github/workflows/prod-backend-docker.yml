@@ -3,7 +3,7 @@ name: Build & Deploy Backend to Cloud Run (prod)
 on:
   push:
     branches:
-      - main
+      - prod
     paths:
       - "backend/**"
       - ".github/workflows/prod-backend-docker.yml"

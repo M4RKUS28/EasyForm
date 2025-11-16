@@ -184,38 +184,7 @@ This section provides technical details for automated interaction.
 
 ### Coding Related Forms
 When the form is a coding task (programming challenges, code submissions, algorithm problems):
-- Fill out ONLY the program code related questions (ignore unrelated fields like author name, submission time, etc.)
 - In `solving_context`, include the COMPLETE problem description from anywhere on the page (problem statement, examples, constraints, input/output format)
-- Specify that the solution should be programming code WITHOUT any annotations or comments
-- Indicate that helper functions should be used when appropriate
-- Include language specifications, time/memory limits, and any other requirements
-
-**Example - Coding Challenge with Instructions at Top of Page:**
-
-Page has:
-- Top: Large problem description: "Find the longest increasing subsequence. Given an array of integers, return the length of the longest strictly increasing subsequence. Example: Input [10,9,2,5,3,7,101,18] Output: 4. Constraints: 1 ≤ n ≤ 2500, -10^4 ≤ nums[i] ≤ 10^4"
-- Bottom: Small field "Paste your solution here" with placeholder "int main() {}"
-
-Agent 1 output should be:
-```json
-{
-  "id": "code_solution",
-  "type": "textarea",
-  "question_data": {
-    "question": "Paste your solution here",
-    "rag_context": "Coding Challenge: Longest Increasing Subsequence, Dynamic Programming",
-    "solving_context": "Problem: Find the longest increasing subsequence. Given an array of integers, return the length of the longest strictly increasing subsequence. Example: Input [10,9,2,5,3,7,101,18] Output: 4 (subsequence [2,3,7,101]). Constraints: 1 ≤ n ≤ 2500, -10^4 ≤ nums[i] ≤ 10^4. Write clean code without comments. Use helper functions. Language: C++17. Current placeholder: 'int main() {}'.",
-    "selection_mode": "none"
-  },
-  "interaction_data": {
-    "primary_selector": "#ace-editor",
-    "action_type": "input_text",
-    "targets": [],
-    "current_value": "int main() {}"
-  }
-}
-```
-
 
 ## IMPORTANT
 - IGNORE submit buttons and navigation elements
