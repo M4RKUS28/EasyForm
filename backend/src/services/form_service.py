@@ -635,6 +635,8 @@ async def process_form_analysis_async(
                 quality=request_data.quality,
                 batch_size=10,
                 file_logger=file_logger,
+                clipboard_text=clipboard_clean,
+                personal_instructions=instructions_clean,
             )
 
             # Validate generator result

@@ -535,6 +535,8 @@ Provide only the solution/answer as plain text. Do not include explanations unle
         quality: str = DEFAULT_QUALITY,
         batch_size: int = 10,
         file_logger: Optional[Any] = None,
+        clipboard_text: Optional[str] = None,
+        personal_instructions: Optional[str] = None,
     ) -> dict:
         """
         Generate actions from question-solution pairs using Action Generator Agent.
@@ -615,21 +617,40 @@ Provide only the solution/answer as plain text. Do not include explanations unle
                             "solution": solution,
                         })
 
-                action_query = f"""Convert the following form questions and their solutions into precise browser actions.
+                query_parts = [
+                    "Convert the following form questions and their solutions into precise browser actions.",
+                ]
 
-                
-Questions and Solutions:
-```json
-{json.dumps(questions_data, indent=2)}
-```
+                if clipboard_text:
+                    query_parts.extend([
+                        "",
+                        "Personal Instructions specifically for this Session:",
+                        clipboard_text,
+                    ])
 
-For each question:
-1. Read the solution
-2. Match the solution to the appropriate inputs
-3. Generate the correct actions using the exact selectors provided
+                if personal_instructions:
+                    query_parts.extend([
+                        "",
+                        "Personal Instructions:",
+                        personal_instructions,
+                    ])
 
-Output a flat list of all actions across all questions.
-"""
+                query_parts.extend([
+                    "",
+                    "Questions and Solutions:",
+                    "```json",
+                    json.dumps(questions_data, indent=2),
+                    "```",
+                    "",
+                    "For each question:",
+                    "1. Read the solution",
+                    "2. Match the solution to the appropriate inputs",
+                    "3. Generate the correct actions using the exact selectors provided",
+                    "",
+                    "Output a flat list of all actions across all questions.",
+                ])
+
+                action_query = "\n".join(query_parts)
 
                 from ..agents.utils import create_multipart_query
                 content = create_multipart_query(query=action_query)
