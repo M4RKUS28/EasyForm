@@ -318,7 +318,7 @@ async function checkHealth() {
     const response = await fetch(healthUrl, {
       method: 'GET',
       headers,
-      signal: AbortSignal.timeout(5000)
+      signal: AbortSignal.timeout(120000) // 2 minutes
     });
 
     if (response.ok) {

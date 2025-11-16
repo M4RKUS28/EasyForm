@@ -281,3 +281,6 @@ addon.pem
 backend/log/
 backend/__pycache__/
 backend/logs/
+
+# Browser extension builds
+addon_v*.zip
