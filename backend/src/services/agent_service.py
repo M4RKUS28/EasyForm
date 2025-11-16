@@ -150,21 +150,31 @@ class AgentService:
         profile = MODEL_CONFIG.get(quality, MODEL_CONFIG[DEFAULT_QUALITY])
         parser_agent = self.parser_flash if profile.parser_model == "gemini-2.5-flash" else self.parser_pro
 
-        query = f"""Please analyze the following HTML and describe every form question with its inputs and context.
-Follow these directives:
-- Group inputs into a single question when they belong together (e.g., name, address, date ranges).
-- Capture helpful metadata such as labels, hints, validation cues, dependencies, and any detected existing values.
-- Use the JSON structure specified in your system instructions and avoid inventing fields not grounded in the HTML.
+        query_parts = [
+            "Please analyze the following HTML and describe every form question with its inputs and context.",
+            "Follow the JSON structure and extraction rules specified in your system instructions.",
+        ]
 
-HTML Code:
-```html
-{html}
-```
+        if personal_instructions:
+            query_parts.extend([
+                "",
+                "Personal Instructions:",
+                personal_instructions,
+            ])
 
-Visible Text Content:
-{dom_text}
+        query_parts.extend([
+            "",
+            "HTML Code:",
+            "```html",
+            html,
+            "```",
+            "",
+            "Visible Text Content:",
+            dom_text,
+            "",
+        ])
 
-"""
+        query = "\n".join(query_parts)
 
         if file_logger:
             file_logger.log_agent_output(

@@ -172,6 +172,38 @@ This section provides technical details for automated interaction.
 - [ ] Current values captured via `solving_context` (semantic) and/or `interaction_data.current_value` (technical) when visible
 - [ ] Grid/scale structure information included in `solving_context` when applicable
 
+## Special Form Types
+
+### GENERAL
+- If there is general information provided at the beginning of a section (e.g., instructions, context, background information), include this information in the `solving_context` field for questions that follow in that section.
+- This helps the solution generator understand the broader context needed to answer specific questions correctly.
+
+### Coding Related Forms
+When the form is a coding task (programming challenges, code submissions, algorithm problems):
+- Fill out ONLY the program code related questions (ignore unrelated fields like author name, submission time, etc.)
+- In `solving_context`, specify that the solution should be programming code WITHOUT any annotations or comments
+- Indicate that helper functions should be used when appropriate
+- Include any language specifications, constraints, or requirements in `solving_context`
+
+Example for coding form:
+```json
+{
+  "id": "code_solution",
+  "type": "textarea",
+  "question_data": {
+    "question": "Write a function to find the longest substring",
+    "rag_context": "Coding Challenge: String Manipulation",
+    "solving_context": "Write clean code without comments. Use helper functions. Language: C++17. Time limit: 2s. Memory limit: 256MB.",
+    "selection_mode": "none"
+  },
+  "interaction_data": {
+    "primary_selector": "#ace-editor textarea.ace_text-input",
+    "action_type": "input_text",
+    "targets": []
+  }
+}
+```
+
 ## IMPORTANT
 - IGNORE submit buttons and navigation elements
 - Focus ONLY on form input fields that need user answers
